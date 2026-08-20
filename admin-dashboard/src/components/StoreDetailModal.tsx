@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Store as StoreIcon, Phone, User, Clock, Star, MapPin, Users, ShoppingBag, CalendarCheck, TrendingUp, Edit3, CheckCircle2, Receipt, Wifi, RefreshCw, ArrowUpRight, CreditCard, Smartphone, Banknote, ChevronRight, PackageCheck } from 'lucide-react';
 import { Store, Product } from '../types';
 import { fetchProductsFromSupabase, fetchOrdersFromSupabase } from '../services/supabaseService';
-import { BACKEND_URL } from '../lib/config';
 import { BrandLogo } from './BrandLogo';
+import { BACKEND_URL } from '../lib/config';
 
 interface StoreDetailModalProps {
   store: Store | null;

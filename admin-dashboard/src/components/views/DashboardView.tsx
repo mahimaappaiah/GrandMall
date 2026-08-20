@@ -50,8 +50,8 @@ import {
   CategoryDistributionChartData
 } from '../../services/supabaseService';
 import { realtimeManager } from '../../services/realtimeService';
-import { BACKEND_URL } from '../../lib/config';
 import { ViewType, KpiItem, Campaign, ActivityLog } from '../../types';
+import { BACKEND_URL } from '../../lib/config';
 
 ChartJS.register(
   CategoryScale,

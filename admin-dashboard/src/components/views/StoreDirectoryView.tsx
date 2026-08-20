@@ -4,8 +4,8 @@ import { MOCK_STORES } from '../../data/mockData';
 import { Store } from '../../types';
 import { downloadStoresCSV } from '../../utils/exportUtils';
 import { fetchStoresFromSupabase, fetchOrdersFromSupabase, fetchConnectedUsersFromSupabase } from '../../services/supabaseService';
-import { BACKEND_URL } from '../../lib/config';
 import { BrandLogo } from '../BrandLogo';
+import { BACKEND_URL } from '../../lib/config';
 
 interface StoreDirectoryViewProps {
   onSelectStore: (store: Store) => void;

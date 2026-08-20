@@ -292,7 +292,11 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
             data.type === 'CAPACITY_UPDATED'
           ) {
             fetchBackendData();
-            if (data.type === 'WAITLIST_PROMOTED') {
+            if (data.type === 'NEW_RESERVATION' || data.type === 'RESERVATION_CREATED') {
+              showToast(`🎉 New live reservation received from ${data.data?.guestName || 'VIP Guest'} for ${data.data?.storeName || 'Boutique'}!`, 'info');
+            } else if (data.type === 'WAITLIST_JOINED') {
+              showToast(`⏳ Waitlist updated: ${data.data?.guestName} joined waitlist for ${data.data?.storeName}`, 'info');
+            } else if (data.type === 'WAITLIST_PROMOTED') {
               showToast(`🎉 Waitlist guest auto-notified: ${data.data?.guestName || 'Shopper'} (+91 ${data.data?.guestPhone})`, 'info');
             }
           }
@@ -302,20 +306,22 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
     let bc: BroadcastChannel | null = null;
     try {
-      bc = new BroadcastChannel('axionix_events');
-      bc.onmessage = (evt) => {
-        if (evt.data && evt.data.type?.includes('RESERVATION')) {
-          fetchBackendData();
-        }
+      bc = new BroadcastChannel('axionix_reservation_events');
+      bc.onmessage = () => {
+        fetchBackendData();
       };
     } catch (e) {}
 
-    window.addEventListener('axionix_reservation_added', fetchBackendData);
+    const handleCustomRes = () => fetchBackendData();
+    window.addEventListener('axionix_reservation_added', handleCustomRes);
+    window.addEventListener('axionix_reservation_created', handleCustomRes);
+
     return () => {
       clearInterval(interval);
       eventSource?.close();
       bc?.close();
-      window.removeEventListener('axionix_reservation_added', fetchBackendData);
+      window.removeEventListener('axionix_reservation_added', handleCustomRes);
+      window.removeEventListener('axionix_reservation_created', handleCustomRes);
     };
   }, []);
 
@@ -329,22 +335,24 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     setEditingCapacities(merged);
   }, [selectedCapStore, slotCapacities]);
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
+  const handleCreateReservation = async (e: React.FormEvent) => {
     e.preventDefault();
-    const refCode = 'RES-' + newStoreName.substring(0, 3).toUpperCase() + '-' + Math.floor(100 + Math.random() * 899);
+    if (!newGuestName || !newStoreName) return;
 
-    const newResPayload: Reservation = {
-      id: 'res-' + Date.now(),
+    const refCode = `RES-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newResPayload = {
+      id: `res-live-${Date.now()}`,
       refCode,
-      guestName: newGuestName || 'yoshima',
-      guestPhone: newGuestPhone || '+91 84950 93170',
+      customerName: newGuestName,
+      customerPhone: newGuestPhone || '+91 98000 00000',
       storeName: newStoreName,
-      partySize: Number(newPartySize || 2),
-      timeSlot: newTimeSlot,
+      partySize: newPartySize,
       date: newDate,
-      specialNotes: newSpecialNotes,
-      specialRequest: newSpecialNotes,
-      status: 'Confirmed'
+      timeSlot: newTimeSlot,
+      status: 'Confirmed',
+      specialRequests: newSpecialNotes || 'VIP Guest Booking',
+      source: 'Admin Portal',
+      createdAt: new Date().toISOString()
     };
 
     try {

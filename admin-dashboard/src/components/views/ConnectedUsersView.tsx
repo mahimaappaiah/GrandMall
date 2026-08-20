@@ -36,7 +36,7 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
       }
     } catch (e) {}
 
-    // 3. Fetch from Shared Backend
+    // 3. Fetch from Shared Backend Port 5000
     try {
       const res = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
       const data = await res.json();

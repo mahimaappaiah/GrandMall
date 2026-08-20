@@ -24,6 +24,7 @@ import { AnalyticsView } from './components/views/AnalyticsView';
 import { ReportsView } from './components/views/ReportsView';
 import { SettingsView } from './components/views/SettingsView';
 import { LoyaltyView } from './components/views/LoyaltyView';
+import { BACKEND_URL } from './lib/config';
 
 // Modals
 import { StoreDetailModal } from './components/StoreDetailModal';
@@ -45,7 +46,6 @@ import {
   onSupabaseAuthStateChange
 } from './services/supabaseService';
 import { realtimeManager } from './services/realtimeService';
-import { BACKEND_URL } from './lib/config';
 import { Bell, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
