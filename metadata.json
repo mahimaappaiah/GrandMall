@@ -1,0 +1,6 @@
+{
+  "name": "AXIONIX Smart Mall Admin Dashboard",
+  "description": "Enterprise Mall Management Admin Dashboard for AXIONIX Smart Mall Network.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,650 @@
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+export interface CustomerProfile {
+  id: string;
+  full_name: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  avatar_url?: string;
+  loyalty_tier?: string;
+  is_active?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// CUSTOMER AUTH & PROFILES
+// ---------------------------------------------------------------------------
+export async function authenticateOrGetCustomerProfile(name: string, phone: string, email?: string): Promise<{ profile: CustomerProfile | null; error?: string }> {
+  if (!isSupabaseConfigured) {
+    return { profile: null };
+  }
+
+  try {
+    const cleanPhone = phone.replace(/\D/g, '');
+    let userId: string | null = null;
+
+    // 1. Check existing Auth session
+    const { data: sessData } = await supabase.auth.getSession();
+    if (sessData?.session?.user) {
+      userId = sessData.session.user.id;
+    } else {
+      // 2. Sign In Anonymously if no active session
+      const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
+      if (anonErr) {
+        console.warn('[Supabase Auth] signInAnonymously:', anonErr.message);
+      }
+      userId = anonData?.user?.id || null;
+    }
+
+    // 3. Query existing profile from public.profiles
+    if (userId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profile) {
+        return {
+          profile: {
+            id: profile.id,
+            full_name: profile.full_name || name,
+            email: profile.email || email,
+            phone: profile.phone || cleanPhone,
+            role: profile.role || 'customer',
+            loyalty_tier: profile.loyalty_tier || 'Bronze',
+            is_active: profile.is_active !== false
+          }
+        };
+      }
+
+      // Upsert profile into public.profiles
+      const newProfile = {
+        id: userId,
+        full_name: name,
+        email: email || undefined,
+        phone: cleanPhone,
+        role: 'customer',
+        loyalty_tier: 'Bronze',
+        is_active: true
+      };
+
+      const { data: upserted } = await supabase
+        .from('profiles')
+        .upsert(newProfile)
+        .select()
+        .maybeSingle();
+
+      return { profile: upserted || newProfile };
+    }
+
+    // Lookup existing profile by phone if auth failed
+    const { data: phoneProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+
+    if (phoneProfile) {
+      return { profile: phoneProfile };
+    }
+
+    return { profile: null };
+  } catch (err: any) {
+    console.error('[Supabase Auth] Exception:', err);
+    return { profile: null, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BRANDS & PRODUCTS
+// ---------------------------------------------------------------------------
+export async function fetchBrandsFromSupabase(): Promise<{ data: any[]; isLive: boolean }> {
+  if (!isSupabaseConfigured) return { data: [], isLive: false };
+
+  try {
+    const { data, error } = await supabase
+      .from('brands')
+      .select('id, name, category, floor, zone, logo_url, logo_variant, banner_url, open_hours, rating, status')
+      .order('name', { ascending: true });
+
+    if (error || !data) {
+      console.warn('[Supabase] fetchBrands error:', error?.message);
+      return { data: [], isLive: false };
+    }
+
+    return { data, isLive: true };
+  } catch (err) {
+    return { data: [], isLive: false };
+  }
+}
+
+export async function fetchProductsFromSupabase(): Promise<{ data: any[]; isLive: boolean }> {
+  if (!isSupabaseConfigured) return { data: [], isLive: false };
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, brand_id, name, category, description, price, image_url, sku, stock_quantity, is_available, brands(id, name)')
+      .order('name', { ascending: true });
+
+    if (error || !data) {
+      console.warn('[Supabase] fetchProducts error:', error?.message);
+      return { data: [], isLive: false };
+    }
+
+    return { data, isLive: true };
+  } catch (err) {
+    return { data: [], isLive: false };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ORDERS & ORDER ITEMS
+// ---------------------------------------------------------------------------
+export async function createOrderInSupabase(orderData: {
+  userId?: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  storeName: string;
+  brandId?: string;
+  items: { productId?: string; name: string; quantity: number; price: number }[];
+  totalAmount: number;
+  rawAmount: number;
+  discountAmount: number;
+  appliedCoupon?: string | null;
+  paymentMethod: string;
+}): Promise<{ order: any | null; error?: string }> {
+  if (!isSupabaseConfigured) return { order: null };
+
+  try {
+    const { data: sessData } = await supabase.auth.getSession();
+    const activeUserId = orderData.userId || sessData?.session?.user?.id || null;
+
+    const orderNumber = `#AX-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const orderRow: any = {
+      order_number: orderNumber,
+      user_id: activeUserId,
+      customer_name: orderData.customerName,
+      customer_phone: orderData.customerPhone,
+      customer_email: orderData.customerEmail || null,
+      subtotal: orderData.rawAmount,
+      tax: 0,
+      discount_amount: orderData.discountAmount || 0,
+      total_amount: orderData.totalAmount,
+      order_type: 'Click & Collect',
+      payment_method: orderData.paymentMethod,
+      payment_status: 'Paid',
+      status: 'Completed'
+    };
+
+    const { data: createdOrder, error: orderErr } = await supabase
+      .from('orders')
+      .insert(orderRow)
+      .select()
+      .maybeSingle();
+
+    if (orderErr) {
+      console.error('[Supabase] createOrder error:', orderErr.message);
+      return { order: null, error: orderErr.message };
+    }
+
+    // Insert order_items if order created
+    if (createdOrder?.id && orderData.items && orderData.items.length > 0) {
+      const itemRows = orderData.items.map(item => ({
+        order_id: createdOrder.id,
+        product_id: item.productId || null,
+        quantity: item.quantity,
+        unit_price: item.price,
+        subtotal: item.price * item.quantity
+      }));
+
+      const { error: itemsErr } = await supabase
+        .from('order_items')
+        .insert(itemRows);
+
+      if (itemsErr) {
+        console.warn('[Supabase] order_items insert error:', itemsErr.message);
+        return { order: null, error: `Order created, but items failed: ${itemsErr.message}` };
+      }
+    }
+
+    return { order: createdOrder };
+  } catch (err: any) {
+    console.error('[Supabase] Exception in createOrder:', err);
+    return { order: null, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RESERVATIONS
+// ---------------------------------------------------------------------------
+export async function createReservationInSupabase(resData: {
+  id?: string;
+  refCode?: string;
+  userId?: string;
+  brandId?: string;
+  storeName: string;
+  guestName: string;
+  guestPhone: string;
+  guestEmail?: string;
+  partySize: number;
+  timeSlot: string;
+  specialNotes?: string;
+}): Promise<{ reservation: any | null; error?: string }> {
+  if (!isSupabaseConfigured) return { reservation: null };
+
+  try {
+    const refCode = resData.refCode || `RES-${resData.storeName.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 899)}`;
+
+    const resRow = {
+      ref_code: refCode,
+      user_id: resData.userId || null,
+      brand_id: resData.brandId || null,
+      guest_name: resData.guestName,
+      guest_phone: resData.guestPhone,
+      guest_email: resData.guestEmail || null,
+      party_size: resData.partySize,
+      time_slot: resData.timeSlot,
+      notes: resData.specialNotes || 'VIP Guest Booking',
+      status: 'Confirmed'
+    };
+
+    const { data: createdRes, error } = await supabase
+      .from('reservations')
+      .insert(resRow)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('[Supabase] createReservation error:', error.message);
+      return { reservation: null, error: error.message };
+    }
+
+    return { reservation: createdRes };
+  } catch (err: any) {
+    console.error('[Supabase] Exception in createReservation:', err);
+    return { reservation: null, error: err.message };
+  }
+}
+
+export async function cancelReservationInSupabase(refCodeOrId: string): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { success: true };
+
+  try {
+    const { error } = await supabase
+      .from('reservations')
+      .update({ status: 'Cancelled' })
+      .or(`ref_code.eq.${refCodeOrId},id.eq.${refCodeOrId}`);
+
+    if (error) {
+      console.warn('[Supabase] cancelReservation error:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchReservationAvailability(storeName: string, date?: string): Promise<{ success: boolean; slots: any[] }> {
+  try {
+    const res = await fetch(`http://localhost:5000/api/reservations/availability?store=${encodeURIComponent(storeName)}&date=${date || new Date().toISOString().split('T')[0]}`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.slots)) {
+      return { success: true, slots: data.slots };
+    }
+  } catch (e) {}
+
+  // Fallback default slots
+  return {
+    success: true,
+    slots: [
+      { timeSlot: '12:00 PM', maxCapacity: 8, bookedCount: 1, available: 7, isFull: false, waitlistCount: 0 },
+      { timeSlot: '14:00 PM', maxCapacity: 8, bookedCount: 2, available: 6, isFull: false, waitlistCount: 0 },
+      { timeSlot: '16:00 PM', maxCapacity: 8, bookedCount: 3, available: 5, isFull: false, waitlistCount: 0 },
+      { timeSlot: '17:00 PM', maxCapacity: 8, bookedCount: 5, available: 3, isFull: false, waitlistCount: 0 },
+      { timeSlot: '18:30 PM', maxCapacity: 6, bookedCount: 6, available: 0, isFull: true, waitlistCount: 1 },
+      { timeSlot: '20:00 PM', maxCapacity: 6, bookedCount: 4, available: 2, isFull: false, waitlistCount: 0 },
+      { timeSlot: '21:30 PM', maxCapacity: 6, bookedCount: 1, available: 5, isFull: false, waitlistCount: 0 }
+    ]
+  };
+}
+
+export async function joinReservationWaitlist(waitlistData: {
+  storeName: string;
+  date: string;
+  timeSlot: string;
+  guestName: string;
+  guestPhone: string;
+  partySize: number;
+  specialNotes?: string;
+}): Promise<{ success: boolean; position?: number; entry?: any }> {
+  try {
+    const res = await fetch('http://localhost:5000/api/reservations/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(waitlistData)
+    });
+    const data = await res.json();
+    return { success: data.success, position: data.position, entry: data.waitlistEntry };
+  } catch (e) {
+    return { success: true, position: 1 };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// COUPONS & REDEMPTIONS
+// ---------------------------------------------------------------------------
+export async function fetchCouponsFromSupabase(): Promise<{ data: any[]; isLive: boolean }> {
+  if (!isSupabaseConfigured) return { data: [], isLive: false };
+
+  try {
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*, brands(id, name, category)')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) {
+      return { data: [], isLive: false };
+    }
+
+    return { data, isLive: true };
+  } catch (err) {
+    return { data: [], isLive: false };
+  }
+}
+
+export async function redeemCouponInSupabase(redemptionData: {
+  couponId?: string;
+  couponCode: string;
+  userId?: string;
+  brandId?: string;
+  savingsAmount: number;
+}): Promise<{ redemption: any | null; error?: string }> {
+  if (!isSupabaseConfigured) return { redemption: null };
+
+  try {
+    const row = {
+      coupon_id: redemptionData.couponId || null,
+      user_id: redemptionData.userId || null,
+      brand_id: redemptionData.brandId || null,
+      savings_amount: redemptionData.savingsAmount,
+      channel: 'WiFi Captive Portal'
+    };
+
+    const { data, error } = await supabase
+      .from('coupon_redemptions')
+      .insert(row)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[Supabase] redeemCoupon error:', error.message);
+    }
+
+    return { redemption: data };
+  } catch (err: any) {
+    return { redemption: null, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// STORE VISITS & WIFI SESSIONS
+// ---------------------------------------------------------------------------
+export async function recordWifiSessionInSupabase(userId?: string, phone?: string): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  try {
+    await supabase.from('wifi_sessions').insert({
+      user_id: userId || null,
+      phone: phone || null,
+      mac_address: 'FE:88:99:A1:B2:C3',
+      ip_address: '192.168.10.142'
+    });
+  } catch (e) {}
+}
+
+export async function recordStoreVisitInSupabase(userId?: string, brandId?: string): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  try {
+    if (brandId) {
+      await supabase.from('store_visits').insert({
+        user_id: userId || null,
+        brand_id: brandId
+      });
+    }
+  } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
+// LOYALTY POINTS & REWARDS API HELPERS
+// ---------------------------------------------------------------------------
+export interface LoyaltyAccount {
+  userId: string;
+  pointsBalance: number;
+  tier: string;
+  lifetimePoints: number;
+}
+
+export async function fetchLoyaltyAccount(userId: string): Promise<LoyaltyAccount | null> {
+  try {
+    const res = await fetch(`http://localhost:5000/api/loyalty/${userId}`);
+    const data = await res.json();
+    if (data.success && data.account) {
+      return data.account;
+    }
+  } catch (e) {}
+  return { userId, pointsBalance: 250, tier: 'Bronze', lifetimePoints: 250 };
+}
+
+export async function earnLoyaltyPoints(userId: string, amountSpent: number): Promise<{ pointsEarned: number; account: LoyaltyAccount } | null> {
+  try {
+    const res = await fetch('http://localhost:5000/api/loyalty/earn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, amountSpent })
+    });
+    const data = await res.json();
+    if (data.success) {
+      return { pointsEarned: data.pointsEarned, account: data.account };
+    }
+  } catch (e) {}
+  return null;
+}
+
+export async function redeemLoyaltyPoints(userId: string, pointsToRedeem: number): Promise<{ discountValue: number; account: LoyaltyAccount } | null> {
+  try {
+    const res = await fetch('http://localhost:5000/api/loyalty/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, pointsToRedeem })
+    });
+    const data = await res.json();
+    if (data.success) {
+      return { discountValue: data.discountValue, account: data.account };
+    }
+  } catch (e) {}
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// MALL PAY UNIFIED WALLET (FEATURE 11)
+// ---------------------------------------------------------------------------
+export interface MallWalletData {
+  walletId: string;
+  userPhone: string;
+  balance: number;
+  transactions: Array<{
+    id: string;
+    amount: number;
+    type: 'credit' | 'debit';
+    referenceId?: string;
+    description: string;
+    createdAt: string;
+  }>;
+  familyMembers: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    relation: string;
+  }>;
+}
+
+const GLOBAL_WALLET_KEY = 'axionix_mall_wallet_global_active';
+
+function saveWalletToStorage(wallet: MallWalletData, userPhone: string) {
+  const cleanPhone = (userPhone || wallet.userPhone || '9342013563').replace(/\D/g, '') || '9342013563';
+  const dataStr = JSON.stringify(wallet);
+  try {
+    localStorage.setItem(GLOBAL_WALLET_KEY, dataStr);
+    localStorage.setItem(`axionix_mall_wallet_${cleanPhone}`, dataStr);
+    localStorage.setItem('axionix_mall_wallet_latest', dataStr);
+  } catch (e) {}
+}
+
+export function getMallWallet(userPhone: string = 'guest'): MallWalletData {
+  const activePhoneFromStorage = localStorage.getItem('axionix_active_guest_phone') || '';
+  const inputPhone = userPhone || activePhoneFromStorage || '8495093177';
+  const cleanPhone = inputPhone.replace(/\D/g, '') || '8495093177';
+
+  try {
+    const existing = localStorage.getItem(`axionix_mall_wallet_${cleanPhone}`) || 
+                     localStorage.getItem(GLOBAL_WALLET_KEY) || 
+                     localStorage.getItem('axionix_mall_wallet_latest');
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      if (parsed && parsed.balance !== undefined && !isNaN(Number(parsed.balance))) {
+        parsed.balance = Number(parsed.balance);
+        return parsed;
+      }
+    }
+  } catch (e) {}
+
+  const defaultWallet: MallWalletData = {
+    walletId: `wlt-${cleanPhone}`,
+    userPhone: cleanPhone,
+    balance: 57000,
+    transactions: [
+      { id: `tx-101`, amount: 57000, type: 'credit', referenceId: 'TOPUP-INIT', description: 'Initial Mall Pay Balance', createdAt: new Date(Date.now() - 3600000).toISOString() }
+    ],
+    familyMembers: [
+      { id: 'fam-1', name: 'Sophia Ricky', phone: '+91 98765 11111', relation: 'Spouse' }
+    ]
+  };
+
+  saveWalletToStorage(defaultWallet, cleanPhone);
+  return defaultWallet;
+}
+
+export function topUpMallWallet(userPhone: string, amount: number, paymentMethod: string = 'UPI / GPay'): MallWalletData {
+  const wallet = getMallWallet(userPhone);
+  const currentBal = Number(wallet.balance) || 0;
+  const topAmt = Number(amount) || 0;
+  const newBalance = currentBal + topAmt;
+
+  const newTx = {
+    id: `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    amount: topAmt,
+    type: 'credit' as const,
+    referenceId: `TOPUP-${Math.floor(1000 + Math.random() * 9000)}`,
+    description: `Wallet Top-Up via ${paymentMethod}`,
+    createdAt: new Date().toISOString()
+  };
+
+  const updatedWallet: MallWalletData = {
+    ...wallet,
+    balance: newBalance,
+    transactions: [newTx, ...(wallet.transactions || [])]
+  };
+
+  saveWalletToStorage(updatedWallet, userPhone);
+
+  if (isSupabaseConfigured) {
+    try {
+      Promise.resolve(supabase.from('mall_wallets').upsert({ user_phone: wallet.userPhone, balance: newBalance })).catch(() => {});
+      Promise.resolve(supabase.from('wallet_transactions').insert({ wallet_id: wallet.walletId, amount: topAmt, type: 'credit', description: newTx.description })).catch(() => {});
+    } catch (e) {}
+  }
+
+  try {
+    const bc = new BroadcastChannel('axionix_wallet_events');
+    bc.postMessage({ type: 'WALLET_TOPUP', wallet: updatedWallet });
+    bc.close();
+  } catch (e) {}
+
+  window.dispatchEvent(new Event('axionix_wallet_updated'));
+  return updatedWallet;
+}
+
+export function deductMallWallet(userPhone: string, amount: number, orderRef: string): { success: boolean; wallet: MallWalletData; error?: string } {
+  const wallet = getMallWallet(userPhone);
+  const currentBal = Number(wallet.balance) || 0;
+  const deductAmt = Number(amount) || 0;
+
+  if (currentBal < deductAmt) {
+    return { success: false, wallet, error: `Insufficient Mall Pay balance. Available: ₹${currentBal.toLocaleString()}, Required: ₹${deductAmt.toLocaleString()}` };
+  }
+
+  const newBalance = currentBal - deductAmt;
+  const newTx = {
+    id: `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    amount: deductAmt,
+    type: 'debit' as const,
+    referenceId: orderRef,
+    description: `Order Checkout at Concierge (${orderRef}) - 2x VIP Points Earned!`,
+    createdAt: new Date().toISOString()
+  };
+
+  const updatedWallet: MallWalletData = {
+    ...wallet,
+    balance: newBalance,
+    transactions: [newTx, ...(wallet.transactions || [])]
+  };
+
+  saveWalletToStorage(updatedWallet, userPhone);
+
+  if (isSupabaseConfigured) {
+    try {
+      Promise.resolve(supabase.from('mall_wallets').upsert({ user_phone: wallet.userPhone, balance: newBalance })).catch(() => {});
+      Promise.resolve(supabase.from('wallet_transactions').insert({ wallet_id: wallet.walletId, amount: deductAmt, type: 'debit', reference_id: orderRef, description: newTx.description })).catch(() => {});
+    } catch (e) {}
+  }
+
+  try {
+    const bc = new BroadcastChannel('axionix_wallet_events');
+    bc.postMessage({ type: 'WALLET_DEBIT', wallet: updatedWallet });
+    bc.close();
+  } catch (e) {}
+
+  window.dispatchEvent(new Event('axionix_wallet_updated'));
+  return { success: true, wallet: updatedWallet };
+}
+
+export function addFamilyMemberToWallet(userPhone: string, name: string, phone: string, relation: string): MallWalletData {
+  const wallet = getMallWallet(userPhone);
+  const newMember = {
+    id: `fam-${Date.now()}`,
+    name,
+    phone,
+    relation
+  };
+
+  const updatedWallet: MallWalletData = {
+    ...wallet,
+    familyMembers: [...wallet.familyMembers, newMember]
+  };
+
+  saveWalletToStorage(updatedWallet, userPhone);
+
+  if (isSupabaseConfigured) {
+    try {
+      Promise.resolve(supabase.from('family_members').insert({ wallet_id: wallet.walletId, member_name: name, member_phone: phone, relation })).catch(() => {});
+    } catch (e) {}
+  }
+
+  window.dispatchEvent(new Event('axionix_wallet_updated'));
+  return updatedWallet;
+}
