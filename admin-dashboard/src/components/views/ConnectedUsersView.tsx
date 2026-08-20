@@ -52,19 +52,20 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
       mergedUsers = [...mergedUsers, ...users];
     }
 
-    // Deduplicate by phone or id, preserving active status and latest visited stores
-    const seen = new Set();
-    const formatted: ConnectedUser[] = [];
+    // Deduplicate by phone or id, preserving active status and merging all visited stores
+    const userMap = new Map<string, ConnectedUser>();
 
     for (const u of mergedUsers) {
       const anyU = u as any;
       const phoneClean = (u.phone || anyU.phone_number || '').replace(/\D/g, '').slice(-10);
       const nameClean = (u.name || 'Valued Guest').trim();
-      const key = phoneClean || nameClean;
+      const key = phoneClean || nameClean.toLowerCase();
 
-      if (!seen.has(key)) {
-        seen.add(key);
-        formatted.push({
+      const existing = userMap.get(key);
+      const incomingStores = Array.isArray(u.visitedStores) ? u.visitedStores.filter(s => s && s !== 'Wi-Fi Captive Portal') : [];
+
+      if (!existing) {
+        userMap.set(key, {
           id: String(u.id || `usr-${Date.now()}`),
           name: nameClean,
           phone: u.phone || anyU.phone_number || '+91 84950 93170',
@@ -72,17 +73,26 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
           ipAddress: u.ipAddress || '192.168.10.142',
           connectionTime: u.connectionTime || 'Just now',
           sessionDuration: u.sessionDuration || '1m',
-          visitedStores: Array.isArray(u.visitedStores) ? u.visitedStores : [],
+          visitedStores: incomingStores,
           dataUsed: u.dataUsed || '15 MB',
           status: String(u.status).toLowerCase() === 'active' ? 'Active' : 'Disconnected',
           vipStatus: true,
-          zone: u.zone || anyU.floor_detected || 'Ground Floor (Lobby & Luxury)',
+          zone: u.zone || anyU.floor_detected || 'Ground Floor Atrium',
           deviceType: u.deviceType || 'iOS'
         });
+      } else {
+        const mergedStores = Array.from(new Set([...existing.visitedStores, ...incomingStores]));
+        existing.visitedStores = mergedStores;
+        if (String(u.status).toLowerCase() === 'active') {
+          existing.status = 'Active';
+        }
+        if (nameClean && nameClean !== 'Valued Guest' && (!existing.name || existing.name === 'Valued Guest' || existing.name === 'WiFi Visitor')) {
+          existing.name = nameClean;
+        }
       }
     }
 
-    setLiveUsersList(formatted);
+    setLiveUsersList(Array.from(userMap.values()));
   };
 
   useEffect(() => {

@@ -742,7 +742,7 @@ export async function fetchReservationsFromSupabase(brandIdOrName?: string): Pro
 }
 
 // ---------------------------------------------------------------------------
-// CONNECTED USERS / WIFI SESSIONS SERVICE (Reading public.wifi_sessions & public.profiles)
+// CONNECTED USERS / WIFI SESSIONS SERVICE (Reading public.wifi_sessions & public.store_visits)
 // ---------------------------------------------------------------------------
 export async function fetchConnectedUsersFromSupabase(): Promise<{ data: ConnectedUser[]; isLive: boolean; error?: string }> {
   if (!isSupabaseConfigured) {
@@ -750,14 +750,35 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
   }
 
   try {
-    const { data: sessions, error } = await supabase
-      .from('wifi_sessions')
-      .select('*, profiles:user_id(id, full_name, phone, email, avatar_url, loyalty_tier, is_active)')
-      .order('connected_at', { ascending: false });
+    const [sessionsRes, visitsRes] = await Promise.all([
+      supabase
+        .from('wifi_sessions')
+        .select('*, profiles:user_id(id, full_name, phone, email, avatar_url, loyalty_tier, is_active)')
+        .order('connected_at', { ascending: false }),
+      supabase
+        .from('store_visits')
+        .select('user_id, visited_at, brands(name)')
+        .order('visited_at', { ascending: false })
+    ]);
 
-    if (error) {
-      console.error('[Supabase] fetchConnectedUsers query error:', error.message);
-      return { data: [], isLive: false, error: error.message };
+    const sessions = sessionsRes.data;
+    if (sessionsRes.error) {
+      console.error('[Supabase] fetchConnectedUsers query error:', sessionsRes.error.message);
+      return { data: [], isLive: false, error: sessionsRes.error.message };
+    }
+
+    // Map store visits by user_id
+    const userVisitsMap = new Map<string, string[]>();
+    if (visitsRes.data) {
+      visitsRes.data.forEach((v: any) => {
+        if (v.user_id && v.brands?.name) {
+          const arr = userVisitsMap.get(v.user_id) || [];
+          if (!arr.includes(v.brands.name)) {
+            arr.push(v.brands.name);
+          }
+          userVisitsMap.set(v.user_id, arr);
+        }
+      });
     }
 
     if (!sessions || sessions.length === 0) {
@@ -771,22 +792,24 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
         ? Math.max(1, Math.round((new Date(s.disconnected_at).getTime() - new Date(s.connected_at).getTime()) / 60000))
         : 35;
 
+      const visited = (s.user_id ? userVisitsMap.get(s.user_id) : null) || [];
+
       return {
         id: s.id || `usr-${idx + 1}`,
         user_id: s.user_id,
-        name: profile?.full_name || profile?.name || 'WiFi Visitor',
+        name: profile?.full_name || profile?.name || (s.phone ? `Guest ${s.phone.slice(-4)}` : 'WiFi Visitor'),
         phone: profile?.phone || s.phone || '+91 98000 00000',
         email: profile?.email || s.email,
         macAddress: s.mac_address || profile?.mac_address || 'FE:88:99:A1:B2:C3',
         ipAddress: s.ip_address || '192.168.10.142',
         connectionTime: s.connected_at ? formatRelativeTime(s.connected_at) : 'Just now',
         sessionDuration: `${durationMin}m`,
-        visitedStores: ['Ground Floor (Lobby & Luxury)'],
+        visitedStores: visited,
         dataUsed: '240 MB',
         status: isSessionActive ? 'Active' : 'Disconnected',
-        vipStatus: profile?.loyalty_tier === 'Gold' || profile?.loyalty_tier === 'Platinum',
+        vipStatus: true,
         loyaltyTier: profile?.loyalty_tier || 'Bronze',
-        zone: 'Ground Floor (Lobby & Luxury)',
+        zone: 'Ground Floor Atrium',
         deviceType: 'iOS'
       };
     });
@@ -816,12 +839,32 @@ export async function fetchCustomersFromSupabase(): Promise<{ data: ConnectedUse
 
   if (isSupabaseConfigured) {
     try {
-      const { data: dbProfiles, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, phone, role, avatar_url, loyalty_tier, is_active, created_at, updated_at')
-        .order('created_at', { ascending: false });
+      const [profilesRes, visitsRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, role, avatar_url, loyalty_tier, is_active, created_at, updated_at')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('store_visits')
+          .select('user_id, visited_at, brands(name)')
+          .order('visited_at', { ascending: false })
+      ]);
 
-      if (!error && dbProfiles && dbProfiles.length > 0) {
+      const userVisitsMap = new Map<string, string[]>();
+      if (visitsRes.data) {
+        visitsRes.data.forEach((v: any) => {
+          if (v.user_id && v.brands?.name) {
+            const arr = userVisitsMap.get(v.user_id) || [];
+            if (!arr.includes(v.brands.name)) {
+              arr.push(v.brands.name);
+            }
+            userVisitsMap.set(v.user_id, arr);
+          }
+        });
+      }
+
+      const dbProfiles = profilesRes.data;
+      if (!profilesRes.error && dbProfiles && dbProfiles.length > 0) {
         supaCustomers = dbProfiles.map((p: any, idx: number) => ({
           id: p.id || `usr-${idx + 1}`,
           user_id: p.id,
@@ -832,12 +875,12 @@ export async function fetchCustomersFromSupabase(): Promise<{ data: ConnectedUse
           ipAddress: '192.168.10.142',
           connectionTime: p.created_at ? formatRelativeTime(p.created_at) : 'Today',
           sessionDuration: '45m',
-          visitedStores: ['Ground Floor (Lobby & Luxury)'],
+          visitedStores: userVisitsMap.get(p.id) || [],
           dataUsed: '180 MB',
           status: p.is_active !== false ? 'Active' : 'Disconnected',
-          vipStatus: p.loyalty_tier === 'Gold' || p.loyalty_tier === 'Platinum',
+          vipStatus: true,
           loyaltyTier: p.loyalty_tier || 'Bronze',
-          zone: 'Ground Floor (Lobby & Luxury)',
+          zone: 'Ground Floor Atrium',
           deviceType: 'iOS'
         }));
         isLive = true;
@@ -851,14 +894,18 @@ export async function fetchCustomersFromSupabase(): Promise<{ data: ConnectedUse
 
   // 1. Seed with MOCK_USERS
   MOCK_USERS.forEach(u => {
-    const key = (u.phone || '').replace(/\D/g, '') || u.id;
-    userMap.set(key, u);
+    const key = (u.phone || '').replace(/\D/g, '').slice(-10) || u.id;
+    userMap.set(key, { ...u });
   });
 
   // 2. Merge Backend Users
   backendUsers.forEach((u: any) => {
-    const key = (u.phone || '').replace(/\D/g, '') || u.id;
+    const key = (u.phone || '').replace(/\D/g, '').slice(-10) || (u.name || '').toLowerCase();
     const existing = userMap.get(key);
+    const existingStores = existing?.visitedStores || [];
+    const newStores = Array.isArray(u.visitedStores) ? u.visitedStores : [];
+    const mergedStores = Array.from(new Set([...existingStores, ...newStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
     userMap.set(key, {
       id: u.id || existing?.id || `usr-${userMap.size + 1}`,
       name: u.name || existing?.name || 'Valued Guest',
@@ -868,10 +915,10 @@ export async function fetchCustomersFromSupabase(): Promise<{ data: ConnectedUse
       ipAddress: u.ipAddress || existing?.ipAddress || '192.168.1.100',
       connectionTime: u.connectionTime || existing?.connectionTime || 'Just Now',
       sessionDuration: u.sessionDuration || existing?.sessionDuration || '30m',
-      visitedStores: u.visitedStores || existing?.visitedStores || ['Central Atrium'],
+      visitedStores: mergedStores,
       dataUsed: u.dataUsed || existing?.dataUsed || '250 MB',
       status: u.status || existing?.status || 'Active',
-      vipStatus: typeof u.vipStatus === 'boolean' ? u.vipStatus : (existing?.vipStatus || false),
+      vipStatus: true,
       zone: u.zone || existing?.zone || 'Central Atrium',
       deviceType: u.deviceType || existing?.deviceType || 'Mobile'
     });
@@ -879,12 +926,16 @@ export async function fetchCustomersFromSupabase(): Promise<{ data: ConnectedUse
 
   // 3. Merge Supabase Customers
   supaCustomers.forEach(u => {
-    const key = (u.phone || '').replace(/\D/g, '') || u.id;
+    const key = (u.phone || '').replace(/\D/g, '').slice(-10) || (u.name || '').toLowerCase();
     const existing = userMap.get(key);
+    const existingStores = existing?.visitedStores || [];
+    const newStores = Array.isArray(u.visitedStores) ? u.visitedStores : [];
+    const mergedStores = Array.from(new Set([...existingStores, ...newStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
     userMap.set(key, {
       ...existing,
       ...u,
-      visitedStores: u.visitedStores || existing?.visitedStores || ['Central Atrium']
+      visitedStores: mergedStores
     });
   });
 

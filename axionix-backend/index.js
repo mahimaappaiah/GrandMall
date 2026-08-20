@@ -1852,8 +1852,8 @@ app.post('/api/auth/send-otp', (req, res) => {
 
 app.post('/api/auth/verify-otp', (req, res) => {
   const { phone, otp, name } = req.body;
-  const cleanPhone = (phone || '').replace(/\D/g, '');
-  const expectedOtp = pendingOtps[cleanPhone] || pendingOtps[phone];
+  const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+  const expectedOtp = (cleanPhone && pendingOtps[cleanPhone]) || pendingOtps[phone];
 
   if (!otp || String(otp).trim() !== String(expectedOtp).trim()) {
     return res.status(400).json({ success: false, message: 'Invalid OTP entered. Please check the code displayed above.' });
@@ -1863,12 +1863,18 @@ app.post('/api/auth/verify-otp', (req, res) => {
   if (phone) delete pendingOtps[phone];
 
   const guestName = name || 'Valued Shopper';
-  let existingUser = connectedUsers.find(u => u.phone === phone || u.phone.replace(/\D/g, '') === cleanPhone);
+  let existingUser = connectedUsers.find(u => {
+    const uClean = (u.phone || '').replace(/\D/g, '').slice(-10);
+    return (cleanPhone && uClean === cleanPhone) || 
+           u.phone === phone || 
+           (name && u.name && u.name.toLowerCase() === name.toLowerCase());
+  });
+
   if (!existingUser) {
     existingUser = {
       id: 'usr-' + Date.now(),
       name: guestName,
-      phone: phone || '+91 98000 00000',
+      phone: phone || `+91 ${cleanPhone}`,
       macAddress: 'FE:88:99:A1:B2:C3',
       ipAddress: '192.168.10.' + (Math.floor(Math.random() * 150) + 100),
       connectionTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -1876,7 +1882,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
       visitedStores: [],
       dataUsed: '15 MB',
       status: 'Active',
-      vipStatus: false,
+      vipStatus: true,
       zone: 'Ground Floor Atrium',
       deviceType: 'iOS'
     };
@@ -1892,8 +1898,12 @@ app.post('/api/auth/verify-otp', (req, res) => {
 
 app.post('/api/auth/disconnect', (req, res) => {
   const { phone, userId } = req.body;
-  const cleanPhone = (phone || '').replace(/\D/g, '');
-  const user = connectedUsers.find(u => u.id === userId || u.phone === phone || (u.phone && u.phone.replace(/\D/g, '') === cleanPhone));
+  const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+  const user = connectedUsers.find(u => {
+    const uClean = (u.phone || '').replace(/\D/g, '').slice(-10);
+    return u.id === userId || (cleanPhone && uClean === cleanPhone) || u.phone === phone;
+  });
+
   if (user) {
     user.status = 'Disconnected';
     broadcastEvent('GUEST_DISCONNECT', user);
@@ -1907,23 +1917,55 @@ app.get('/api/auth/connected-users', (req, res) => {
 });
 
 app.post('/api/auth/visit-store', (req, res) => {
-  const { phone, storeName } = req.body;
-  const user = connectedUsers.find(u => u.phone === phone || u.name === phone);
+  const { phone, storeName, userName } = req.body;
+  if (!storeName) return res.status(400).json({ success: false, message: 'storeName is required' });
+
+  const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+  let user = connectedUsers.find(u => {
+    const uClean = (u.phone || '').replace(/\D/g, '').slice(-10);
+    return (cleanPhone && uClean === cleanPhone) || 
+           (phone && u.phone === phone) || 
+           (userName && u.name && u.name.toLowerCase() === userName.toLowerCase()) ||
+           (phone && u.name && u.name.toLowerCase() === phone.toLowerCase());
+  });
+
   if (user) {
+    if (!Array.isArray(user.visitedStores)) user.visitedStores = [];
     if (!user.visitedStores.includes(storeName)) {
       user.visitedStores.push(storeName);
     }
+    user.status = 'Active';
+    if (userName && (!user.name || user.name === 'Valued Guest')) {
+      user.name = userName;
+    }
+  } else if (cleanPhone || userName || phone) {
+    user = {
+      id: 'usr-' + Date.now(),
+      name: userName || (cleanPhone ? `Guest ${cleanPhone.slice(-4)}` : 'Valued Guest'),
+      phone: phone || (cleanPhone ? `+91 ${cleanPhone}` : '+91 94612 34567'),
+      macAddress: 'FE:88:99:A1:B2:C3',
+      ipAddress: '192.168.10.' + (Math.floor(Math.random() * 150) + 100),
+      connectionTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      sessionDuration: 'Just connected',
+      visitedStores: [storeName],
+      dataUsed: '15 MB',
+      status: 'Active',
+      vipStatus: true,
+      zone: 'Ground Floor Atrium',
+      deviceType: 'iOS'
+    };
+    connectedUsers.unshift(user);
   }
 
-  const brand = brands.find(b => b.name === storeName);
+  const brand = brands.find(b => b.name.toLowerCase() === storeName.toLowerCase());
   if (brand) {
-    brand.visitorsToday += 1;
+    brand.visitorsToday = (brand.visitorsToday || 0) + 1;
   }
 
   const log = {
     id: 'act-' + Date.now(),
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    userName: user ? user.name : 'Shopper',
+    userName: user ? user.name : (userName || 'Shopper'),
     action: 'visited',
     detail: `Browsed ${storeName}`,
     storeName: storeName,
@@ -1932,7 +1974,7 @@ app.post('/api/auth/visit-store', (req, res) => {
   activityLogs.unshift(log);
 
   broadcastEvent('STORE_VISIT', { user, storeName, visitorsToday: brand ? brand.visitorsToday : 0 });
-  res.json({ success: true, visitorsToday: brand ? brand.visitorsToday : 0 });
+  res.json({ success: true, user, visitorsToday: brand ? brand.visitorsToday : 0 });
 });
 
 // 3. Brands & Store Directory Routes

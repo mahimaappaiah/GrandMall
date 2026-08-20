@@ -1867,6 +1867,40 @@ export default function App() {
             localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(stored));
           } catch (e) {}
 
+          localStorage.setItem('axionix_active_guest_phone', cleanPhone);
+          localStorage.setItem('axionix_active_guest_name', fullName);
+
+          try {
+            const usersList = JSON.parse(localStorage.getItem('axionix_users_list') || '[]');
+            const existingUserIdx = usersList.findIndex((u: any) => (u.phone && u.phone.replace(/\D/g, '') === cleanPhone) || (u.name && u.name.toLowerCase() === fullName.toLowerCase()));
+            const userEntry = {
+              id: supaAuthRes?.profile?.id || `usr-${Date.now()}`,
+              name: fullName,
+              phone: mobileNumber,
+              macAddress: 'FE:88:99:A1:B2:C3',
+              ipAddress: '192.168.10.142',
+              connectionTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              sessionDuration: 'Just connected',
+              visitedStores: existingUserIdx >= 0 ? (usersList[existingUserIdx].visitedStores || []) : [],
+              dataUsed: '15 MB',
+              status: 'Active',
+              vipStatus: true,
+              zone: selectedFloor || 'Ground Floor Atrium',
+              deviceType: 'iOS'
+            };
+            if (existingUserIdx >= 0) {
+              usersList[existingUserIdx] = { ...usersList[existingUserIdx], ...userEntry };
+            } else {
+              usersList.unshift(userEntry);
+            }
+            localStorage.setItem('axionix_users_list', JSON.stringify(usersList));
+            const bc = new BroadcastChannel('axionix_events');
+            bc.postMessage({ type: 'GUEST_CHECKIN', payload: userEntry });
+            bc.close();
+            window.dispatchEvent(new Event('axionix_user_added'));
+            window.dispatchEvent(new Event('storage'));
+          } catch (e) {}
+
           setCurrentStep('category-hub');
         } else {
           setFormError(data.message || 'Invalid OTP entered. Please enter the correct OTP code.');
@@ -1879,6 +1913,77 @@ export default function App() {
           setFormError('Invalid OTP entered. Please enter the correct OTP code.');
         }
       });
+  };
+
+  const recordUserStoreVisit = (storeNameOrBrand: string | Brand) => {
+    if (!storeNameOrBrand) return;
+    const brandName = typeof storeNameOrBrand === 'string' ? storeNameOrBrand : storeNameOrBrand.name;
+    const brandObj = typeof storeNameOrBrand === 'string' ? brands.find(b => b.name === storeNameOrBrand) : storeNameOrBrand;
+    const brandId = brandObj?.id;
+
+    if (customerProfile?.id && brandId) {
+      recordStoreVisitInSupabase(customerProfile.id, brandId);
+    }
+    
+    const phoneToUse = mobileNumber || customerProfile?.phone || localStorage.getItem('axionix_active_guest_phone') || '';
+    const nameToUse = fullName || customerProfile?.full_name || localStorage.getItem('axionix_active_guest_name') || 'Valued Guest';
+
+    if (phoneToUse || nameToUse) {
+      fetch(`${API_BASE}/api/auth/visit-store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneToUse, userName: nameToUse, storeName: brandName })
+      }).catch(() => {});
+    }
+
+    try {
+      const usersList = JSON.parse(localStorage.getItem('axionix_users_list') || '[]');
+      const cleanP = phoneToUse.replace(/\D/g, '');
+      let updated = false;
+      
+      usersList.forEach((u: any) => {
+        const uClean = (u.phone || '').replace(/\D/g, '');
+        if ((cleanP && uClean === cleanP) || (nameToUse && u.name && u.name.toLowerCase() === nameToUse.toLowerCase())) {
+          if (!Array.isArray(u.visitedStores)) u.visitedStores = [];
+          if (!u.visitedStores.includes(brandName)) {
+            u.visitedStores.push(brandName);
+            updated = true;
+          }
+        }
+      });
+      
+      if (!updated && (cleanP || nameToUse)) {
+        usersList.unshift({
+          id: customerProfile?.id || `usr-${Date.now()}`,
+          name: nameToUse,
+          phone: phoneToUse || '+91 94612 34567',
+          macAddress: 'FE:88:99:A1:B2:C3',
+          ipAddress: '192.168.10.142',
+          connectionTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sessionDuration: 'Just connected',
+          visitedStores: [brandName],
+          dataUsed: '15 MB',
+          status: 'Active',
+          vipStatus: true,
+          zone: selectedFloor || 'Ground Floor Atrium',
+          deviceType: 'iOS'
+        });
+        updated = true;
+      }
+
+      if (updated) {
+        localStorage.setItem('axionix_users_list', JSON.stringify(usersList));
+        localStorage.setItem('axionix_last_event', JSON.stringify({
+          type: 'STORE_VISIT',
+          payload: { phone: phoneToUse, userName: nameToUse, storeName: brandName, timestamp: Date.now() }
+        }));
+        const bc = new BroadcastChannel('axionix_events');
+        bc.postMessage({ type: 'STORE_VISIT', payload: { phone: phoneToUse, userName: nameToUse, storeName: brandName } });
+        bc.close();
+        window.dispatchEvent(new Event('axionix_user_added'));
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch (e) {}
   };
 
   const handleSignOut = () => {
@@ -1918,14 +2023,7 @@ export default function App() {
 
   const handleViewStore = (brand: Brand) => {
     setActiveBrandModal(brand);
-    recordStoreVisitInSupabase(customerProfile?.id, brand.id);
-    if (mobileNumber) {
-      fetch(`${API_BASE}/api/auth/visit-store`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: mobileNumber, storeName: brand.name })
-      }).catch(() => {});
-    }
+    recordUserStoreVisit(brand);
   };
 
   // Helper to classify Food sub-category: 'dessert' | 'beverage' | 'savory' | null
@@ -2118,6 +2216,9 @@ export default function App() {
   const [optQuantity, setOptQuantity] = useState<number>(1);
 
   const handleOpenProductOptions = (item: BrandItem, storeName: string) => {
+    if (storeName) {
+      recordUserStoreVisit(storeName);
+    }
     const cat = (item.category || '').toLowerCase();
     const name = (item.name || '').toLowerCase();
     const foodSubtype = getFoodSubtype(item, storeName);
@@ -2312,6 +2413,9 @@ export default function App() {
 
     setAppliedCoupon(coupon);
     setCouponInput(coupon.code);
+    if (coupon.storeName) {
+      recordUserStoreVisit(coupon.storeName);
+    }
 
     const activeCustName = fullName.trim() || 'Reynold Ricky';
     const activeCustPhone = mobileNumber.trim() || '+91 98987 65432';
@@ -2409,6 +2513,9 @@ export default function App() {
     setIsPlacingOrder(true);
 
     const mainStore = cart.length > 0 ? cart[0].brandName : 'The Grand Mall Store';
+    if (mainStore) {
+      recordUserStoreVisit(mainStore);
+    }
     const itemsList = cart.map(c => ({
       name: c.item.name,
       quantity: c.quantity,
@@ -2583,6 +2690,9 @@ TOTAL AMOUNT PAID: ₹${(orderObj.totalAmount || finalCartTotal).toLocaleString(
     e.preventDefault();
     const categoryBrands = brands.filter(b => b.category === selectedMainCategory);
     const targetStore = resSelectedBrand || (categoryBrands.length > 0 ? categoryBrands[0].name : (activeBrandModal ? activeBrandModal.name : 'Nike Flagship'));
+    if (targetStore) {
+      recordUserStoreVisit(targetStore);
+    }
 
     // Check if customer already booked this store
     const existingStoreBooking = myReservations.find(r => 

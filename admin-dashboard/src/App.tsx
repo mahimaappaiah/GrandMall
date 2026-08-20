@@ -476,7 +476,28 @@ export default function App() {
       const res = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
       const data = await res.json();
       if (data.success && Array.isArray(data.users) && data.users.length > 0) {
-        setUsersList(data.users);
+        setUsersList(prev => {
+          const map = new Map<string, ConnectedUser>();
+          prev.forEach(u => {
+            const key = (u.phone || '').replace(/\D/g, '').slice(-10) || (u.name || '').toLowerCase();
+            map.set(key, { ...u });
+          });
+          data.users.forEach((u: any) => {
+            const key = (u.phone || '').replace(/\D/g, '').slice(-10) || (u.name || '').toLowerCase();
+            const existing = map.get(key);
+            const existingStores = existing?.visitedStores || [];
+            const incomingStores = Array.isArray(u.visitedStores) ? u.visitedStores : [];
+            const mergedStores = Array.from(new Set([...existingStores, ...incomingStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+            map.set(key, {
+              ...existing,
+              ...u,
+              visitedStores: mergedStores,
+              status: u.status || existing?.status || 'Active'
+            });
+          });
+          return Array.from(map.values());
+        });
       }
     } catch (e) {}
   };
@@ -533,7 +554,7 @@ export default function App() {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          handleRealtimeEvent(data.type, data.payload);
+          handleRealtimeEvent(data.type, data.payload || data.data);
           fetchBackendConnectedUsers();
         } catch (e) {}
       };
@@ -543,7 +564,7 @@ export default function App() {
       bc = new BroadcastChannel('axionix_events');
       bc.onmessage = (event) => {
         if (event.data?.type) {
-          handleRealtimeEvent(event.data.type, event.data.payload);
+          handleRealtimeEvent(event.data.type, event.data.payload || event.data.data);
           fetchBackendConnectedUsers();
         }
       };
@@ -571,14 +592,6 @@ export default function App() {
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
-
-  // Auto hide live toast
-  useEffect(() => {
-    if (liveToast) {
-      const timer = setTimeout(() => setLiveToast(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [liveToast]);
 
   // Auth Loading Splash Screen
   if (authLoading) {
@@ -782,6 +795,34 @@ export default function App() {
           reportType={reportModalType}
           onClose={() => setReportModalType(null)}
         />
+      )}
+
+      {/* LIVE EVENT PERMANENT NOTIFICATION BANNER */}
+      {liveToast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-slate-900/95 text-white p-4 rounded-2xl shadow-2xl border border-slate-700/80 backdrop-blur-md transition-all flex items-start justify-between gap-3 animate-slide-in">
+          <div className="flex items-start gap-3">
+            <span className="relative flex h-3 w-3 mt-1 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <div>
+              <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>{liveToast.title}</span>
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">LIVE</span>
+              </div>
+              <p className="text-sm font-medium text-slate-100 mt-1 leading-snug">
+                {liveToast.message}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setLiveToast(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors shrink-0"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
     </div>
