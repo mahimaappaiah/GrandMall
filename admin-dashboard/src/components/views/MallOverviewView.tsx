@@ -4,7 +4,7 @@ import { MOCK_STORES } from '../../data/mockData';
 import { Store, MallFloor, MallZone } from '../../types';
 import { fetchFloorsAndZonesFromSupabase, fetchStoresFromSupabase } from '../../services/supabaseService';
 import { BrandLogo } from '../BrandLogo';
-import { MallFloorMap } from './MallFloorMap';
+import { MallFloorMap, normalizeFloorName } from './MallFloorMap';
 
 interface MallOverviewViewProps {
   onSelectStore: (store: Store) => void;
@@ -14,34 +14,34 @@ interface MallOverviewViewProps {
 type ActivePanel = 'floor' | 'footfall' | 'heat' | 'access' | null;
 
 const FLOOR_INFO: Record<string, { stores: number; zones: string[]; category: string; icon: string }> = {
-  'Ground Floor': { stores: 4, zones: ['Luxury Fashion Zone', 'Main Entrance'], category: 'Fashion & Luxury', icon: '🏪' },
-  'First Floor':  { stores: 4, zones: ['Fashion Zone', 'Lifestyle Zone'], category: 'Fashion & Lifestyle', icon: '👔' },
-  'Second Floor': { stores: 4, zones: ['Food & Dining Zone', 'Entertainment Zone'], category: 'Dining & Entertainment', icon: '🍜' },
-  'Third Floor':  { stores: 4, zones: ['Luxury Dining Zone', 'Premium Retail Zone'], category: 'Luxury Retail & Dining', icon: '✨' },
+  'Ground Floor': { stores: 4, zones: ['Central Atrium', 'North Wing', 'East Wing', 'South Wing', 'West Wing', 'Luxury Fashion Zone', 'Main Entrance'], category: 'Fashion & Luxury', icon: '🏪' },
+  'First Floor':  { stores: 4, zones: ['Fashion Atrium', 'North Gallery', 'East Concourse', 'South Terrace', 'West Wing', 'Fashion Zone', 'Lifestyle Zone'], category: 'Fashion & Lifestyle', icon: '👔' },
+  'Second Floor': { stores: 4, zones: ['Dining Hub', 'Food Court North', 'East Promenade', 'South Wing', 'West Wing', 'Food & Dining Zone'], category: 'Dining & Entertainment', icon: '🍜' },
+  'Third Floor':  { stores: 4, zones: ['Entertainment Atrium', 'Multiplex Arena', 'East Wing', 'South Wing', 'West Arcade', 'Luxury Dining Zone'], category: 'Luxury Retail & Dining', icon: '✨' },
   'Fourth Floor': { stores: 3, zones: ['Technology Zone', 'Services Zone'], category: 'Technology & Services', icon: '💻' },
   'Fifth Floor':  { stores: 1, zones: ['VIP Lounge', 'Events Zone'], category: 'VIP Lounge & Events', icon: '👑' },
-  '1st Floor':    { stores: 6, zones: ['East Wing', 'West Wing', 'Central Atrium'], category: 'Electronics & Tech', icon: '💻' },
-  '2nd Floor':    { stores: 5, zones: ['North Wing', 'South Wing'], category: 'Lifestyle & Sports', icon: '🏋️' },
-  '3rd Floor':    { stores: 4, zones: ['East Wing', 'West Wing'], category: 'Kids & Toys', icon: '🧸' },
+  '1st Floor':    { stores: 4, zones: ['Fashion Atrium', 'North Gallery', 'East Concourse', 'South Terrace', 'West Wing'], category: 'Fashion & Lifestyle', icon: '👔' },
+  '2nd Floor':    { stores: 4, zones: ['Dining Hub', 'Food Court North', 'East Promenade', 'South Wing', 'West Wing'], category: 'Dining & Entertainment', icon: '🍜' },
+  '3rd Floor':    { stores: 4, zones: ['Entertainment Atrium', 'Multiplex Arena', 'East Wing', 'South Wing', 'West Arcade'], category: 'Entertainment & Tech', icon: '🎬' },
   'Food Court':   { stores: 12, zones: ['Central Food Hub', 'East Dining'], category: 'Food & Beverages', icon: '🍜' },
   'Multiplex':    { stores: 3, zones: ['Screen Zone A', 'Screen Zone B'], category: 'Entertainment', icon: '🎬' },
 };
 
 const ZONE_HEAT: { zone: string; density: number; level: string; color: string }[] = [
-  { zone: 'Luxury Fashion Zone', density: 82, level: 'High', color: 'text-red-600 bg-red-50 border-red-200' },
-  { zone: 'Food & Dining Zone',  density: 74, level: 'High', color: 'text-orange-600 bg-orange-50 border-orange-200' },
-  { zone: 'Fashion Zone',        density: 61, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
-  { zone: 'Technology Zone',     density: 53, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
-  { zone: 'Main Entrance',       density: 48, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-  { zone: 'VIP Lounge',          density: 27, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+  { zone: 'Central Atrium',      density: 85, level: 'High', color: 'text-red-600 bg-red-50 border-red-200' },
+  { zone: 'Dining Hub',          density: 78, level: 'High', color: 'text-orange-600 bg-orange-50 border-orange-200' },
+  { zone: 'North Wing',          density: 64, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  { zone: 'East Wing',           density: 58, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  { zone: 'South Wing',          density: 46, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+  { zone: 'West Wing',           density: 38, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
 ];
 
 const ACCESS_POINTS: { id: string; location: string; users: number; signal: string; status: 'Online' | 'Degraded' | 'Offline'; floor: string }[] = [
-  { id: 'AP-G01', location: 'Ground Floor — Luxury Fashion Zone', users: 142, signal: '5 GHz / -48 dBm', status: 'Online', floor: 'Ground Floor' },
+  { id: 'AP-G01', location: 'Ground Floor — Central Atrium',      users: 142, signal: '5 GHz / -48 dBm', status: 'Online', floor: 'Ground Floor' },
   { id: 'AP-G02', location: 'Ground Floor — Main Entrance',       users: 87,  signal: '5 GHz / -52 dBm', status: 'Online', floor: 'Ground Floor' },
-  { id: 'AP-1F1', location: 'First Floor — Fashion Zone',         users: 63,  signal: '2.4 GHz / -61 dBm', status: 'Online', floor: 'First Floor' },
-  { id: 'AP-2F1', location: 'Second Floor — Food & Dining Hub',   users: 118, signal: '5 GHz / -49 dBm', status: 'Online', floor: 'Second Floor' },
-  { id: 'AP-3F1', location: 'Third Floor — Luxury Dining Zone',   users: 54,  signal: '5 GHz / -55 dBm', status: 'Online', floor: 'Third Floor' },
+  { id: 'AP-1F1', location: '1st Floor — Fashion Gallery',        users: 63,  signal: '2.4 GHz / -61 dBm', status: 'Online', floor: '1st Floor' },
+  { id: 'AP-2F1', location: '2nd Floor — Dining Hub',             users: 118, signal: '5 GHz / -49 dBm', status: 'Online', floor: '2nd Floor' },
+  { id: 'AP-3F1', location: '3rd Floor — Entertainment Arena',    users: 54,  signal: '5 GHz / -55 dBm', status: 'Online', floor: '3rd Floor' },
   { id: 'AP-4F1', location: 'Fourth Floor — Technology Zone',     users: 76,  signal: '2.4 GHz / -63 dBm', status: 'Degraded', floor: 'Fourth Floor' },
   { id: 'AP-5F1', location: 'Fifth Floor — VIP Lounge',           users: 29,  signal: '5 GHz / -57 dBm', status: 'Online', floor: 'Fifth Floor' },
 ];
@@ -52,11 +52,51 @@ export const MallOverviewView: React.FC<MallOverviewViewProps> = ({ onSelectStor
   const [selectedFloor, setSelectedFloor] = useState<string>('Ground Floor');
   const [selectedZone, setSelectedZone] = useState<string>('All');
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
-  const [liveStores, setLiveStores] = useState<Store[]>(stores);
+  
+  const [liveStores, setLiveStores] = useState<Store[]>(() => {
+    try {
+      const saved = localStorage.getItem('axionix_stores_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return stores && stores.length > 0 ? stores : MOCK_STORES;
+  });
 
+  // Keep liveStores synced whenever stores prop updates from parent App
+  React.useEffect(() => {
+    if (stores && stores.length > 0) {
+      setLiveStores(stores);
+    }
+  }, [stores]);
+
+  // Real-time Event Subscriptions across tabs and Supabase
   React.useEffect(() => {
     let isMounted = true;
+    let bc: BroadcastChannel | null = null;
+    let resBc: BroadcastChannel | null = null;
 
+    const reloadData = () => {
+      if (!isMounted) return;
+      try {
+        const saved = localStorage.getItem('axionix_stores_list');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLiveStores(parsed);
+          }
+        }
+      } catch (e) {}
+
+      fetchStoresFromSupabase().then(res => {
+        if (isMounted && res.data && res.data.length > 0) {
+          setLiveStores(res.data);
+        }
+      }).catch(() => {});
+    };
+
+    // Initial load
     Promise.all([
       fetchStoresFromSupabase(),
       fetchFloorsAndZonesFromSupabase()
@@ -76,26 +116,60 @@ export const MallOverviewView: React.FC<MallOverviewViewProps> = ({ onSelectStor
       console.warn('[MallOverviewView] Load error:', err);
     });
 
-    return () => { isMounted = false; };
+    try {
+      bc = new BroadcastChannel('axionix_events');
+      bc.onmessage = () => reloadData();
+    } catch (e) {}
+
+    try {
+      resBc = new BroadcastChannel('axionix_reservation_events');
+      resBc.onmessage = () => reloadData();
+    } catch (e) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'axionix_stores_list' && e.newValue) {
+        try { setLiveStores(JSON.parse(e.newValue)); } catch (err) {}
+      } else if (e.key === 'axionix_orders_list' || e.key === 'axionix_reservations_list' || e.key === 'axionix_last_event') {
+        reloadData();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('axionix_order_added', reloadData);
+    window.addEventListener('axionix_coupon_redeemed', reloadData);
+
+    const interval = setInterval(reloadData, 3000);
+
+    return () => {
+      isMounted = false;
+      bc?.close();
+      resBc?.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('axionix_order_added', reloadData);
+      window.removeEventListener('axionix_coupon_redeemed', reloadData);
+      clearInterval(interval);
+    };
   }, []);
 
-  const fallbackFloors = ['Ground Floor', 'First Floor', 'Second Floor', 'Third Floor', 'Fourth Floor', 'Fifth Floor'];
+  const fallbackFloors = ['Ground Floor', '1st Floor', '2nd Floor', '3rd Floor'];
   const floors = mallFloors.length > 0
-    ? mallFloors.map(f => f.floor_name)
+    ? Array.from(new Set(mallFloors.map(f => f.floor_name)))
     : fallbackFloors;
 
-  const activeFloorObj = mallFloors.find(f => f.floor_name === selectedFloor);
+  const normalizedSelected = normalizeFloorName(selectedFloor);
+  const activeFloorObj = mallFloors.find(f => normalizeFloorName(f.floor_name) === normalizedSelected);
   const activeFloorZones = activeFloorObj
     ? mallZones.filter(z => z.floor_id === activeFloorObj.id)
     : mallZones.filter(z => (FLOOR_INFO[selectedFloor]?.zones || []).includes(z.zone_name));
 
   const availableZoneNames = activeFloorZones.length > 0
     ? activeFloorZones.map(z => z.zone_name)
-    : (FLOOR_INFO[selectedFloor]?.zones || ['Luxury Fashion Zone', 'Main Entrance']);
+    : (FLOOR_INFO[selectedFloor]?.zones || ['Central Atrium', 'North Wing', 'East Wing', 'South Wing', 'West Wing']);
 
   const floorStores = liveStores.filter(s => {
-    const matchesFloor = s.floor === selectedFloor;
-    const matchesZone = selectedZone === 'All' || s.zone === selectedZone;
+    const matchesFloor = normalizeFloorName(s.floor) === normalizedSelected;
+    const matchesZone = selectedZone === 'All' || 
+      (s.zone || '').toLowerCase().includes(selectedZone.toLowerCase()) || 
+      selectedZone.toLowerCase().includes((s.zone || '').toLowerCase());
     return matchesFloor && matchesZone;
   });
 
@@ -105,29 +179,30 @@ export const MallOverviewView: React.FC<MallOverviewViewProps> = ({ onSelectStor
 
   const floorCategory = activeFloorObj?.description || FLOOR_INFO[selectedFloor]?.category || 'Retail & Lifestyle';
 
-  const dynamicZoneHeat = mallZones.length > 0
-    ? mallZones.map((z, idx) => {
-        const matchingStatic = ZONE_HEAT.find(zh => zh.zone.toLowerCase() === z.zone_name.toLowerCase());
-        if (matchingStatic) return matchingStatic;
+  const dynamicZoneHeat = availableZoneNames.map((zName, idx) => {
+    const zoneStores = floorStores.filter(s => 
+      (s.zone || '').toLowerCase().includes(zName.toLowerCase()) || 
+      zName.toLowerCase().includes((s.zone || '').toLowerCase())
+    );
+    const zoneVisits = zoneStores.reduce((acc, s) => acc + (s.visitorsToday || 0), 0);
+    const zoneOrders = zoneStores.reduce((acc, s) => acc + (s.ordersCount || 0), 0);
+    const density = zoneStores.length > 0 
+      ? Math.min(98, Math.max(25, Math.floor(zoneVisits / 12) + (zoneOrders * 2)))
+      : (55 - (idx * 5));
+    const level = density >= 70 ? 'High' : density >= 50 ? 'Medium' : 'Low';
+    const color = density >= 70
+      ? 'text-red-600 bg-red-50 border-red-200'
+      : density >= 50
+      ? 'text-amber-600 bg-amber-50 border-amber-200'
+      : 'text-emerald-600 bg-emerald-50 border-emerald-200';
 
-        const isHigh = z.zone_type === 'Dining' || z.zone_type === 'Entrance' || idx % 3 === 0;
-        const isMed = z.zone_type === 'Retail' || z.zone_type === 'Electronics' || idx % 3 === 1;
-        const density = isHigh ? 82 - (idx * 4) : isMed ? 62 - (idx * 3) : 38 + (idx * 2);
-        const level = density >= 70 ? 'High' : density >= 50 ? 'Medium' : 'Low';
-        const color = density >= 70
-          ? 'text-red-600 bg-red-50 border-red-200'
-          : density >= 50
-          ? 'text-amber-600 bg-amber-50 border-amber-200'
-          : 'text-emerald-600 bg-emerald-50 border-emerald-200';
-
-        return {
-          zone: z.zone_name,
-          density,
-          level,
-          color
-        };
-      })
-    : ZONE_HEAT;
+    return {
+      zone: zName,
+      density,
+      level,
+      color
+    };
+  });
 
   const topZone = dynamicZoneHeat[0] || ZONE_HEAT[0];
 

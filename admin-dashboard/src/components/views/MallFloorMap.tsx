@@ -33,6 +33,17 @@ interface ZonePolygon {
   baseColor: string;
 }
 
+export const normalizeFloorName = (f?: string): string => {
+  const s = (f || '').toLowerCase().trim();
+  if (s.includes('ground') || s === 'g' || s === 'g floor') return 'Ground Floor';
+  if (s.includes('1') || s.includes('first')) return '1st Floor';
+  if (s.includes('2') || s.includes('second')) return '2nd Floor';
+  if (s.includes('3') || s.includes('third')) return '3rd Floor';
+  if (s.includes('4') || s.includes('fourth')) return '4th Floor';
+  if (s.includes('5') || s.includes('fifth')) return '5th Floor';
+  return f || 'Ground Floor';
+};
+
 const FLOOR_ZONES: Record<string, ZonePolygon[]> = {
   'Ground Floor': [
     { name: 'Central Atrium', path: 'M 300 200 L 500 200 L 500 350 L 300 350 Z', labelX: 400, labelY: 275, baseColor: '#3b82f6' },
@@ -67,6 +78,9 @@ const FLOOR_ZONES: Record<string, ZonePolygon[]> = {
 const STORE_COORDINATES: Record<string, { x: number; y: number }> = {
   'starbucks reserve': { x: 380, y: 250 },
   'starbucks': { x: 380, y: 250 },
+  'häagen-dazs': { x: 440, y: 250 },
+  'haagen-dazs': { x: 440, y: 250 },
+  'haagen dazs': { x: 440, y: 250 },
   'din tai fung': { x: 420, y: 430 },
   'brew & bean': { x: 350, y: 115 },
   'nike flagship': { x: 380, y: 115 },
@@ -79,16 +93,24 @@ const STORE_COORDINATES: Record<string, { x: number; y: number }> = {
   'prada': { x: 400, y: 430 },
   'louis vuitton': { x: 480, y: 270 },
   'rolex boutique': { x: 340, y: 270 },
+  'rolex': { x: 340, y: 270 },
   'h&m flagship': { x: 165, y: 350 },
   'h&m': { x: 165, y: 350 },
-  'adidas Originals': { x: 480, y: 115 },
+  'u.s. polo': { x: 380, y: 115 },
+  'us polo': { x: 380, y: 115 },
   'adidas': { x: 480, y: 115 },
   'apple experience store': { x: 635, y: 280 },
   'apple store': { x: 635, y: 280 },
+  'apple': { x: 635, y: 280 },
   'ray-ban sunglass hut': { x: 165, y: 250 },
   'ray-ban': { x: 165, y: 250 },
   'pvr cinemas': { x: 400, y: 115 },
-  'sephora': { x: 635, y: 350 }
+  'sephora': { x: 635, y: 350 },
+  'pizzaexpress': { x: 420, y: 115 },
+  'coffee day': { x: 380, y: 250 },
+  'subway': { x: 320, y: 115 },
+  'tiffany': { x: 400, y: 250 },
+  'cartier': { x: 400, y: 115 }
 };
 
 export const MallFloorMap: React.FC<MallFloorMapProps> = ({
@@ -101,20 +123,25 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
-  const zones = FLOOR_ZONES[currentFloor] || FLOOR_ZONES['Ground Floor'];
-  const filteredBrands = brands.filter(b => (b.floor || '').toLowerCase().includes(currentFloor.toLowerCase().replace('floor', '').trim()));
+  const normalizedCurrentFloor = normalizeFloorName(currentFloor);
+  const zones = FLOOR_ZONES[normalizedCurrentFloor] || FLOOR_ZONES['Ground Floor'];
+  const filteredBrands = brands.filter(b => normalizeFloorName(b.floor) === normalizedCurrentFloor);
 
   const getZoneDensity = (zoneName: string): number => {
-    const zoneStores = filteredBrands.filter(b => (b.zone || '').toLowerCase().includes(zoneName.toLowerCase()));
+    const zoneStores = filteredBrands.filter(b => 
+      (b.zone || '').toLowerCase().includes(zoneName.toLowerCase()) ||
+      zoneName.toLowerCase().includes((b.zone || '').toLowerCase())
+    );
     if (!zoneStores.length) return 35;
     const totalVisits = zoneStores.reduce((acc, s) => acc + (s.visitorsToday || 0), 0);
-    return Math.min(98, Math.max(25, Math.floor(totalVisits / 12)));
+    const totalOrders = zoneStores.reduce((acc, s) => acc + (s.ordersCount || 0), 0);
+    return Math.min(98, Math.max(25, Math.floor(totalVisits / 12) + (totalOrders * 2)));
   };
 
   const getHeatmapColor = (density: number): string => {
-    if (density >= 75) return 'rgba(239, 68, 68, 0.6)';
-    if (density >= 50) return 'rgba(245, 158, 11, 0.5)';
-    return 'rgba(16, 185, 129, 0.4)';
+    if (density >= 75) return 'rgba(239, 68, 68, 0.65)';
+    if (density >= 50) return 'rgba(245, 158, 11, 0.55)';
+    return 'rgba(16, 185, 129, 0.45)';
   };
 
   return (
@@ -128,8 +155,8 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
               <Layers className="w-5 h-5 text-blue-400" />
               <span>Interactive 2D Spatial Floor Twin — {currentFloor}</span>
             </h3>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-widest">
-              Live Sensor Sync
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-widest animate-pulse">
+              Live Data Synced
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -244,12 +271,23 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
 
             <circle cx="400" cy="275" r="90" fill="url(#atriumGlow)" className="animate-pulse" />
 
-            {filteredBrands.map(store => {
+            {filteredBrands.map((store, idx) => {
               const nameLower = store.name.toLowerCase();
               let pos = STORE_COORDINATES[nameLower];
               if (!pos) {
-                const matchKey = Object.keys(STORE_COORDINATES).find(k => nameLower.includes(k));
-                pos = matchKey ? STORE_COORDINATES[matchKey] : { x: 400, y: 275 };
+                const matchKey = Object.keys(STORE_COORDINATES).find(k => nameLower.includes(k) || k.includes(nameLower));
+                if (matchKey) {
+                  pos = STORE_COORDINATES[matchKey];
+                } else {
+                  const matchingZone = zones.find(z => 
+                    (store.zone || '').toLowerCase().includes(z.name.toLowerCase()) || 
+                    z.name.toLowerCase().includes((store.zone || '').toLowerCase())
+                  );
+                  const baseCenter = matchingZone ? { x: matchingZone.labelX, y: matchingZone.labelY } : { x: 400, y: 275 };
+                  const offsetX = ((idx % 3) - 1) * 60;
+                  const offsetY = Math.floor(idx / 3) * 35 + 10;
+                  pos = { x: baseCenter.x + offsetX, y: baseCenter.y + offsetY };
+                }
               }
 
               const revK = Math.floor((store.revenueToday || 0) / 1000);
@@ -263,7 +301,7 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
                 >
                   <circle r="22" fill="#0f172a" stroke="#3b82f6" strokeWidth="2" className="shadow-lg group-hover:scale-110 transition-transform" />
                   <text y="4" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle">
-                    {store.logo || store.name.slice(0, 2).toUpperCase()}
+                    {store.logo && !store.logo.startsWith('http') ? store.logo : store.name.slice(0, 2).toUpperCase()}
                   </text>
                   
                   <g transform="translate(0, 28)">
@@ -287,7 +325,7 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Peak (&gt;75%)</span>
         </div>
         <div>
-          Showing <span className="font-bold text-white">{filteredBrands.length}</span> stores on {currentFloor}
+          Showing <span className="font-bold text-white">{filteredBrands.length}</span> live stores on {currentFloor}
         </div>
       </div>
     </div>
