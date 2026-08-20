@@ -39,6 +39,7 @@ import {
   recordAuditLog
 } from '../../services/supabaseService';
 import { Store, Order, Reservation } from '../../types';
+import { BACKEND_URL } from '../../lib/config';
 
 export const TenantDashboardView: React.FC = () => {
   const [storesList, setStoresList] = useState<Store[]>(MOCK_STORES);
@@ -81,7 +82,7 @@ export const TenantDashboardView: React.FC = () => {
     let supaOrders: any[] = [];
 
     try {
-      const res = await fetch('http://localhost:5000/api/orders');
+      const res = await fetch(`${BACKEND_URL}/api/orders`);
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
         backendOrders = data.orders;
@@ -132,7 +133,7 @@ export const TenantDashboardView: React.FC = () => {
     let supaRes: any[] = [];
 
     try {
-      const res = await fetch('http://localhost:5000/api/reservations');
+      const res = await fetch(`${BACKEND_URL}/api/reservations`);
       const data = await res.json();
       if (data.success && Array.isArray(data.reservations)) {
         backendRes = data.reservations;
@@ -232,7 +233,7 @@ export const TenantDashboardView: React.FC = () => {
     // SSE Stream
     let es: EventSource | null = null;
     try {
-      es = new EventSource('http://localhost:5000/api/realtime/stream');
+      es = new EventSource(`${BACKEND_URL}/api/realtime/stream`);
       es.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -310,7 +311,7 @@ export const TenantDashboardView: React.FC = () => {
     showToast(`Order ${orderId} status updated to '${newStatus}'`);
 
     try {
-      await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+      await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -323,7 +324,7 @@ export const TenantDashboardView: React.FC = () => {
     showToast(`Reservation updated to '${newStatus}'`);
 
     try {
-      await fetch(`http://localhost:5000/api/reservations/${resId}/status`, {
+      await fetch(`${BACKEND_URL}/api/reservations/${resId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -336,7 +337,7 @@ export const TenantDashboardView: React.FC = () => {
     showToast(`❌ Marked ${refCode} as No-Show. Slot freed!`, 'warning');
 
     try {
-      await fetch(`http://localhost:5000/api/reservations/${resId}/no-show`, {
+      await fetch(`${BACKEND_URL}/api/reservations/${resId}/no-show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

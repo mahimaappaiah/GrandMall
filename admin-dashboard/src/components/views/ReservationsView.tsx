@@ -29,6 +29,7 @@ import { MOCK_RESERVATIONS } from '../../data/mockData';
 import { downloadReservationsCSV } from '../../utils/exportUtils';
 import { Reservation } from '../../types';
 import { fetchReservationsFromSupabase } from '../../services/supabaseService';
+import { BACKEND_URL } from '../../lib/config';
 
 interface ReservationsViewProps {
   reservationsList?: Reservation[];
@@ -181,7 +182,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
     // 1. Fetch live reservations from backend
     try {
-      const res = await fetch('http://localhost:5000/api/reservations');
+      const res = await fetch(`${BACKEND_URL}/api/reservations`);
       const data = await res.json();
       if (data.success && Array.isArray(data.reservations)) {
         backendItems = data.reservations;
@@ -190,7 +191,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
     // 2. Fetch capacities
     try {
-      const capRes = await fetch('http://localhost:5000/api/reservations/capacity');
+      const capRes = await fetch(`${BACKEND_URL}/api/reservations/capacity`);
       const capData = await capRes.json();
       if (capData.success && capData.capacities) {
         setSlotCapacities(capData.capacities);
@@ -199,7 +200,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
     // 3. Fetch waitlist
     try {
-      const wtRes = await fetch('http://localhost:5000/api/reservations/waitlist');
+      const wtRes = await fetch(`${BACKEND_URL}/api/reservations/waitlist`);
       const wtData = await wtRes.json();
       if (wtData.success && Array.isArray(wtData.waitlist)) {
         setWaitlistEntries(wtData.waitlist);
@@ -275,7 +276,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource('http://localhost:5000/api/realtime/stream');
+      eventSource = new EventSource(`${BACKEND_URL}/api/realtime/stream`);
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -352,7 +353,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     } catch (e) {}
 
     try {
-      await fetch('http://localhost:5000/api/reservations', {
+      await fetch(`${BACKEND_URL}/api/reservations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newResPayload)
@@ -381,7 +382,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
     showToast(`Reservation status updated to ${nextStatus}`);
 
-    fetch(`http://localhost:5000/api/reservations/${resId}/status`, {
+    fetch(`${BACKEND_URL}/api/reservations/${resId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus })
@@ -398,7 +399,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     setLiveReservations(prev => prev.map(r => (r.id === resId || r.refCode === resId ? { ...r, status: 'No Show' as any } : r)));
 
     try {
-      const res = await fetch(`http://localhost:5000/api/reservations/${resId}/no-show`, {
+      const res = await fetch(`${BACKEND_URL}/api/reservations/${resId}/no-show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -436,7 +437,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     showToast(`📅 Rescheduled ${targetRes.refCode} to ${targetTimeSlot} on ${targetDate}`);
 
     try {
-      await fetch(`http://localhost:5000/api/reservations/${draggedResId}/reschedule`, {
+      await fetch(`${BACKEND_URL}/api/reservations/${draggedResId}/reschedule`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: targetDate, timeSlot: targetTimeSlot })
@@ -452,13 +453,13 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     try {
       const promises = Object.entries(editingCapacities).map(([slot, cap]) => {
         if (slot === 'default') {
-          return fetch('http://localhost:5000/api/reservations/capacity', {
+          return fetch(`${BACKEND_URL}/api/reservations/capacity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ storeName: selectedCapStore, defaultCapacity: cap })
           });
         }
-        return fetch('http://localhost:5000/api/reservations/capacity', {
+        return fetch(`${BACKEND_URL}/api/reservations/capacity`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ storeName: selectedCapStore, timeSlot: slot, capacity: cap })
@@ -475,7 +476,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
   // Feature 08 — Confirm Waitlist Entry
   const handleConfirmWaitlistEntry = async (entry: WaitlistEntry) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/reservations/waitlist/${entry.id}/confirm`, {
+      const res = await fetch(`${BACKEND_URL}/api/reservations/waitlist/${entry.id}/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

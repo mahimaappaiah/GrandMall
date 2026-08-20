@@ -4,6 +4,7 @@ import { MOCK_STORES } from '../../data/mockData';
 import { Store } from '../../types';
 import { downloadStoresCSV } from '../../utils/exportUtils';
 import { fetchStoresFromSupabase, fetchOrdersFromSupabase, fetchConnectedUsersFromSupabase } from '../../services/supabaseService';
+import { BACKEND_URL } from '../../lib/config';
 import { BrandLogo } from '../BrandLogo';
 
 interface StoreDirectoryViewProps {
@@ -49,7 +50,7 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
 
       // Fallback local endpoints
       try {
-        const oRes = await fetch('http://localhost:5000/api/orders');
+        const oRes = await fetch(`${BACKEND_URL}/api/orders`);
         const oData = await oRes.json();
         if (isMounted && oData.success && Array.isArray(oData.orders)) {
           setLiveOrders(oData.orders);
@@ -57,7 +58,7 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
       } catch (e) {}
 
       try {
-        const uRes = await fetch('http://localhost:5000/api/auth/connected-users');
+        const uRes = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
         const uData = await uRes.json();
         if (isMounted && uData.success && Array.isArray(uData.users)) {
           setLiveUsers(uData.users);

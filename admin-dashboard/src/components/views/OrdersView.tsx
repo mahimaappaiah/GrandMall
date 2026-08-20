@@ -4,6 +4,7 @@ import { MOCK_ORDERS } from '../../data/mockData';
 import { Order } from '../../types';
 import { downloadOrdersCSV, downloadOrderReceiptTXT } from '../../utils/exportUtils';
 import { fetchOrdersFromSupabase, recordAuditLog } from '../../services/supabaseService';
+import { BACKEND_URL } from '../../lib/config';
 
 interface OrdersViewProps {
   ordersList?: Order[];
@@ -36,7 +37,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
 
     // 3. Fetch from Backend REST endpoint
     try {
-      const res = await fetch('http://localhost:5000/api/orders');
+      const res = await fetch(`${BACKEND_URL}/api/orders`);
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
         rawOrders.push(...data.orders);
@@ -133,7 +134,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
 
     recordAuditLog('ORDER_STATUS_CHANGED', 'order', orderId, { newStatus: nextStatus });
 
-    fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+    fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus })
@@ -146,7 +147,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
 
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource('http://localhost:5000/api/realtime/stream');
+      eventSource = new EventSource(`${BACKEND_URL}/api/realtime/stream`);
       eventSource.onmessage = () => {
         fetchLiveOrders();
       };

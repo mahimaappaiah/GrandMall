@@ -71,16 +71,7 @@ export default function App() {
   const unreadAlertsCount = alertsList.filter(a => !a.read).length;
 
   // Stores List State (Loaded from Supabase brands, falling back to mock)
-  const [storesList, setStoresList] = useState<Store[]>(() => {
-    try {
-      const saved = localStorage.getItem('axionix_stores_list');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return MOCK_STORES;
-  });
+  const [storesList, setStoresList] = useState<Store[]>(MOCK_STORES);
 
   // Real-time Lists State (Preserved and Persistent across browser refreshes)
   const [usersList, setUsersList] = useState<ConnectedUser[]>(() => {
@@ -120,10 +111,6 @@ export default function App() {
     localStorage.removeItem('axionix_coupons_list');
     return MOCK_COUPONS;
   });
-
-  useEffect(() => {
-    try { localStorage.setItem('axionix_stores_list', JSON.stringify(storesList)); } catch (e) {}
-  }, [storesList]);
 
   useEffect(() => {
     try { localStorage.setItem('axionix_users_list', JSON.stringify(usersList)); } catch (e) {}
@@ -368,20 +355,10 @@ export default function App() {
         }
         return u;
       }));
-
-      // Reflect live store footfall on Mall Twin
-      setStoresList(prevStores => prevStores.map(s => {
-        const sNameLower = s.name.toLowerCase().trim();
-        const targetLower = store.toLowerCase().trim();
-        if (sNameLower.includes(targetLower) || targetLower.includes(sNameLower)) {
-          return { ...s, visitorsToday: (s.visitorsToday || 0) + 1 };
-        }
-        return s;
-      }));
-    } else if (type === 'ORDER_CREATED' || type === 'NEW_ORDER' || type === 'order_created') {
-      const orderPayload = payload?.order || payload || {};
+    } else if (type === 'ORDER_CREATED') {
+      const orderPayload = payload.order || payload || {};
       const orderNum = orderPayload.orderNumber || orderPayload.order_number || `#AX-${Math.floor(1000 + Math.random() * 9000)}`;
-      const targetStore = orderPayload.storeName || orderPayload.store_name || orderPayload.brand_name || 'Starbucks Reserve';
+      const targetStore = orderPayload.storeName || orderPayload.store_name || 'Starbucks Reserve';
       const custName = orderPayload.customerName || orderPayload.user_name || orderPayload.guest_name || 'Valued Guest';
       const custPhone = orderPayload.customerPhone || orderPayload.user_phone || '+91 84950 93170';
 
@@ -397,8 +374,6 @@ export default function App() {
         { name: orderPayload.item_name || 'Designer Item', quantity: Number(orderPayload.quantity || 1), price: Number(orderPayload.totalAmount || 2495) }
       ];
 
-      const orderTotal = Number(orderPayload.totalAmount || orderPayload.total_amount || 2495);
-
       const newOrder: Order = {
         id: String(orderPayload.id || 'ord-' + Date.now()),
         orderNumber: orderNum,
@@ -408,7 +383,7 @@ export default function App() {
         storeCategory: orderPayload.storeCategory || 'Fashion',
         orderType: orderPayload.orderType || 'Click & Collect',
         paymentMethod: orderPayload.paymentMethod || 'UPI / GPay',
-        totalAmount: orderTotal,
+        totalAmount: Number(orderPayload.totalAmount || orderPayload.total_amount || 2495),
         itemsCount: Number(orderPayload.itemsCount || rawItems.reduce((acc: number, i: any) => acc + i.quantity, 0)),
         timestamp: orderPayload.timestamp || 'Just now',
         status: 'Completed',
@@ -428,27 +403,12 @@ export default function App() {
         return u;
       }));
 
-      // Reflect live store revenue, orders, and visitors immediately on Mall Twin
-      setStoresList(prevStores => prevStores.map(s => {
-        const sNameLower = s.name.toLowerCase().trim();
-        const targetLower = targetStore.toLowerCase().trim();
-        if (sNameLower.includes(targetLower) || targetLower.includes(sNameLower)) {
-          return {
-            ...s,
-            ordersCount: (s.ordersCount || 0) + 1,
-            revenueToday: (s.revenueToday || 0) + orderTotal,
-            visitorsToday: (s.visitorsToday || 0) + 1
-          };
-        }
-        return s;
-      }));
-
       setLiveToast({
         title: `Order ${newOrder.orderNumber} Placed`,
-        message: `${newOrder.customerName} placed order for ${newOrder.itemsCount} items at ${targetStore}!`
+        message: `${newOrder.customerName} placed order for ${newOrder.itemsCount} items!`
       });
-    } else if (type === 'RESERVATION_CREATED' || type === 'NEW_RESERVATION' || type === 'reservation_created') {
-      const resPayload = payload?.reservation || payload || {};
+    } else if (type === 'RESERVATION_CREATED') {
+      const resPayload = payload.reservation || payload || {};
       const targetVenue = resPayload.storeName || resPayload.store_name || resPayload.venue || 'Starbucks Reserve';
       const gName = resPayload.guestName || resPayload.guest_name || resPayload.user_name || 'Valued Guest';
       const gPhone = resPayload.guestPhone || resPayload.user_phone || resPayload.guest_phone || '+91 84950 93170';
@@ -478,26 +438,12 @@ export default function App() {
         return u;
       }));
 
-      // Reflect live reservations on Mall Twin
-      setStoresList(prevStores => prevStores.map(s => {
-        const sNameLower = s.name.toLowerCase().trim();
-        const targetLower = targetVenue.toLowerCase().trim();
-        if (sNameLower.includes(targetLower) || targetLower.includes(sNameLower)) {
-          return {
-            ...s,
-            reservationsCount: (s.reservationsCount || 0) + 1,
-            visitorsToday: (s.visitorsToday || 0) + Number(resPayload.partySize || 2)
-          };
-        }
-        return s;
-      }));
-
       setLiveToast({
         title: 'Fitting Room / Table Reserved',
         message: `Reservation ${newRes.refCode} confirmed for ${newRes.guestName} at ${targetVenue}.`
       });
-    } else if (type === 'COUPON_REDEEMED' || type === 'coupon_redeemed') {
-      const code = payload?.code || payload?.redemption?.code;
+    } else if (type === 'COUPON_REDEEMED') {
+      const code = payload.code;
       setCouponsList(prev => prev.map(c => {
         if (c.code === code) {
           return {
@@ -506,8 +452,8 @@ export default function App() {
             redeemedCustomers: [
               {
                 id: 'rdm-' + Date.now(),
-                customerName: payload.user_name || payload.redemption?.customerName || 'Valued Guest',
-                customerPhone: payload.user_phone || payload.redemption?.customerPhone || '+91 98765 43210',
+                customerName: payload.user_name || 'Valued Guest',
+                customerPhone: payload.user_phone || '+91 98765 43210',
                 timestamp: 'Just now',
                 channel: 'WiFi Portal'
               },
@@ -520,7 +466,7 @@ export default function App() {
 
       setLiveToast({
         title: 'Promo Coupon Redeemed!',
-        message: `Coupon code '${code}' redeemed by ${payload.user_name || payload.redemption?.customerName || 'Guest'}`
+        message: `Coupon code '${code}' redeemed by ${payload.user_name || 'Guest'}`
       });
     }
   };
@@ -573,7 +519,7 @@ export default function App() {
 
   useEffect(() => {
     fetchBackendConnectedUsers();
-    const interval = setInterval(fetchBackendConnectedUsers, 2000);
+    const interval = setInterval(fetchBackendConnectedUsers, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -581,7 +527,6 @@ export default function App() {
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let bc: BroadcastChannel | null = null;
-    let resBc: BroadcastChannel | null = null;
 
     try {
       eventSource = new EventSource(`${BACKEND_URL}/api/realtime/stream`);
@@ -598,37 +543,24 @@ export default function App() {
       bc = new BroadcastChannel('axionix_events');
       bc.onmessage = (event) => {
         if (event.data?.type) {
-          handleRealtimeEvent(event.data.type, event.data.payload || event.data);
+          handleRealtimeEvent(event.data.type, event.data.payload);
           fetchBackendConnectedUsers();
         }
       };
     } catch (e) {}
 
-    try {
-      resBc = new BroadcastChannel('axionix_reservation_events');
-      resBc.onmessage = (event) => {
-        if (event.data) {
-          handleRealtimeEvent('RESERVATION_CREATED', event.data);
-        }
-      };
-    } catch (e) {}
-
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'axionix_stores_list' && e.newValue) {
-        try { setStoresList(JSON.parse(e.newValue)); } catch (err) {}
-      } else if (e.key === 'axionix_users_list' && e.newValue) {
-        try { setUsersList(JSON.parse(e.newValue)); } catch (err) {}
-      } else if (e.key === 'axionix_orders_list' && e.newValue) {
-        try { setOrdersList(JSON.parse(e.newValue)); } catch (err) {}
-      } else if (e.key === 'axionix_reservations_list' && e.newValue) {
-        try { setReservationsList(JSON.parse(e.newValue)); } catch (err) {}
-      } else if (e.key === 'axionix_last_event' && e.newValue) {
+      if ((e.key === 'axionix_last_event' || e.key === 'axionix_users_list') && e.newValue) {
         try {
-          const data = JSON.parse(e.newValue);
-          if (data.type) {
-            handleRealtimeEvent(data.type, data.payload || data);
+          if (e.key === 'axionix_users_list') {
+            setUsersList(JSON.parse(e.newValue));
+          } else {
+            const data = JSON.parse(e.newValue);
+            if (data.type) {
+              handleRealtimeEvent(data.type, data.payload);
+            }
           }
-        } catch (err) {}
+        } catch (e) {}
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -636,7 +568,6 @@ export default function App() {
     return () => {
       eventSource?.close();
       bc?.close();
-      resBc?.close();
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);

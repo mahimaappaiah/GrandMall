@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { BACKEND_URL } from '../lib/config';
 import {
   Store,
   ConnectedUser,
@@ -76,7 +77,7 @@ function formatRelativeTime(dateStr?: string | null): string {
 export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive: boolean; error?: string }> {
   let backendBrands: any[] = [];
   try {
-    const res = await fetch('http://localhost:5000/api/brands');
+    const res = await fetch(`${BACKEND_URL}/api/brands`);
     const bData = await res.json();
     if (bData.success && Array.isArray(bData.brands)) {
       backendBrands = bData.brands;
@@ -803,7 +804,7 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
 export async function fetchCustomersFromSupabase(): Promise<{ data: ConnectedUser[]; isLive: boolean; error?: string }> {
   let backendUsers: any[] = [];
   try {
-    const res = await fetch('http://localhost:5000/api/auth/connected-users');
+    const res = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
     const uData = await res.json();
     if (uData.success && Array.isArray(uData.users)) {
       backendUsers = uData.users;
@@ -1555,7 +1556,7 @@ export function broadcastEvent(eventType: string, payload: any) {
 
   window.dispatchEvent(new CustomEvent('axionix_broadcast_event', { detail: { type: eventType, payload } }));
 
-  fetch('http://localhost:5000/api/realtime/broadcast', {
+  fetch(`${BACKEND_URL}/api/realtime/broadcast`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: eventType, payload })
@@ -1570,7 +1571,7 @@ export async function updateProductStockApi(
   minStock?: number
 ): Promise<{ success: boolean; product?: any; error?: string }> {
   try {
-    const res = await fetch(`http://localhost:5000/api/products/${productId}/stock`, {
+    const res = await fetch(`${BACKEND_URL}/api/products/${productId}/stock`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ quantity, operation, sku, minStock })

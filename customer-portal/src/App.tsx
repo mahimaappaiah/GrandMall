@@ -24,8 +24,9 @@ import {
   CustomerProfile,
   MallWalletData
 } from './services/supabaseService';
+import { BACKEND_URL } from './lib/config';
 
-const API_BASE = 'http://localhost:5000';
+const API_BASE = BACKEND_URL;
 const REGISTERED_USERS_KEY = 'axionix_registered_users';
 
 interface BrandItem {

@@ -3,6 +3,7 @@ import { Ticket, Search, Plus, Copy, Users, Calendar, Download, Eye, X, UserChec
 import { Coupon, CouponRedemption } from '../../types';
 import { downloadCouponsCSV, downloadRedeemedCustomersCSV } from '../../utils/exportUtils';
 import { fetchCouponsFromSupabase, recordAuditLog } from '../../services/supabaseService';
+import { BACKEND_URL } from '../../lib/config';
 
 // WEBSITE ACTIVE COUPONS DATABASE MAPPED STRICTLY TO CUSTOMER PORTAL & ALL MALL BRANDS
 const WEBSITE_WEBSITE_COUPONS: Coupon[] = [
@@ -618,7 +619,7 @@ export const CouponsView: React.FC<CouponsViewProps> = ({ couponsList }) => {
 
     // 1. Fetch from backend REST endpoint
     try {
-      const res = await fetch('http://localhost:5000/api/auth/coupon-redemptions');
+      const res = await fetch(`${BACKEND_URL}/api/auth/coupon-redemptions`);
       const data = await res.json();
       if (data.success && Array.isArray(data.redemptions)) {
         allRedemptions.push(...data.redemptions);
@@ -635,7 +636,7 @@ export const CouponsView: React.FC<CouponsViewProps> = ({ couponsList }) => {
 
     // 3. Fetch orders from backend REST to extract any order placed with a coupon
     try {
-      const ordRes = await fetch('http://localhost:5000/api/orders');
+      const ordRes = await fetch(`${BACKEND_URL}/api/orders`);
       const ordData = await ordRes.json();
       if (ordData.success && Array.isArray(ordData.orders)) {
         for (const o of ordData.orders) {
@@ -747,7 +748,7 @@ export const CouponsView: React.FC<CouponsViewProps> = ({ couponsList }) => {
 
     let es: EventSource | null = null;
     try {
-      es = new EventSource('http://localhost:5000/api/realtime/stream');
+      es = new EventSource(`${BACKEND_URL}/api/realtime/stream`);
       es.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);

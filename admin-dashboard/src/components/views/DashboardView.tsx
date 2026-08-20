@@ -50,6 +50,7 @@ import {
   CategoryDistributionChartData
 } from '../../services/supabaseService';
 import { realtimeManager } from '../../services/realtimeService';
+import { BACKEND_URL } from '../../lib/config';
 import { ViewType, KpiItem, Campaign, ActivityLog } from '../../types';
 
 ChartJS.register(
@@ -89,7 +90,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const fetchLiveAxionixMetrics = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/admin/metrics');
+      const res = await fetch(`${BACKEND_URL}/api/admin/metrics`);
       const data = await res.json();
       if (data.success) {
         setRawMetrics({

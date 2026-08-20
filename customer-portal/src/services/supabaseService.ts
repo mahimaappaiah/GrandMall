@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { BACKEND_URL } from '../lib/config';
 
 export interface CustomerProfile {
   id: string;
@@ -291,7 +292,7 @@ export async function cancelReservationInSupabase(refCodeOrId: string): Promise<
 
 export async function fetchReservationAvailability(storeName: string, date?: string): Promise<{ success: boolean; slots: any[] }> {
   try {
-    const res = await fetch(`http://localhost:5000/api/reservations/availability?store=${encodeURIComponent(storeName)}&date=${date || new Date().toISOString().split('T')[0]}`);
+    const res = await fetch(`${BACKEND_URL}/api/reservations/availability?store=${encodeURIComponent(storeName)}&date=${date || new Date().toISOString().split('T')[0]}`);
     const data = await res.json();
     if (data.success && Array.isArray(data.slots)) {
       return { success: true, slots: data.slots };
@@ -323,7 +324,7 @@ export async function joinReservationWaitlist(waitlistData: {
   specialNotes?: string;
 }): Promise<{ success: boolean; position?: number; entry?: any }> {
   try {
-    const res = await fetch('http://localhost:5000/api/reservations/waitlist', {
+    const res = await fetch(`${BACKEND_URL}/api/reservations/waitlist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(waitlistData)
@@ -431,7 +432,7 @@ export interface LoyaltyAccount {
 
 export async function fetchLoyaltyAccount(userId: string): Promise<LoyaltyAccount | null> {
   try {
-    const res = await fetch(`http://localhost:5000/api/loyalty/${userId}`);
+    const res = await fetch(`${BACKEND_URL}/api/loyalty/${userId}`);
     const data = await res.json();
     if (data.success && data.account) {
       return data.account;
@@ -442,7 +443,7 @@ export async function fetchLoyaltyAccount(userId: string): Promise<LoyaltyAccoun
 
 export async function earnLoyaltyPoints(userId: string, amountSpent: number): Promise<{ pointsEarned: number; account: LoyaltyAccount } | null> {
   try {
-    const res = await fetch('http://localhost:5000/api/loyalty/earn', {
+    const res = await fetch(`${BACKEND_URL}/api/loyalty/earn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, amountSpent })
@@ -457,7 +458,7 @@ export async function earnLoyaltyPoints(userId: string, amountSpent: number): Pr
 
 export async function redeemLoyaltyPoints(userId: string, pointsToRedeem: number): Promise<{ discountValue: number; account: LoyaltyAccount } | null> {
   try {
-    const res = await fetch('http://localhost:5000/api/loyalty/redeem', {
+    const res = await fetch(`${BACKEND_URL}/api/loyalty/redeem`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, pointsToRedeem })
