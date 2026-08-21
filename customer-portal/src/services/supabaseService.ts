@@ -422,9 +422,9 @@ export async function joinReservationWaitlist(waitlistData: {
 }
 
 // ---------------------------------------------------------------------------
-// COUPONS & REDEMPTIONS
+// COUPONS
 // ---------------------------------------------------------------------------
-export async function fetchCouponsFromSupabase(): Promise<{ data: any[]; isLive: boolean }> {
+export async function fetchCouponsFromSupabase(): Promise<{ data: any[]; isLive: boolean; error?: string }> {
   if (!isSupabaseConfigured) return { data: [], isLive: false };
 
   try {
@@ -434,13 +434,54 @@ export async function fetchCouponsFromSupabase(): Promise<{ data: any[]; isLive:
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
-    if (error || !data) {
-      return { data: [], isLive: false };
+    if (error) {
+      console.warn('[Supabase] fetchCoupons error:', error.message);
+      return { data: [], isLive: false, error: error.message };
     }
 
-    return { data, isLive: true };
-  } catch (err) {
-    return { data: [], isLive: false };
+    if (!data) return { data: [], isLive: true };
+
+    const activeCoupons = data.filter((c: any) => {
+      if (c.valid_until && new Date(c.valid_until) < new Date()) return false;
+      if (c.valid_from && new Date(c.valid_from) > new Date()) return false;
+      return true;
+    });
+
+    return { data: activeCoupons, isLive: true };
+  } catch (err: any) {
+    return { data: [], isLive: false, error: err.message };
+  }
+}
+
+export async function validateCouponInSupabase(couponCode: string): Promise<{ coupon: any | null; isValid: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !couponCode) {
+    return { coupon: null, isValid: false };
+  }
+
+  try {
+    const cleanCode = couponCode.trim().toUpperCase();
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*, brands(id, name, category)')
+      .eq('is_active', true)
+      .ilike('code', cleanCode)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { coupon: null, isValid: false, error: error?.message || 'Coupon not found' };
+    }
+
+    if (data.valid_until && new Date(data.valid_until) < new Date()) {
+      return { coupon: null, isValid: false, error: 'Coupon has expired' };
+    }
+
+    if (data.valid_from && new Date(data.valid_from) > new Date()) {
+      return { coupon: null, isValid: false, error: 'Coupon is not yet active' };
+    }
+
+    return { coupon: data, isValid: true };
+  } catch (err: any) {
+    return { coupon: null, isValid: false, error: err.message };
   }
 }
 

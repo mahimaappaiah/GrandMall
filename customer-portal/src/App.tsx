@@ -6,6 +6,7 @@ import {
   fetchBrandsFromSupabase,
   fetchProductsFromSupabase,
   fetchCouponsFromSupabase,
+  validateCouponInSupabase,
   createOrderInSupabase,
   createReservationInSupabase,
   cancelReservationInSupabase,
@@ -2506,15 +2507,39 @@ export default function App() {
     window.dispatchEvent(new Event('storage'));
   };
 
-  const handleApplyManualCoupon = () => {
+  const handleApplyManualCoupon = async () => {
     setCouponError(null);
     if (!couponInput.trim()) return;
 
     const enteredCode = couponInput.trim().toUpperCase();
-    const match = PRELOADED_COUPONS.find(c => c.code.toUpperCase() === enteredCode);
+    let match = PRELOADED_COUPONS.find(c => c.code.toUpperCase() === enteredCode);
+
+    if (!match && isSupabaseConfigured) {
+      const { coupon: supaCpn, isValid, error } = await validateCouponInSupabase(enteredCode);
+      if (isValid && supaCpn) {
+        const discountLabel = supaCpn.discount_type === 'percentage'
+          ? `${supaCpn.discount_value}% OFF`
+          : `₹${supaCpn.discount_value} OFF`;
+
+        match = {
+          id: supaCpn.id,
+          code: supaCpn.code,
+          title: supaCpn.description || 'Special Discount',
+          discount: discountLabel,
+          discountValue: Number(supaCpn.discount_value) || 0,
+          storeName: supaCpn.brands?.name || 'The Grand Mall',
+          category: supaCpn.brands?.category || 'All Stores',
+          expiryDate: supaCpn.valid_until ? supaCpn.valid_until.split('T')[0] : '2026-12-31',
+          minCartTotal: 0
+        };
+      } else if (error && error !== 'Coupon not found') {
+        setCouponError(`❌ ${error}`);
+        return;
+      }
+    }
 
     if (!match) {
-      // Code not found in any preloaded coupon list
+      // Code not found in Supabase or preloaded coupon list
       setCouponError(`❌ Promo code "${enteredCode}" is invalid. Please enter a valid coupon code.`);
       return;
     }
