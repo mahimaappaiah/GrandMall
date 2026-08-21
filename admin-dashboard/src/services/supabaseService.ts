@@ -1051,9 +1051,16 @@ export async function fetchCouponsFromSupabase(): Promise<{ data: Coupon[]; isLi
         valid_from,
         valid_until,
         max_redemptions,
-        redemption_count,
         brands (id, name, category),
-        coupon_redemptions (id, user_id, coupon_id, redeemed_at)
+        coupon_redemptions (
+          id,
+          user_id,
+          coupon_id,
+          order_id,
+          redeemed_at,
+          profiles:user_id (id, full_name, phone, email),
+          orders:order_id (id, order_number, customer_name, customer_phone, total_amount, store_name)
+        )
       `)
       .order('created_at', { ascending: false });
 
@@ -1089,7 +1096,7 @@ export async function fetchCouponsFromSupabase(): Promise<{ data: Coupon[]; isLi
         c.is_active !== false ? 'Active' : 'Expired';
 
       const redemptions = c.coupon_redemptions || [];
-      const redemptionCount = c.redemption_count ?? redemptions.length;
+      const redemptionCount = redemptions.length;
 
       return {
         id: c.id,
@@ -1115,13 +1122,14 @@ export async function fetchCouponsFromSupabase(): Promise<{ data: Coupon[]; isLi
           id: r.id,
           couponId: c.id,
           couponCode: c.code,
-          customerName: r.users?.name || 'Valued Guest',
-          customerPhone: r.users?.phone || '+91 98000 00000',
+          customerName: r.profiles?.full_name || r.orders?.customer_name || 'Valued Guest',
+          customerPhone: r.profiles?.phone || r.orders?.customer_phone || '+91 98000 00000',
           redeemedAt: r.redeemed_at ? formatRelativeTime(r.redeemed_at) : 'Recently',
-          storeName: c.brands?.name || 'Mall Store',
+          storeName: r.orders?.store_name || c.brands?.name || 'Mall Store',
           discountApplied: discountLabel,
           savingsAmount: c.discount_value ? `₹${c.discount_value}` : '₹Savings Applied',
           channel: 'WiFi Captive Portal',
+          orderNumber: r.orders?.order_number || '#AX-1088',
           vipStatus: false
         }))
       };
