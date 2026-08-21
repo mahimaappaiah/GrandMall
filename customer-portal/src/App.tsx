@@ -1443,6 +1443,39 @@ export default function App() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<any>(null);
 
+  // Payment form fields - Start empty for new users
+  const [upiId, setUpiId] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [paymentFormError, setPaymentFormError] = useState<string | null>(null);
+  const [isApplePayProcessing, setIsApplePayProcessing] = useState(false);
+
+  // Load saved payment credentials ONLY for returning users
+  useEffect(() => {
+    if (activeVisitorTab === 'returning' && mobileNumber) {
+      try {
+        const savedUpi = localStorage.getItem(`axionix_saved_upi_${mobileNumber}`);
+        const savedCard = localStorage.getItem(`axionix_saved_card_${mobileNumber}`);
+        if (savedUpi) setUpiId(savedUpi);
+        if (savedCard) {
+          const cardData = JSON.parse(savedCard);
+          if (cardData.number) setCardNumber(cardData.number);
+          if (cardData.name) setCardName(cardData.name);
+          if (cardData.expiry) setCardExpiry(cardData.expiry);
+        }
+      } catch (e) {}
+    } else if (activeVisitorTab === 'new') {
+      // Ensure all credentials fields are strictly empty for new users
+      setUpiId('');
+      setCardNumber('');
+      setCardName('');
+      setCardExpiry('');
+      setCardCvv('');
+    }
+  }, [activeVisitorTab, mobileNumber]);
+
   const [mallWallet, setMallWallet] = useState<MallWalletData>(() => getMallWallet(mobileNumber));
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [walletTab, setWalletTab] = useState<'overview' | 'topup' | 'family'>('overview');
@@ -2385,11 +2418,15 @@ export default function App() {
       setCurrentStep('stores');
     } else if (rawCode.toLowerCase().startsWith('qr_coupon_') || rawCode.toUpperCase().includes('GRAND') || rawCode.toUpperCase().includes('ZARA')) {
       const couponCode = rawCode.replace(/qr_coupon_/i, '').toUpperCase();
-      const match = PRELOADED_COUPONS.find(c => c.code.toUpperCase() === couponCode) || PRELOADED_COUPONS[0];
-      handleApplyCoupon(match);
-      setToastMessage(`🎟️ QR Coupon Auto-Applied: ${match.code} (${match.discount})!`);
-      setCheckoutModalOpen(true);
-      setCheckoutStep('cart');
+      const match = PRELOADED_COUPONS.find(c => c.code.toUpperCase() === couponCode);
+      if (match) {
+        handleApplyCoupon(match);
+        setToastMessage(`🎟️ QR Coupon Auto-Applied: ${match.code} (${match.discount})!`);
+        setCheckoutModalOpen(true);
+        setCheckoutStep('cart');
+      } else {
+        setToastMessage(`❌ QR code does not contain a valid coupon.`);
+      }
     } else {
       setToastMessage(`📍 Wayfinder QR Scanned: You are at Ground Floor Central Atrium.`);
     }
@@ -2475,22 +2512,28 @@ export default function App() {
     setCouponError(null);
     if (!couponInput.trim()) return;
 
-    const match = PRELOADED_COUPONS.find(c => c.code.toUpperCase() === couponInput.trim().toUpperCase());
-    if (match) {
-      handleApplyCoupon(match);
-    } else {
-      const customCoupon: Coupon = {
-        id: 'cpn-manual',
-        code: couponInput.trim().toUpperCase(),
-        title: 'Special Concierge Offer',
-        discount: '10% OFF',
-        storeName: 'The Grand Mall',
-        discountType: 'percentage',
-        discountValue: 10,
-        maxDiscount: 2000
-      };
-      setAppliedCoupon(customCoupon);
+    const enteredCode = couponInput.trim().toUpperCase();
+    const match = PRELOADED_COUPONS.find(c => c.code.toUpperCase() === enteredCode);
+
+    if (!match) {
+      // Code not found in any preloaded coupon list
+      setCouponError(`❌ Promo code "${enteredCode}" is invalid. Please enter a valid coupon code.`);
+      return;
     }
+
+    // Check if this is a brand-specific coupon and the brand is NOT in cart
+    const storeLower = match.storeName.toLowerCase();
+    const isMallWide = storeLower.includes('grand mall') || storeLower.includes('concierge') || storeLower.includes('all stores');
+    if (!isMallWide) {
+      const cartBrandNames = cart.map(c => c.brandName.toLowerCase());
+      const brandInCart = cartBrandNames.some(b => b.includes(storeLower) || storeLower.includes(b));
+      if (!brandInCart) {
+        setCouponError(`❌ This coupon is valid only at ${match.storeName}. Add items from that store to use this code.`);
+        return;
+      }
+    }
+
+    handleApplyCoupon(match);
   };
 
   const handlePlaceOrder = async () => {
@@ -2607,49 +2650,127 @@ export default function App() {
   };
 
   const handlePrintReceipt = () => {
-    window.print();
+    const el = document.getElementById('digital-receipt-printable');
+    if (!el) {
+      window.print();
+      return;
+    }
+
+    const printWin = window.open('', '_blank', 'width=520,height=750,toolbar=0,scrollbars=1');
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>AXIONIX Receipt - ${orderSuccess?.orderNumber || '#AX-9496'}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #ffffff;
+      color: #0f172a;
+      padding: 24px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .font-serif-title { font-family: 'Playfair Display', Georgia, serif; }
+    @media print {
+      body { padding: 0; }
+      @page { margin: 12mm; }
+    }
+  </style>
+</head>
+<body class="bg-white text-slate-900">
+  <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs font-sans text-left space-y-3 relative overflow-hidden">
+    ${el.innerHTML}
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 350);
+    };
+  <\/script>
+</body>
+</html>`);
+    printWin.document.close();
   };
 
   const handleDownloadReceipt = (orderObj: any) => {
     const itemsList = orderObj.items || cart.map(c => ({ item: c.item, quantity: c.quantity, brandName: c.brandName }));
-    const itemsText = itemsList.map((c: any) => {
+    const itemsHtml = itemsList.map((c: any) => {
       const name = c.item ? c.item.name : c.name || 'Item';
       const qty = c.quantity || 1;
       const price = c.item ? c.item.price : c.price || 0;
-      return `  - ${name} x${qty} @ ₹${price.toLocaleString()} = ₹${(qty * price).toLocaleString()}`;
-    }).join('\n');
+      return `<tr>
+        <td style="padding:6px 0;border-bottom:1px solid #e2e8f0;font-size:12px;color:#334155">${name}</td>
+        <td style="padding:6px 0;border-bottom:1px solid #e2e8f0;font-size:12px;color:#334155;text-align:center">x${qty}</td>
+        <td style="padding:6px 0;border-bottom:1px solid #e2e8f0;font-size:12px;color:#334155;text-align:right">₹${(qty * price).toLocaleString()}</td>
+      </tr>`;
+    }).join('');
 
-    const receiptText = `=====================================================
-            THE GRAND MALL — AXIONIX POS            
-               OFFICIAL DIGITAL RECEIPT              
-=====================================================
-Order Ref: ${orderObj.orderNumber || '#AX-9496'}
-Date: ${orderObj.timestamp || new Date().toLocaleString()}
-Store / Service: ${orderObj.storeName || 'The Grand Mall Luxury Concierge'}
-Customer: ${orderObj.customerName || 'Valued Guest'} (${orderObj.customerPhone || '+91 98765 43210'})
-Payment Channel: ${orderObj.paymentMethod || 'Paid at Concierge Counter'} [PAID ✓]
------------------------------------------------------
-ITEMS PURCHASED:
-${itemsText}
------------------------------------------------------
-Cart Subtotal: ₹${(orderObj.rawAmount || orderObj.totalAmount || finalCartTotal).toLocaleString()}
-${orderObj.appliedCoupon ? `Coupon Discount (${orderObj.appliedCoupon}): -₹${(orderObj.discountAmount || 0).toLocaleString()}\n` : ''}GST (5% Included): ₹${Math.round(((orderObj.totalAmount || finalCartTotal) * 5) / 105).toLocaleString()}
------------------------------------------------------
-TOTAL AMOUNT PAID: ₹${(orderObj.totalAmount || finalCartTotal).toLocaleString()}
-=====================================================
- Verified by AXIONIX Smart Mall POS Gateway
- Thank you for shopping at The Grand Mall!
-=====================================================`;
+    const couponRow = orderObj.appliedCoupon
+      ? `<tr><td colspan="2" style="padding:4px 0;font-size:11px;color:#059669">Coupon (${orderObj.appliedCoupon})</td><td style="padding:4px 0;font-size:11px;color:#059669;text-align:right">-₹${(orderObj.discountAmount || 0).toLocaleString()}</td></tr>`
+      : '';
 
-    const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `AXIONIX_Receipt_${(orderObj.orderNumber || 'AX-9496').replace('#', '')}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const gst = Math.round(((orderObj.totalAmount || finalCartTotal) * 5) / 105);
+    const printWin = window.open('', '_blank', 'width=480,height=700,toolbar=0,scrollbars=1');
+    if (!printWin) return;
+    printWin.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>AXIONIX Receipt ${orderObj.orderNumber || '#AX-9496'}</title>
+<style>
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#0f172a;margin:0;padding:32px 24px;max-width:420px;margin:0 auto}
+  .header{text-align:center;border-bottom:2px dashed #cbd5e1;padding-bottom:16px;margin-bottom:16px}
+  .logo{font-size:22px;font-weight:900;letter-spacing:-.5px;color:#1e293b}
+  .sub{font-size:10px;color:#64748b;margin-top:2px;letter-spacing:.5px}
+  .badge{display:inline-block;background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 10px;border-radius:99px;border:1px solid #86efac;margin-top:6px}
+  .meta{font-size:11px;color:#64748b;margin-bottom:12px;line-height:1.8}
+  .meta span{font-weight:700;color:#0f172a}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;padding:4px 0;border-bottom:2px solid #e2e8f0;text-align:left}
+  th:last-child{text-align:right}
+  .totals{margin-top:10px;border-top:2px dashed #cbd5e1;padding-top:10px}
+  .total-row{display:flex;justify-content:space-between;font-size:11px;color:#475569;padding:3px 0}
+  .grand{font-size:16px;font-weight:900;color:#059669;border-top:2px solid #0f172a;margin-top:6px;padding-top:8px;display:flex;justify-content:space-between}
+  .barcode{text-align:center;font-family:monospace;font-size:11px;color:#94a3b8;letter-spacing:2px;margin-top:14px;padding-top:12px;border-top:1px dashed #cbd5e1}
+  .footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:8px}
+  @media print{body{padding:12px}}
+</style></head><body>
+<div class="header">
+  <div class="logo">THE GRAND MALL</div>
+  <div class="sub">AXIONIX SMART POS • DIGITAL INVOICE</div>
+  <div class="badge">PAID ✓</div>
+  <div style="font-size:13px;font-weight:700;margin-top:4px;color:#2563eb">${orderObj.orderNumber || '#AX-9496'}</div>
+</div>
+<div class="meta">
+  <div>Date: <span>${orderObj.timestamp || new Date().toLocaleString()}</span></div>
+  <div>Store: <span>${orderObj.storeName || 'The Grand Mall Luxury Concierge'}</span></div>
+  <div>Customer: <span>${orderObj.customerName || 'Valued Guest'}</span></div>
+  <div>Phone: <span>${orderObj.customerPhone || '+91 98765 43210'}</span></div>
+  <div>Payment: <span>${orderObj.paymentMethod || 'Concierge Counter'}</span></div>
+</div>
+<table>
+  <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead>
+  <tbody>${itemsHtml}</tbody>
+</table>
+<div class="totals">
+  <div class="total-row"><span>Subtotal</span><span>₹${(orderObj.rawAmount || orderObj.totalAmount || finalCartTotal).toLocaleString()}</span></div>
+  ${couponRow ? `<div class="total-row" style="color:#059669">${couponRow.replace(/<[^>]+>/g,'').trim()}</div>` : ''}
+  <div class="total-row"><span>GST (5% Included)</span><span>₹${gst.toLocaleString()}</span></div>
+  <div class="grand"><span>TOTAL AMOUNT PAID</span><span>₹${(orderObj.totalAmount || finalCartTotal).toLocaleString()}</span></div>
+</div>
+<div class="barcode">||| | ||||| ||| || | |||| ||| ||||||| | |||</div>
+<div class="footer">Verified by AXIONIX Smart POS Gateway<br>Thank you for shopping at The Grand Mall!</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`);
+    printWin.document.close();
   };
 
   const saveOrderToLocalStorage = (orderObj: any) => {
@@ -3702,11 +3823,11 @@ TOTAL AMOUNT PAID: ₹${(orderObj.totalAmount || finalCartTotal).toLocaleString(
                       SELECT FULFILLMENT / PAYMENT OPTION:
                     </p>
 
-                    <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="grid grid-cols-2 gap-3 mb-2">
                       
-                      {/* MALL PAY UNIFIED WALLET (FEATURE 11) */}
+                      {/* MALL PAY UNIFIED WALLET */}
                       <div
-                        onClick={() => setSelectedPaymentOption('mallpay')}
+                        onClick={() => { setSelectedPaymentOption('mallpay'); setPaymentFormError(null); }}
                         className={`col-span-2 rounded-2xl p-4 cursor-pointer transition-all ${
                           selectedPaymentOption === 'mallpay'
                             ? 'bg-gradient-to-r from-blue-900 to-indigo-900 text-white border-2 border-blue-400 shadow-md ring-2 ring-blue-500/20'
@@ -3750,54 +3871,247 @@ TOTAL AMOUNT PAID: ₹${(orderObj.totalAmount || finalCartTotal).toLocaleString(
                         )}
                       </div>
 
+                      {/* UPI / GPAY */}
                       <div
-                        onClick={() => setSelectedPaymentOption('upi')}
-                        className={`rounded-2xl p-3.5 cursor-pointer transition-all ${
+                        onClick={() => { setSelectedPaymentOption('upi'); setPaymentFormError(null); }}
+                        className={`col-span-2 rounded-2xl cursor-pointer transition-all border ${
                           selectedPaymentOption === 'upi'
-                            ? 'bg-blue-50/80 border-2 border-blue-600 shadow-sm'
-                            : 'bg-white border border-slate-200 hover:border-slate-300'
+                            ? 'border-blue-500 shadow-sm bg-blue-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
-                        <p className="font-bold text-xs text-slate-900">UPI / GPay</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Google Pay, PhonePe, Paytm</p>
+                        <div className="flex items-center gap-3 p-3.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-black flex-shrink-0">UPI</div>
+                          <div className="flex-1">
+                            <p className="font-bold text-xs text-slate-900">UPI / GPay</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Google Pay, PhonePe, Paytm</p>
+                          </div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 transition-all ${
+                            selectedPaymentOption === 'upi' ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
+                          }`}>{selectedPaymentOption === 'upi' && <div className="w-1.5 h-1.5 bg-white rounded-full mx-auto mt-0.5" />}</div>
+                        </div>
+                        {selectedPaymentOption === 'upi' && (
+                          <div className="px-3.5 pb-3.5 space-y-2" onClick={e => e.stopPropagation()}>
+                            <div className="border-t border-blue-100 pt-3">
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Enter UPI ID</label>
+                              <div className="flex items-center bg-white border border-slate-300 rounded-xl overflow-hidden focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+                                <input
+                                  type="text"
+                                  value={upiId}
+                                  onChange={e => { setUpiId(e.target.value); setPaymentFormError(null); }}
+                                  placeholder="yourname@okaxis / 9999999999@ybl"
+                                  className="flex-1 px-3 py-2 text-xs font-mono text-slate-800 bg-transparent outline-none"
+                                />
+                                <span className="px-3 text-[10px] font-bold text-slate-400 border-l border-slate-200">UPI</span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1">Format: name@bank or mobilenumber@upi</p>
+                              <div className="flex gap-2 mt-2">
+                                {[
+                                  { name: 'GPay', handle: '@okaxis', icon: '🟡' },
+                                  { name: 'PhonePe', handle: '@ybl', icon: '🟣' },
+                                  { name: 'Paytm', handle: '@paytm', icon: '🔵' }
+                                ].map(app => (
+                                  <button
+                                    key={app.name}
+                                    type="button"
+                                    onClick={() => {
+                                      const base = upiId.includes('@') ? upiId.split('@')[0] : upiId.trim();
+                                      if (base) {
+                                        setUpiId(base + app.handle);
+                                      } else if (activeVisitorTab === 'returning' && mobileNumber) {
+                                        setUpiId(mobileNumber.replace(/\D/g, '') + app.handle);
+                                      } else {
+                                        setUpiId(app.handle);
+                                      }
+                                      setPaymentFormError(null);
+                                    }}
+                                    className="flex-1 py-1 text-[10px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer transition-colors"
+                                  >
+                                    {app.icon} {app.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
+                      {/* CREDIT / DEBIT CARD */}
                       <div
-                        onClick={() => setSelectedPaymentOption('card')}
-                        className={`rounded-2xl p-3.5 cursor-pointer transition-all ${
+                        onClick={() => { setSelectedPaymentOption('card'); setPaymentFormError(null); }}
+                        className={`col-span-2 rounded-2xl cursor-pointer transition-all border ${
                           selectedPaymentOption === 'card'
-                            ? 'bg-blue-50/80 border-2 border-blue-600 shadow-sm'
-                            : 'bg-white border border-slate-200 hover:border-slate-300'
+                            ? 'border-blue-500 shadow-sm bg-blue-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
-                        <p className="font-bold text-xs text-slate-900">Credit / Debit Card</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Visa, Mastercard, RuPay</p>
+                        <div className="flex items-center gap-3 p-3.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white flex-shrink-0">
+                            <CreditCard className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-bold text-xs text-slate-900">Credit / Debit Card</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Visa, Mastercard, RuPay</p>
+                          </div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 transition-all ${
+                            selectedPaymentOption === 'card' ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
+                          }`}>{selectedPaymentOption === 'card' && <div className="w-1.5 h-1.5 bg-white rounded-full mx-auto mt-0.5" />}</div>
+                        </div>
+                        {selectedPaymentOption === 'card' && (
+                          <div className="px-3.5 pb-3.5 space-y-2.5" onClick={e => e.stopPropagation()}>
+                            <div className="border-t border-blue-100 pt-3 space-y-2.5">
+                              {/* Card preview strip */}
+                              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 text-white shadow-lg">
+                                <div className="flex justify-between items-start mb-4">
+                                  <div className="w-8 h-6 rounded bg-amber-400/80" />
+                                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+                                    {cardNumber.startsWith('4') ? 'VISA' : cardNumber.startsWith('5') ? 'MASTERCARD' : cardNumber.startsWith('6') ? 'RUPAY' : 'CARD'}
+                                  </span>
+                                </div>
+                                <p className="font-mono text-sm tracking-[0.2em] text-slate-100">
+                                  {cardNumber ? cardNumber.replace(/(.{4})/g, '$1 ').trim() : '•••• •••• •••• ••••'}
+                                </p>
+                                <div className="flex justify-between mt-3">
+                                  <span className="text-[10px] text-slate-400 font-semibold">{cardName || 'CARD HOLDER'}</span>
+                                  <span className="text-[10px] text-slate-400 font-semibold">{cardExpiry || 'MM/YY'}</span>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Card Number</label>
+                                <input
+                                  type="text"
+                                  maxLength={16}
+                                  value={cardNumber}
+                                  onChange={e => { setCardNumber(e.target.value.replace(/\D/g, '')); setPaymentFormError(null); }}
+                                  placeholder="1234 5678 9012 3456"
+                                  className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Cardholder Name</label>
+                                <input
+                                  type="text"
+                                  value={cardName}
+                                  onChange={e => { setCardName(e.target.value.toUpperCase()); setPaymentFormError(null); }}
+                                  placeholder="AS ON CARD"
+                                  className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Expiry (MM/YY)</label>
+                                  <input
+                                    type="text"
+                                    maxLength={5}
+                                    value={cardExpiry}
+                                    onChange={e => {
+                                      let v = e.target.value.replace(/\D/g, '');
+                                      if (v.length >= 2) v = v.slice(0, 2) + '/' + v.slice(2);
+                                      setCardExpiry(v.slice(0, 5));
+                                      setPaymentFormError(null);
+                                    }}
+                                    placeholder="MM/YY"
+                                    className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">CVV</label>
+                                  <input
+                                    type="password"
+                                    maxLength={4}
+                                    value={cardCvv}
+                                    onChange={e => { setCardCvv(e.target.value.replace(/\D/g, '')); setPaymentFormError(null); }}
+                                    placeholder="•••"
+                                    className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                                <span>🔒</span>
+                                <span>256-bit SSL encrypted. We never store your card details.</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
+                      {/* PAY AT COUNTER */}
                       <div
-                        onClick={() => setSelectedPaymentOption('counter')}
-                        className={`rounded-2xl p-3.5 cursor-pointer transition-all ${
+                        onClick={() => { setSelectedPaymentOption('counter'); setPaymentFormError(null); }}
+                        className={`rounded-2xl cursor-pointer transition-all border ${
                           selectedPaymentOption === 'counter'
-                            ? 'bg-blue-50/80 border-2 border-blue-600 shadow-sm'
-                            : 'bg-white border border-slate-200 hover:border-slate-300'
+                            ? 'border-blue-500 shadow-sm bg-blue-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
-                        <p className="font-bold text-xs text-slate-900">Pay at Counter</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Cash / Card on Pickup</p>
+                        <div className="flex items-start gap-2.5 p-3.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-base flex-shrink-0">🏪</div>
+                          <div className="flex-1">
+                            <p className="font-bold text-xs text-slate-900">Pay at Counter</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Cash / Card on Pickup</p>
+                          </div>
+                        </div>
+                        {selectedPaymentOption === 'counter' && (
+                          <div className="px-3.5 pb-3.5" onClick={e => e.stopPropagation()}>
+                            <div className="border-t border-blue-100 pt-3 bg-emerald-50 rounded-xl p-3 space-y-1.5">
+                              <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">✅ Order reserved — pay at store counter</p>
+                              <p className="text-[10px] text-emerald-700">• Show your order QR or reference number at the store</p>
+                              <p className="text-[10px] text-emerald-700">• Pay by cash, card, or UPI at the counter</p>
+                              <p className="text-[10px] text-emerald-700">• Pickup within <strong>2 hours</strong> of placing the order</p>
+                              <div className="mt-2 bg-white border border-emerald-200 rounded-lg p-2 text-center">
+                                <p className="text-[10px] text-slate-500">Estimated amount due at counter</p>
+                                <p className="text-lg font-extrabold text-emerald-700">₹{finalCartTotal.toLocaleString()}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
+                      {/* APPLE PAY */}
                       <div
-                        onClick={() => setSelectedPaymentOption('apple')}
-                        className={`rounded-2xl p-3.5 cursor-pointer transition-all ${
+                        onClick={() => { setSelectedPaymentOption('apple'); setPaymentFormError(null); }}
+                        className={`rounded-2xl cursor-pointer transition-all border ${
                           selectedPaymentOption === 'apple'
-                            ? 'bg-blue-50/80 border-2 border-blue-600 shadow-sm'
-                            : 'bg-white border border-slate-200 hover:border-slate-300'
+                            ? 'border-blue-500 shadow-sm bg-blue-50'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
-                        <p className="font-bold text-xs text-slate-900">Apple Pay</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Instant One-Tap Pay</p>
+                        <div className="flex items-start gap-2.5 p-3.5">
+                          <div className="w-8 h-8 rounded-xl bg-black flex items-center justify-center text-white text-base flex-shrink-0">🍎</div>
+                          <div className="flex-1">
+                            <p className="font-bold text-xs text-slate-900">Apple Pay</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Instant One-Tap Pay</p>
+                          </div>
+                        </div>
+                        {selectedPaymentOption === 'apple' && (
+                          <div className="px-3.5 pb-3.5" onClick={e => e.stopPropagation()}>
+                            <div className="border-t border-blue-100 pt-3 space-y-2">
+                              <div className="bg-black rounded-2xl p-4 text-white text-center space-y-2 shadow-lg">
+                                <p className="text-2xl">🍎</p>
+                                <p className="text-xs font-bold tracking-tight">Apple Pay</p>
+                                <p className="text-[10px] text-white/60">Secured by Face ID / Touch ID</p>
+                                <div className="bg-white/10 rounded-xl p-2.5 mt-1">
+                                  <p className="text-[10px] text-white/70">Amount</p>
+                                  <p className="text-xl font-extrabold tracking-tight">₹{finalCartTotal.toLocaleString()}</p>
+                                </div>
+                                <div className="bg-white/5 border border-white/20 rounded-xl p-2 text-[10px] text-white/60">
+                                  <span>💳 Visa •••• 4242 &nbsp;|&nbsp; Default Card</span>
+                                </div>
+                              </div>
+                              <p className="text-center text-[10px] text-slate-500">Tap <strong>"Pay ₹{finalCartTotal.toLocaleString()} &amp; Place Order"</strong> below to authenticate with Face ID / Touch ID</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
+
+                    {/* Payment form validation error */}
+                    {paymentFormError && (
+                      <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-[11px] font-semibold text-rose-700 mb-2">
+                        ❌ {paymentFormError}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -3835,12 +4149,52 @@ TOTAL AMOUNT PAID: ₹${(orderObj.totalAmount || finalCartTotal).toLocaleString(
                     </button>
                   ) : (
                     <button
-                      onClick={handlePlaceOrder}
-                      disabled={isPlacingOrder}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-blue-600/25 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                      onClick={() => {
+                        setPaymentFormError(null);
+                        // Validate UPI
+                        if (selectedPaymentOption === 'upi') {
+                          const upiTrimmed = upiId.trim();
+                          if (!upiTrimmed) { setPaymentFormError('Please enter your UPI ID to proceed.'); return; }
+                          const upiRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9]+$/;
+                          if (!upiRegex.test(upiTrimmed)) { setPaymentFormError('Invalid UPI ID format. Example: name@okaxis or 9999999999@ybl'); return; }
+                        }
+                        // Validate Card
+                        if (selectedPaymentOption === 'card') {
+                          if (!cardNumber || cardNumber.length < 16) { setPaymentFormError('Please enter a valid 16-digit card number.'); return; }
+                          if (!cardName.trim()) { setPaymentFormError('Please enter the cardholder name.'); return; }
+                          const [mm, yy] = (cardExpiry || '').split('/');
+                          if (!mm || !yy || isNaN(Number(mm)) || isNaN(Number(yy)) || Number(mm) < 1 || Number(mm) > 12 || yy.length !== 2) {
+                            setPaymentFormError('Please enter a valid expiry date (MM/YY).'); return;
+                          }
+                          if (!cardCvv || cardCvv.length < 3) { setPaymentFormError('Please enter a valid CVV (3 or 4 digits).'); return; }
+                        }
+                        // Apple Pay biometric simulation
+                        if (selectedPaymentOption === 'apple') {
+                          setIsApplePayProcessing(true);
+                          setTimeout(() => { setIsApplePayProcessing(false); handlePlaceOrder(); }, 1800);
+                          return;
+                        }
+                        handlePlaceOrder();
+                      }}
+                      disabled={isPlacingOrder || isApplePayProcessing}
+                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-blue-600/25 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                     >
-                      <span>PAY ₹{finalCartTotal.toLocaleString()} & PLACE ORDER</span>
-                      <span>→</span>
+                      {isApplePayProcessing ? (
+                        <span className="flex items-center gap-2"><span className="animate-spin">⟳</span> Authenticating Face ID…</span>
+                      ) : isPlacingOrder ? (
+                        <span className="flex items-center gap-2"><span className="animate-spin">⟳</span> Processing…</span>
+                      ) : (
+                        <>
+                          <span>
+                            {selectedPaymentOption === 'apple' ? '🍎 PAY WITH APPLE PAY' :
+                             selectedPaymentOption === 'upi' ? '📱 PAY WITH UPI' :
+                             selectedPaymentOption === 'card' ? '💳 PAY WITH CARD' :
+                             selectedPaymentOption === 'counter' ? '🏪 RESERVE & PAY AT COUNTER' :
+                             `PAY ₹${finalCartTotal.toLocaleString()} & PLACE ORDER`}
+                          </span>
+                          <span>→</span>
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
@@ -3970,7 +4324,7 @@ TOTAL AMOUNT PAID: ₹${(orderObj.totalAmount || finalCartTotal).toLocaleString(
                     className="py-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-2xl flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
-                    <span>DOWNLOAD TXT</span>
+                    <span>DOWNLOAD RECEIPT</span>
                   </button>
 
                   <button

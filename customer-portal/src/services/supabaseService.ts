@@ -567,6 +567,12 @@ export function topUpMallWallet(userPhone: string, amount: number, paymentMethod
     try {
       Promise.resolve(supabase.from('mall_wallets').upsert({ user_phone: wallet.userPhone, balance: newBalance })).catch(() => {});
       Promise.resolve(supabase.from('wallet_transactions').insert({ wallet_id: wallet.walletId, amount: topAmt, type: 'credit', description: newTx.description })).catch(() => {});
+      recordAdminAuditLogToSupabase({
+        action: 'MALL_PAY_TOPUP',
+        resourceType: 'wallet',
+        resourceId: newTx.referenceId,
+        details: { customerPhone: userPhone, amount: topAmt, channel: paymentMethod, newBalance }
+      }).catch(() => {});
     } catch (e) {}
   }
 
@@ -611,6 +617,12 @@ export function deductMallWallet(userPhone: string, amount: number, orderRef: st
     try {
       Promise.resolve(supabase.from('mall_wallets').upsert({ user_phone: wallet.userPhone, balance: newBalance })).catch(() => {});
       Promise.resolve(supabase.from('wallet_transactions').insert({ wallet_id: wallet.walletId, amount: deductAmt, type: 'debit', reference_id: orderRef, description: newTx.description })).catch(() => {});
+      recordAdminAuditLogToSupabase({
+        action: 'MALL_PAY_TRANSACTION',
+        resourceType: 'wallet',
+        resourceId: orderRef,
+        details: { customerPhone: userPhone, amount: deductAmt, type: 'DEBIT', orderRef, newBalance }
+      }).catch(() => {});
     } catch (e) {}
   }
 
@@ -622,6 +634,27 @@ export function deductMallWallet(userPhone: string, amount: number, orderRef: st
 
   window.dispatchEvent(new Event('axionix_wallet_updated'));
   return { success: true, wallet: updatedWallet };
+}
+
+export async function recordAdminAuditLogToSupabase(logData: {
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  details: any;
+  adminEmail?: string;
+}) {
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.from('admin_audit_logs').insert({
+        action: logData.action,
+        resource_type: logData.resourceType,
+        resource_id: logData.resourceId,
+        details: typeof logData.details === 'object' ? JSON.stringify(logData.details) : logData.details,
+        admin_email: logData.adminEmail || 'customer.portal@axionix.io',
+        created_at: new Date().toISOString()
+      });
+    } catch (e) {}
+  }
 }
 
 export function addFamilyMemberToWallet(userPhone: string, name: string, phone: string, relation: string): MallWalletData {
@@ -649,3 +682,4 @@ export function addFamilyMemberToWallet(userPhone: string, name: string, phone: 
   window.dispatchEvent(new Event('axionix_wallet_updated'));
   return updatedWallet;
 }
+

@@ -71,6 +71,14 @@ export default function App() {
   const [alertsList, setAlertsList] = useState<SystemAlert[]>(MOCK_ALERTS);
   const unreadAlertsCount = alertsList.filter(a => !a.read).length;
 
+  const handleDismissAlert = (id: string) => {
+    setAlertsList(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleMarkAllAlertsRead = () => {
+    setAlertsList(prev => prev.map(a => ({ ...a, read: true })));
+  };
+
   // Stores List State (Loaded from Supabase brands, falling back to mock)
   const [storesList, setStoresList] = useState<Store[]>(MOCK_STORES);
 
@@ -747,7 +755,11 @@ export default function App() {
 
           {/* 9. NOTIFICATION CENTER */}
           {currentView === 'notifications' && (
-            <NotificationsView />
+            <NotificationsView
+              alerts={alertsList}
+              onDismiss={handleDismissAlert}
+              onMarkAllRead={handleMarkAllAlertsRead}
+            />
           )}
 
           {/* 10. SUPER ADMIN */}

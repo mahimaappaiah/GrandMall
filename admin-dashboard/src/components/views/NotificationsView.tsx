@@ -1,28 +1,17 @@
 import React, { useState } from 'react';
-import { Bell, AlertTriangle, Info, CheckCircle2, ShieldAlert, Filter } from 'lucide-react';
-import { MOCK_ALERTS } from '../../data/mockData';
+import { Bell, AlertTriangle, Info, ShieldAlert } from 'lucide-react';
 import { SystemAlert } from '../../types';
-import { fetchNotificationsFromSupabase } from '../../services/supabaseService';
 
-export const NotificationsView: React.FC = () => {
-  const [alerts, setAlerts] = useState<SystemAlert[]>(MOCK_ALERTS);
+interface NotificationsViewProps {
+  alerts: SystemAlert[];
+  onDismiss: (id: string) => void;
+  onMarkAllRead: () => void;
+}
+
+export const NotificationsView: React.FC<NotificationsViewProps> = ({ alerts, onDismiss, onMarkAllRead }) => {
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
 
-  React.useEffect(() => {
-    let isMounted = true;
-    fetchNotificationsFromSupabase().then(res => {
-      if (isMounted && res.data && res.data.length > 0) {
-        setAlerts(res.data);
-      }
-    });
-    return () => { isMounted = false; };
-  }, []);
-
   const filteredAlerts = alerts.filter(a => filter === 'all' || a.severity === filter);
-
-  const markAllRead = () => {
-    setAlerts(alerts.map(a => ({ ...a, read: true })));
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -32,7 +21,7 @@ export const NotificationsView: React.FC = () => {
         <div>
           <h1 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
             <Bell className="w-5 h-5 text-blue-600" />
-            AXIONIX System Notifications & Security Feed
+            AXIONIX System Notifications &amp; Security Feed
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             Automated alerts for high atrium footfall spikes, access point packet loss, and tenant inventory feeds.
@@ -40,7 +29,7 @@ export const NotificationsView: React.FC = () => {
         </div>
 
         <button
-          onClick={markAllRead}
+          onClick={onMarkAllRead}
           className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
         >
           Mark All As Read
@@ -66,10 +55,17 @@ export const NotificationsView: React.FC = () => {
 
       {/* Alerts Feed */}
       <div className="space-y-3">
+        {filteredAlerts.length === 0 && (
+          <div className="text-center py-12 text-slate-400 font-semibold text-sm">
+            ✅ No alerts in this category
+          </div>
+        )}
         {filteredAlerts.map(alert => (
           <div
             key={alert.id}
             className={`p-5 rounded-2xl border transition-all flex items-start justify-between gap-4 ${
+              !alert.read ? 'ring-2 ring-blue-200/60' : ''
+            } ${
               alert.severity === 'critical' ? 'bg-rose-50/40 border-rose-200' :
               alert.severity === 'warning' ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-slate-200/80'
             }`}
@@ -84,13 +80,16 @@ export const NotificationsView: React.FC = () => {
               </div>
 
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
                     alert.severity === 'critical' ? 'bg-rose-100 text-rose-800' :
                     alert.severity === 'warning' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
                   }`}>
                     {alert.severity} • {alert.category}
                   </span>
+                  {!alert.read && (
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">NEW</span>
+                  )}
                   <span className="text-xs text-slate-400 font-medium">{alert.timestamp}</span>
                 </div>
 
@@ -105,8 +104,8 @@ export const NotificationsView: React.FC = () => {
             </div>
 
             <button
-              onClick={() => setAlerts(alerts.filter(a => a.id !== alert.id))}
-              className="text-xs font-semibold text-slate-400 hover:text-slate-600"
+              onClick={() => onDismiss(alert.id)}
+              className="text-xs font-semibold text-slate-400 hover:text-rose-600 transition-colors shrink-0"
             >
               Dismiss
             </button>

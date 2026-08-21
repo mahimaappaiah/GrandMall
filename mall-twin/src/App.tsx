@@ -3,36 +3,43 @@ import { MallFloorMap, StoreMapPin } from './MallFloorMap';
 import { Layers, MapPin, Activity, Flame, Shield, Search, Sparkles, Building2, Store } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 
-const MOCK_MALL_BRANDS: StoreMapPin[] = [
-  // Ground Floor
-  { id: '1', name: 'Starbucks Reserve', category: 'Food', floor: 'Ground Floor', zone: 'Central Atrium', revenueToday: 480000, visitorsToday: 950, ordersCount: 420, status: 'Open', rating: 4.8, logo: '☕' },
-  { id: '2', name: 'Häagen-Dazs', category: 'Food', floor: 'Ground Floor', zone: 'Central Atrium', revenueToday: 198000, visitorsToday: 820, ordersCount: 340, status: 'Open', rating: 4.7, logo: '🍨' },
-  { id: '7', name: 'Nike Flagship', category: 'Fashion', floor: 'Ground Floor', zone: 'North Wing', revenueToday: 2450000, visitorsToday: 1850, ordersCount: 890, status: 'Open', rating: 4.9, logo: '👟' },
-  { id: '8', name: 'Zara Flagship', category: 'Fashion', floor: 'Ground Floor', zone: 'West Wing', revenueToday: 1890000, visitorsToday: 1420, ordersCount: 610, status: 'Open', rating: 4.8, logo: '👗' },
-  { id: '9', name: 'Gucci Boutique', category: 'Luxury', floor: 'Ground Floor', zone: 'North Wing', revenueToday: 4200000, visitorsToday: 410, ordersCount: 95, status: 'Open', rating: 4.95, logo: '👜' },
+/** Category → default emoji when no logo_variant / logo_url is provided by Supabase. */
+function defaultLogoForCategory(category?: string): string {
+  const cat = (category || '').toLowerCase();
+  if (cat === 'food' || cat === 'food & beverage' || cat === 'f&b') return '🍽️';
+  if (cat === 'luxury') return '👑';
+  if (cat === 'fashion') return '👗';
+  if (cat === 'accessories') return '💎';
+  if (cat === 'electronics' || cat === 'tech') return '📱';
+  if (cat === 'beauty' || cat === 'wellness') return '💄';
+  if (cat === 'sports' || cat === 'fitness') return '🏋️';
+  if (cat === 'entertainment') return '🎭';
+  return '🏬';
+}
 
-  // 1st Floor
-  { id: '10', name: 'Prada Atelier', category: 'Luxury', floor: '1st Floor', zone: 'South Terrace', revenueToday: 3850000, visitorsToday: 380, ordersCount: 78, status: 'Open', rating: 4.9, logo: '🕶️' },
-  { id: '11', name: 'H&M Everyday Fashion', category: 'Fashion', floor: '1st Floor', zone: 'West Wing', revenueToday: 1250000, visitorsToday: 1100, ordersCount: 520, status: 'Open', rating: 4.6, logo: '👕' },
-  { id: '12', name: 'U.S. Polo Assn.', category: 'Fashion', floor: '1st Floor', zone: 'North Gallery', revenueToday: 980000, visitorsToday: 890, ordersCount: 380, status: 'Open', rating: 4.7, logo: '🏇' },
-  { id: '13', name: 'Rolex Boutique', category: 'Luxury', floor: '1st Floor', zone: 'Fashion Atrium', revenueToday: 8900000, visitorsToday: 290, ordersCount: 42, status: 'Open', rating: 4.98, logo: '⌚' },
-
-  // 2nd Floor
-  { id: '3', name: 'Din Tai Fung', category: 'Food', floor: '2nd Floor', zone: 'Dining Hub', revenueToday: 1280000, visitorsToday: 680, ordersCount: 290, status: 'Open', rating: 4.9, logo: '🥟' },
-  { id: '4', name: 'PizzaExpress Gourmet', category: 'Food', floor: '2nd Floor', zone: 'Food Court North', revenueToday: 620000, visitorsToday: 610, ordersCount: 220, status: 'Open', rating: 4.7, logo: '🍕' },
-  { id: '5', name: 'Coffee Day', category: 'Food', floor: '2nd Floor', zone: 'Dining Hub', revenueToday: 390000, visitorsToday: 540, ordersCount: 195, status: 'Open', rating: 4.8, logo: '☕' },
-  { id: '6', name: 'Subway Fresh Gourmet', category: 'Food', floor: '2nd Floor', zone: 'Food Court North', revenueToday: 310000, visitorsToday: 490, ordersCount: 180, status: 'Open', rating: 4.6, logo: '🥪' },
-
-  // 3rd Floor
-  { id: '14', name: 'Louis Vuitton Maison', category: 'Luxury', floor: '3rd Floor', zone: 'East Wing', revenueToday: 6500000, visitorsToday: 520, ordersCount: 110, status: 'Open', rating: 4.95, logo: '👜' },
-  { id: '15', name: 'Tiffany & Co.', category: 'Luxury', floor: '3rd Floor', zone: 'Entertainment Atrium', revenueToday: 5100000, visitorsToday: 340, ordersCount: 65, status: 'Open', rating: 4.9, logo: '💎' },
-  { id: '16', name: 'Cartier High Jewelry', category: 'Luxury', floor: '3rd Floor', zone: 'Multiplex Arena', revenueToday: 7400000, visitorsToday: 260, ordersCount: 38, status: 'Open', rating: 4.96, logo: '👑' },
-  { id: '17', name: 'Apple Experience Store', category: 'Accessories', floor: '3rd Floor', zone: 'East Wing', revenueToday: 9800000, visitorsToday: 2100, ordersCount: 840, status: 'Open', rating: 4.9, logo: '🍎' },
-  { id: '18', name: 'Ray-Ban Sunglass Hut', category: 'Accessories', floor: '3rd Floor', zone: 'West Arcade', revenueToday: 750000, visitorsToday: 630, ordersCount: 210, status: 'Open', rating: 4.7, logo: '🕶️' }
-];
+/** Map a raw Supabase brands row → StoreMapPin used by the Mall Twin. */
+function mapSupabaseBrand(b: any, idx: number): StoreMapPin {
+  return {
+    id: String(b.id || `brand-${idx + 1}`),
+    name: b.name || 'Store Tenant',
+    category: b.category || 'Retail',
+    floor: b.floor || 'Ground Floor',
+    zone: b.zone || 'Central Atrium',
+    revenueToday: Number(b.revenue_today) || 0,
+    visitorsToday: Number(b.visitors_today) || 0,
+    ordersCount: Number(b.orders_count) || 0,
+    status: b.status || 'Open',
+    rating: typeof b.rating === 'number' ? b.rating : (parseFloat(b.rating) || 4.5),
+    // Use logo_variant (emoji) from Supabase first, then fall back to category default
+    logo: b.logo_variant || defaultLogoForCategory(b.category),
+  };
+}
 
 export default function App() {
-  const [brands, setBrands] = useState<StoreMapPin[]>(MOCK_MALL_BRANDS);
+  // Start empty — the Mall Twin shows ONLY live Supabase data when configured.
+  // If Supabase is not configured at all the list stays empty (no stale mocks).
+  const [brands, setBrands] = useState<StoreMapPin[]>([]);
+  const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
   const [currentFloor, setCurrentFloor] = useState<string>('Ground Floor');
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
@@ -43,34 +50,23 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from('brands')
-        .select('*')
+        .select('id, name, category, floor, zone, logo_url, logo_variant, rating, status, revenue_today, visitors_today, orders_count')
         .order('name', { ascending: true });
 
-      if (!error && data && data.length > 0) {
-        const mockMap = new Map<string, StoreMapPin>();
-        MOCK_MALL_BRANDS.forEach(mb => mockMap.set(mb.name.toLowerCase().trim(), mb));
-
-        const liveBrands: StoreMapPin[] = data.map((b: any, idx: number) => {
-          const existing = mockMap.get((b.name || '').toLowerCase().trim());
-          return {
-            id: b.id || `brand-${idx + 1}`,
-            name: b.name || 'Store Tenant',
-            category: b.category || existing?.category || 'Fashion',
-            floor: b.floor || existing?.floor || 'Ground Floor',
-            zone: b.zone || existing?.zone || 'Central Atrium',
-            revenueToday: Number(b.revenue_today) || existing?.revenueToday || 0,
-            visitorsToday: Number(b.visitors_today) || existing?.visitorsToday || 0,
-            ordersCount: Number(b.orders_count) || existing?.ordersCount || 0,
-            status: b.status || existing?.status || 'Open',
-            rating: typeof b.rating === 'number' ? b.rating : (existing?.rating || 4.8),
-            logo: existing?.logo || b.logo_variant || (b.category === 'Food' ? '☕' : b.category === 'Fashion' ? '👗' : '🏬')
-          };
-        });
-
-        setBrands(liveBrands);
+      if (error) {
+        console.warn('[MallTwin] Supabase fetch error:', error.message);
+        return;
       }
+
+      // Always update state with whatever Supabase returns (even 0 rows).
+      // This guarantees Mall Twin store list == public.brands exactly.
+      const liveBrands: StoreMapPin[] = (data || []).map(mapSupabaseBrand);
+      console.info(`[MallTwin] Loaded ${liveBrands.length} brands from Supabase public.brands`);
+      setBrands(liveBrands);
     } catch (e) {
-      console.warn('[MallTwin] Supabase fetch error:', e);
+      console.warn('[MallTwin] Supabase fetch exception:', e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -230,7 +226,15 @@ export default function App() {
             </h4>
 
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-              {filteredBrands.map(b => (
+              {loading ? (
+                <div className="text-center py-6 text-slate-500 text-xs">
+                  <span className="animate-pulse">⟳ Loading live store data…</span>
+                </div>
+              ) : filteredBrands.length === 0 ? (
+                <div className="text-center py-6 text-slate-600 text-xs">
+                  No stores on {currentFloor}
+                </div>
+              ) : filteredBrands.map(b => (
                 <div
                   key={b.id}
                   onClick={() => setSelectedStoreId(b.id)}

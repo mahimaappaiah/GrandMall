@@ -270,3 +270,19 @@ export function downloadAuditLogsCSV(logs: any[]) {
   ]);
   downloadCSV(`AXIONIX_Admin_Audit_Logs_Export_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
 }
+
+export function downloadMallPayLedgerCSV(txs: any[]) {
+  const headers = ['Transaction ID', 'Timestamp', 'Customer / Wallet Phone', 'Customer Name', 'Type', 'Description / Channel', 'Amount (INR)', 'Cashback Multiplier'];
+  const rows = txs.map(t => [
+    t.id,
+    t.timestamp,
+    t.phone,
+    t.customerName || 'Valued Guest',
+    t.type,
+    t.description,
+    t.amount,
+    t.multiplier
+  ]);
+  downloadCSV(`AXIONIX_Mall_Pay_Unified_Wallet_Ledger_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+}
+

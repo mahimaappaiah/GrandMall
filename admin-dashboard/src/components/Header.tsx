@@ -254,40 +254,6 @@ export const Header: React.FC<HeaderProps> = ({
         {/* RIGHT: Mall Selector + Date/Time + Gateway + Notifications */}
         <div className="flex items-center gap-3">
           
-          {/* Mall Selector Dropdown */}
-          <div ref={mallRef} className="relative hidden md:block">
-            <button
-              onClick={() => setMallDropdownOpen(!mallDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 transition-colors"
-            >
-              <Building2 className="w-3.5 h-3.5 text-blue-600" />
-              <span className="truncate max-w-[150px]">{selectedMall}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {mallDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden z-50 p-1">
-                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Select AXIONIX Location
-                </div>
-                {MALL_LIST.map((mall) => (
-                  <button
-                    key={mall}
-                    onClick={() => {
-                      onSelectMall(mall);
-                      setMallDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors ${
-                      selectedMall === mall ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>{mall}</span>
-                    {selectedMall === mall && <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Date & Time display */}
           <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl text-xs text-slate-600 font-medium">
