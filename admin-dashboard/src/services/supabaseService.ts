@@ -94,35 +94,36 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
     }
   }
 
-  // 1. Primary Source of Truth: Supabase Brands Table
+  // 1. Primary Source of Truth: Supabase Brands Table merged with Master Store Directory
+  const supaMap = new Map<string, any>();
   if (supaBrands.length > 0) {
-    const mockMap = new Map<string, Store>();
-    MOCK_STORES.forEach(ms => mockMap.set(ms.name.toLowerCase().trim(), ms));
-
-    const finalStoresList: Store[] = supaBrands.map((b: any, idx: number) => {
-      const existing = mockMap.get((b.name || '').toLowerCase().trim());
-      return {
-        id: b.id || `store-supa-${idx + 1}`,
-        name: b.name || 'Store Tenant',
-        logo: b.logo_url || existing?.logo || getCategoryLogo(b.category),
-        category: (b.category as any) || existing?.category || 'Fashion',
-        floor: (b.floor as any) || existing?.floor || 'Ground Floor',
-        zone: (b.zone as any) || existing?.zone || 'Central Atrium',
-        visitorsToday: typeof b.visitors_today === 'number' ? b.visitors_today : (existing?.visitorsToday || 250),
-        ordersCount: typeof b.orders_count === 'number' ? b.orders_count : (existing?.ordersCount || 25),
-        reservationsCount: typeof b.reservations_count === 'number' ? b.reservations_count : (existing?.reservationsCount || 5),
-        conversionRate: typeof b.conversion_rate === 'number' ? b.conversion_rate : (existing?.conversionRate || 22.5),
-        revenueToday: typeof b.revenue_today === 'number' ? b.revenue_today : (existing?.revenueToday || 450000),
-        status: b.status === 'open' ? 'Open' : b.status === 'peak' ? 'Peak' : (b.status as any) || existing?.status || 'Open',
-        manager: b.manager || existing?.manager || 'Store Manager',
-        phone: b.phone || existing?.phone || '+91 98765 43210',
-        openHours: b.open_hours || existing?.openHours || '10:00 AM - 10:00 PM',
-        rating: typeof b.rating === 'number' ? b.rating : (existing?.rating || 4.8)
-      };
-    });
-
-    return { data: finalStoresList, isLive: true };
+    supaBrands.forEach(sb => supaMap.set((sb.name || '').toLowerCase().trim(), sb));
   }
+
+  const finalStoresList: Store[] = MOCK_STORES.map((ms: Store, idx: number) => {
+    const sb = supaMap.get((ms.name || '').toLowerCase().trim());
+    return {
+      ...ms,
+      id: sb?.id || ms.id || `store-${idx + 1}`,
+      name: ms.name,
+      category: ms.category,
+      floor: ms.floor,
+      zone: ms.zone,
+      logo: sb?.logo_url || ms.logo || getCategoryLogo(ms.category),
+      status: sb?.status === 'open' ? 'Open' : sb?.status === 'peak' ? 'Peak' : (sb?.status as any) || ms.status || 'Open',
+      manager: sb?.manager || ms.manager || 'Store Manager',
+      phone: sb?.phone || ms.phone || '+91 98765 43210',
+      openHours: sb?.open_hours || ms.openHours || '10:00 AM - 10:00 PM',
+      rating: typeof sb?.rating === 'number' ? sb.rating : (ms.rating || 4.8),
+      visitorsToday: ms.visitorsToday,
+      ordersCount: ms.ordersCount,
+      revenueToday: ms.revenueToday,
+      reservationsCount: ms.reservationsCount,
+      conversionRate: ms.conversionRate
+    };
+  });
+
+  return { data: finalStoresList, isLive: true };
 
   // 2. Secondary Fallback: Backend Brands
   let backendBrands: any[] = [];

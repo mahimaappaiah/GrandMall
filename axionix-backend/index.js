@@ -463,14 +463,14 @@ let brands = [
     "category": "Accessories",
     "floor": "Ground Floor",
     "zone": "Central Atrium",
-    "visitorsToday": 290,
-    "ordersCount": 21,
-    "reservationsCount": 17,
-    "conversionRate": 19.8,
-    "revenueToday": 3950000,
+    "visitorsToday": 210,
+    "ordersCount": 18,
+    "reservationsCount": 16,
+    "conversionRate": 19.0,
+    "revenueToday": 3650000,
     "status": "Open",
-    "manager": "Gianluca Conti",
-    "phone": "+91 98450 99001",
+    "manager": "Marco V.",
+    "phone": "+91 98222 99887",
     "openHours": "10:00 AM - 10:00 PM",
     "rating": 4.9,
     "logo": "🐍",
@@ -485,16 +485,16 @@ let brands = [
     "category": "Accessories",
     "floor": "1st Floor",
     "zone": "East Wing",
-    "visitorsToday": 620,
-    "ordersCount": 84,
+    "visitorsToday": 490,
+    "ordersCount": 85,
     "reservationsCount": 5,
-    "conversionRate": 36.4,
+    "conversionRate": 28.0,
     "revenueToday": 680000,
     "status": "Open",
-    "manager": "Sophie Weber",
-    "phone": "+91 98450 88776",
+    "manager": "Clara M.",
+    "phone": "+91 98111 88776",
     "openHours": "10:00 AM - 10:00 PM",
-    "rating": 4.8,
+    "rating": 4.7,
     "logo": "🦢",
     "items": [
       {"id": "sw-1","name": "Millenia Tennis Bracelet Clear Crystal","price": 16500,"category": "Jewelry","image": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=800&q=80"},
@@ -508,15 +508,15 @@ let brands = [
     "category": "Accessories",
     "floor": "Ground Floor",
     "zone": "West Wing",
-    "visitorsToday": 490,
-    "ordersCount": 45,
+    "visitorsToday": 620,
+    "ordersCount": 110,
     "reservationsCount": 28,
-    "conversionRate": 28.0,
-    "revenueToday": 5800000,
+    "conversionRate": 32.5,
+    "revenueToday": 5400000,
     "status": "Open",
-    "manager": "Rajesh Sharma",
-    "phone": "+91 98450 66554",
-    "openHours": "10:00 AM - 10:00 PM",
+    "manager": "Ramesh Kumar",
+    "phone": "+91 98450 11223",
+    "openHours": "10:00 AM - 09:30 PM",
     "rating": 4.9,
     "logo": "👑",
     "items": [
@@ -531,15 +531,15 @@ let brands = [
     "category": "Accessories",
     "floor": "Ground Floor",
     "zone": "West Wing",
-    "visitorsToday": 420,
-    "ordersCount": 39,
+    "visitorsToday": 580,
+    "ordersCount": 98,
     "reservationsCount": 20,
-    "conversionRate": 24.5,
-    "revenueToday": 4400000,
+    "conversionRate": 30.0,
+    "revenueToday": 4890000,
     "status": "Open",
-    "manager": "Naveen Kurian",
-    "phone": "+91 98450 44332",
-    "openHours": "10:00 AM - 10:00 PM",
+    "manager": "Suresh Menon",
+    "phone": "+91 98450 44556",
+    "openHours": "10:00 AM - 09:30 PM",
     "rating": 4.8,
     "logo": "💎",
     "items": [
@@ -560,7 +560,7 @@ let brands = [
     "ordersCount": 68,
     "reservationsCount": 0,
     "conversionRate": 23.4,
-    "revenueToday": 410000,
+    "revenueToday": 210000,
     "status": "Open",
     "manager": "Kavita B.",
     "phone": "+91 98765 43247",
@@ -579,16 +579,16 @@ let brands = [
     "category": "Accessories",
     "floor": "1st Floor",
     "zone": "Central Atrium",
-    "visitorsToday": 480,
-    "ordersCount": 54,
+    "visitorsToday": 410,
+    "ordersCount": 55,
     "reservationsCount": 0,
-    "conversionRate": 27.2,
-    "revenueToday": 780000,
+    "conversionRate": 22.0,
+    "revenueToday": 390000,
     "status": "Open",
-    "manager": "Vikram Mehta",
-    "phone": "+91 98450 22119",
+    "manager": "Amitabh R.",
+    "phone": "+91 98222 33441",
     "openHours": "10:00 AM - 10:00 PM",
-    "rating": 4.8,
+    "rating": 4.6,
     "logo": "🕶️",
     "items": [
       {"id": "sh-1","name": "Versace Medusa Biggie Luxury Sunglasses","price": 28500,"category": "Eyewear","image": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=800&q=80"},
@@ -602,16 +602,16 @@ let brands = [
     "category": "Accessories",
     "floor": "1st Floor",
     "zone": "North Wing",
-    "visitorsToday": 390,
-    "ordersCount": 46,
+    "visitorsToday": 380,
+    "ordersCount": 42,
     "reservationsCount": 0,
-    "conversionRate": 29.0,
-    "revenueToday": 590000,
+    "conversionRate": 21.0,
+    "revenueToday": 280000,
     "status": "Open",
-    "manager": "Rohit Verma",
-    "phone": "+91 98450 11998",
+    "manager": "Rohan D.",
+    "phone": "+91 98111 22338",
     "openHours": "10:00 AM - 10:00 PM",
-    "rating": 4.8,
+    "rating": 4.7,
     "logo": "🔴",
     "items": [
       {"id": "ok-1","name": "Oakley Holbrook Polarized Prizm Black","price": 15490,"category": "Eyewear","image": "https://images.unsplash.com/photo-1508296695146-257a814070b4?auto=format&fit=crop&w=800&q=80"},
@@ -625,14 +625,14 @@ let brands = [
     "category": "Accessories",
     "floor": "Ground Floor",
     "zone": "South Wing",
-    "visitorsToday": 270,
+    "visitorsToday": 290,
     "ordersCount": 28,
     "reservationsCount": 10,
-    "conversionRate": 22.4,
-    "revenueToday": 950000,
+    "conversionRate": 20.0,
+    "revenueToday": 890000,
     "status": "Open",
-    "manager": "Julian Thorne",
-    "phone": "+91 98450 99887",
+    "manager": "Vanessa L.",
+    "phone": "+91 98450 99001",
     "openHours": "10:00 AM - 10:00 PM",
     "rating": 4.9,
     "logo": "🕶️",
@@ -648,16 +648,16 @@ let brands = [
     "category": "Accessories",
     "floor": "1st Floor",
     "zone": "East Wing",
-    "visitorsToday": 640,
-    "ordersCount": 92,
-    "reservationsCount": 15,
-    "conversionRate": 35.0,
+    "visitorsToday": 650,
+    "ordersCount": 180,
+    "reservationsCount": 0,
+    "conversionRate": 34.0,
     "revenueToday": 420000,
     "status": "Open",
-    "manager": "Ananya Roy",
-    "phone": "+91 98450 77665",
+    "manager": "Pooja V.",
+    "phone": "+91 98888 77665",
     "openHours": "10:00 AM - 10:00 PM",
-    "rating": 4.8,
+    "rating": 4.6,
     "logo": "👓",
     "items": [
       {"id": "lk-1","name": "John Jacobs Titanium Japanese Aviator Eyeglasses","price": 7500,"category": "Eyewear","image": "https://images.unsplash.com/photo-1577803645773-f96470509666?auto=format&fit=crop&w=800&q=80"},
@@ -673,11 +673,11 @@ let brands = [
     "category": "Accessories",
     "floor": "Ground Floor",
     "zone": "Central Atrium",
-    "visitorsToday": 340,
-    "ordersCount": 26,
-    "reservationsCount": 14,
+    "visitorsToday": 310,
+    "ordersCount": 24,
+    "reservationsCount": 8,
     "conversionRate": 28.5,
-    "revenueToday": 4900000,
+    "revenueToday": 2900000,
     "status": "Open",
     "manager": "Claire Montrose",
     "phone": "+91 98111 22334",
@@ -697,13 +697,13 @@ let brands = [
     "floor": "Ground Floor",
     "zone": "Central Atrium",
     "visitorsToday": 280,
-    "ordersCount": 22,
+    "ordersCount": 20,
     "reservationsCount": 12,
-    "conversionRate": 24.0,
+    "conversionRate": 22.0,
     "revenueToday": 2450000,
     "status": "Open",
-    "manager": "Henri Dupont",
-    "phone": "+91 98450 33221",
+    "manager": "Julian Thorne",
+    "phone": "+91 98333 11223",
     "openHours": "10:00 AM - 10:00 PM",
     "rating": 4.9,
     "logo": "Ω",
@@ -719,14 +719,14 @@ let brands = [
     "category": "Accessories",
     "floor": "1st Floor",
     "zone": "North Wing",
-    "visitorsToday": 350,
-    "ordersCount": 31,
+    "visitorsToday": 340,
+    "ordersCount": 26,
     "reservationsCount": 10,
-    "conversionRate": 26.5,
-    "revenueToday": 1850000,
+    "conversionRate": 21.0,
+    "revenueToday": 1890000,
     "status": "Open",
-    "manager": "Carlos Sainz",
-    "phone": "+91 98450 55443",
+    "manager": "Lukas Weber",
+    "phone": "+91 98222 44556",
     "openHours": "10:00 AM - 10:00 PM",
     "rating": 4.8,
     "logo": "⏱️",
@@ -765,16 +765,16 @@ let brands = [
     "category": "Accessories",
     "floor": "1st Floor",
     "zone": "West Wing",
-    "visitorsToday": 410,
-    "ordersCount": 48,
-    "reservationsCount": 8,
-    "conversionRate": 32.0,
-    "revenueToday": 740000,
+    "visitorsToday": 420,
+    "ordersCount": 38,
+    "reservationsCount": 5,
+    "conversionRate": 24.0,
+    "revenueToday": 980000,
     "status": "Open",
-    "manager": "Simon Favre",
-    "phone": "+91 98450 77112",
+    "manager": "Felix B.",
+    "phone": "+91 98765 11223",
     "openHours": "10:00 AM - 10:00 PM",
-    "rating": 4.8,
+    "rating": 4.7,
     "logo": "🇨🇭",
     "items": [
       {"id": "ts-1","name": "Tissot PRX Powermatic 80 Integrated Bracelet Watch","price": 62500,"category": "Watches","image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"},
@@ -787,20 +787,20 @@ let brands = [
     "category": "Accessories",
     "floor": "1st Floor",
     "zone": "Central Atrium",
-    "visitorsToday": 360,
-    "ordersCount": 34,
-    "reservationsCount": 16,
-    "conversionRate": 29.5,
+    "visitorsToday": 390,
+    "ordersCount": 32,
+    "reservationsCount": 8,
+    "conversionRate": 23.5,
     "revenueToday": 1450000,
     "status": "Open",
-    "manager": "Deepak Nair",
-    "phone": "+91 98450 88990",
+    "manager": "Venkat R.",
+    "phone": "+91 98450 66778",
     "openHours": "10:00 AM - 10:00 PM",
     "rating": 4.8,
     "logo": "👑",
     "items": [
-      {"id": "tn-1","name": "Nebula 18k Solid Gold Chronograph Watch","price": 245000,"category": "Watches","image": "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=800&q=80"},
-      {"id": "tn-2","name": "Nebula Deccan Heritage Automatic 18k Gold","price": 320000,"category": "Watches","image": "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80"}
+      {"id": "tn-1","name": "Nebula 18k Solid Gold Chronograph Watch","price": 285000,"category": "Watches","image": "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80"},
+      {"id": "tn-2","name": "Nebula Calligraphy Diamond 18k Gold Watch","price": 195000,"category": "Watches","image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"}
     ]
   }
 ];
@@ -1721,10 +1721,10 @@ app.get('/', (req, res) => {
         return;
       }
 
-      container.innerHTML = filtered.map(function(store, idx) {
-        const visitors = Number(store.visitorsToday) || Number(store.visitors_today) || (320 + (idx * 37) % 450);
-        const ordersNum = Number(store.ordersCount) || Number(store.orders_count) || (24 + (idx * 11) % 60);
-        const revVal = Number(store.revenueToday) || Number(store.revenue_today) || (ordersNum * 3650);
+      container.innerHTML = filtered.map(function(store) {
+        const visitors = Number(store.visitorsToday || store.visitors_today) || 0;
+        const ordersNum = Number(store.ordersCount || store.orders_count) || 0;
+        const revVal = Number(store.revenueToday || store.revenue_today) || 0;
         const revK = (revVal / 1000).toFixed(0);
 
         const SQ = "'";
@@ -1742,11 +1742,11 @@ app.get('/', (req, res) => {
           '<div class="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-center">' +
             '<div>' +
               '<div class="text-[10px] text-slate-400 uppercase font-bold">Visitors</div>' +
-              '<div class="font-extrabold text-slate-900 mt-0.5">' + visitors + '</div>' +
+              '<div class="font-extrabold text-slate-900 mt-0.5">' + visitors.toLocaleString() + '</div>' +
             '</div>' +
             '<div>' +
               '<div class="text-[10px] text-slate-400 uppercase font-bold">Orders</div>' +
-              '<div class="font-extrabold text-slate-900 mt-0.5">' + ordersNum + '</div>' +
+              '<div class="font-extrabold text-slate-900 mt-0.5">' + ordersNum.toLocaleString() + '</div>' +
             '</div>' +
             '<div>' +
               '<div class="text-[10px] text-slate-400 uppercase font-bold">Revenue</div>' +
@@ -1771,17 +1771,26 @@ app.get('/', (req, res) => {
           renderStores();
           renderSpatialSvgMap();
           
-          let totalStoreRev = storesData.reduce((acc, s) => acc + (Number(s.revenueToday) || 0), 0);
+          let totalStoreRev = storesData.reduce((acc, s) => acc + (Number(s.revenueToday || s.revenue_today) || 0), 0);
+          let totalStoreVisitors = storesData.reduce((acc, s) => acc + (Number(s.visitorsToday || s.visitors_today) || 0), 0);
+          let totalStoreOrders = storesData.reduce((acc, s) => acc + (Number(s.ordersCount || s.orders_count) || 0), 0);
+
           document.getElementById('metric-stores').innerText = storesData.length + ' Stores';
           if (totalStoreRev > 0) {
             document.getElementById('metric-revenue').innerText = '₹' + (totalStoreRev / 10000000).toFixed(2) + ' Cr';
           }
+          if (totalStoreVisitors > 0) {
+            document.getElementById('metric-footfall').innerText = totalStoreVisitors.toLocaleString();
+          }
+          if (totalStoreOrders > 0) {
+            document.getElementById('metric-orders').innerText = totalStoreOrders.toLocaleString() + ' Orders';
+          }
         }
 
         if (mRes.success) {
-          baseFootfall = mRes.totalFootfall || 4965;
-          document.getElementById('metric-footfall').innerText = baseFootfall.toLocaleString();
-          document.getElementById('metric-users').innerText = (mRes.activeUsers || 6) + ' Active';
+          if (mRes.activeUsers !== undefined) {
+            document.getElementById('metric-users').innerText = mRes.activeUsers + ' Active';
+          }
         }
 
         if (uRes.success) {
@@ -1790,20 +1799,21 @@ app.get('/', (req, res) => {
 
         if (oRes.success) {
           ordersData = oRes.orders || [];
-          document.getElementById('metric-orders').innerText = ordersData.length + ' Orders';
         }
       } catch(err) {}
     }
 
-    // Realistic Live Telemetry Sensor Fluctuations (Every 3.5 seconds)
-    setInterval(() => {
-      const delta = Math.floor(Math.random() * 3) + 1;
-      baseFootfall += delta;
-      const elem = document.getElementById('metric-footfall');
-      if (elem) elem.innerText = baseFootfall.toLocaleString();
-    }, 3500);
+    // Connect to SSE stream for instantaneous real-time UI updates
+    try {
+      const evtSource = new EventSource('/api/realtime/stream');
+      evtSource.onmessage = function(e) {
+        try {
+          loadData();
+        } catch(err) {}
+      };
+    } catch(err) {}
 
-    // Poll live backend endpoints every 2.5 seconds
+    // Poll live backend endpoints every 2.5 seconds as fallback
     setInterval(loadData, 2500);
 
     loadData();
@@ -1981,40 +1991,47 @@ app.post('/api/auth/visit-store', (req, res) => {
 app.get('/api/brands', async (req, res) => {
   try {
     const { data: supaBrands, error } = await supabase.from('brands').select('*').order('name', { ascending: true });
-    if (!error && supaBrands && supaBrands.length > 0) {
-      const enrichedBrands = supaBrands.map((sb, idx) => {
-        const memoryBrand = brands.find(b => b.name.toLowerCase() === sb.name.toLowerCase() || b.id === sb.id);
-        const visitors = Number(sb.visitors_today) || Number(sb.visitorsToday) || (memoryBrand ? memoryBrand.visitorsToday : (350 + (idx * 37) % 450));
-        const orders = Number(sb.orders_count) || Number(sb.ordersCount) || (memoryBrand ? memoryBrand.ordersCount : (25 + (idx * 13) % 80));
-        const rev = Number(sb.revenue_today) || Number(sb.revenueToday) || (memoryBrand ? memoryBrand.revenueToday : (orders * 3800));
-
-        return {
-          id: sb.id || (memoryBrand ? memoryBrand.id : `brand-${idx + 1}`),
-          name: sb.name,
-          category: sb.category || (memoryBrand ? memoryBrand.category : 'Fashion'),
-          floor: sb.floor || (memoryBrand ? memoryBrand.floor : 'Ground Floor'),
-          zone: sb.zone || (memoryBrand ? memoryBrand.zone : 'Central Atrium'),
-          status: sb.status || (memoryBrand ? memoryBrand.status : 'Open'),
-          rating: Number(sb.rating) || (memoryBrand ? memoryBrand.rating : 4.8),
-          openHours: sb.open_hours || sb.openHours || (memoryBrand ? memoryBrand.openHours : '10:00 AM - 10:00 PM'),
-          manager: sb.manager || (memoryBrand ? memoryBrand.manager : 'Store Manager'),
-          phone: sb.phone || (memoryBrand ? memoryBrand.phone : '+91 80 4930 1000'),
-          logo: sb.logo_variant || sb.logo || (memoryBrand ? memoryBrand.logo : '🏬'),
-          logo_variant: sb.logo_variant,
-          logo_url: sb.logo_url,
-          visitorsToday: visitors,
-          visitors_today: visitors,
-          ordersCount: orders,
-          orders_count: orders,
-          revenueToday: rev,
-          revenue_today: rev,
-          items: (memoryBrand && memoryBrand.items) || []
-        };
-      });
-      return res.json({ success: true, brands: enrichedBrands });
+    const supaMap = new Map();
+    if (!error && supaBrands && Array.isArray(supaBrands)) {
+      supaBrands.forEach(sb => supaMap.set((sb.name || '').toLowerCase().trim(), sb));
     }
-  } catch (e) {}
-  res.json({ success: true, brands: brands });
+
+    const allMergedBrands = brands.map((mb, idx) => {
+      const sb = supaMap.get((mb.name || '').toLowerCase().trim());
+      const visitors = (typeof mb.visitorsToday === 'number') ? mb.visitorsToday : 250;
+      const orders = (typeof mb.ordersCount === 'number') ? mb.ordersCount : 25;
+      const rev = (typeof mb.revenueToday === 'number') ? mb.revenueToday : 450000;
+
+      return {
+        id: (sb && sb.id) || mb.id || `brand-${idx + 1}`,
+        name: mb.name,
+        category: mb.category || (sb && sb.category) || 'Fashion',
+        floor: mb.floor || (sb && sb.floor) || 'Ground Floor',
+        zone: mb.zone || (sb && sb.zone) || 'Central Atrium',
+        status: (sb && sb.status) || mb.status || 'Open',
+        rating: (sb && typeof sb.rating === 'number') ? sb.rating : (mb.rating || 4.8),
+        openHours: (sb && sb.open_hours) || mb.openHours || '10:00 AM - 10:00 PM',
+        manager: (sb && sb.manager) || mb.manager || 'Store Manager',
+        phone: (sb && sb.phone) || mb.phone || '+91 80 4930 1000',
+        logo: mb.logo || (sb && sb.logo_variant) || '🏬',
+        logo_variant: (sb && sb.logo_variant) || mb.logoVariant,
+        logo_url: (sb && sb.logo_url) || mb.logoUrl,
+        visitorsToday: visitors,
+        visitors_today: visitors,
+        ordersCount: orders,
+        orders_count: orders,
+        revenueToday: rev,
+        revenue_today: rev,
+        reservationsCount: mb.reservationsCount || 5,
+        conversionRate: mb.conversionRate || 22.5,
+        items: mb.items || []
+      };
+    });
+
+    return res.json({ success: true, brands: allMergedBrands });
+  } catch (e) {
+    res.json({ success: true, brands: brands });
+  }
 });
 
 // 4. Coupons & Redemptions Routes
@@ -2562,14 +2579,13 @@ app.post('/api/reservations', (req, res) => {
 
 // 7. Admin Metrics Routes
 app.get('/api/admin/metrics', (req, res) => {
-  const brandRev = brands.reduce((acc, b) => acc + b.revenueToday, 0);
-  const orderRev = orders.reduce((acc, o) => acc + Number(o.totalAmount || 0), 0);
-  const totalRevenue = brandRev + orderRev;
-  const storeVisits = brands.reduce((acc, b) => acc + b.visitorsToday, 0);
+  const brandRev = brands.reduce((acc, b) => acc + (Number(b.revenueToday) || 0), 0);
+  const totalRevenue = brandRev;
+  const storeVisits = brands.reduce((acc, b) => acc + (Number(b.visitorsToday) || 0), 0);
   const totalFootfall = storeVisits;
-  const activeUsers = connectedUsers.filter(u => u.status === 'Active').length;
-  const totalUsers = connectedUsers.length;
-  const totalOrders = orders.length;
+  const activeUsers = connectedUsers.filter(u => u.status === 'Active').length || 6;
+  const totalUsers = connectedUsers.length || 12;
+  const totalOrders = brands.reduce((acc, b) => acc + (Number(b.ordersCount) || 0), 0);
   const totalReservations = reservations.length;
   const totalRedemptions = couponRedemptions.length;
 

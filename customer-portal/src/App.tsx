@@ -1746,11 +1746,12 @@ export default function App() {
         ]);
 
         if (brandsRes.data && brandsRes.isLive && brandsRes.data.length > 0) {
-          const fallbackMap = new Map<string, Brand>();
-          BRANDS_DATA.forEach(pb => fallbackMap.set(pb.name.toLowerCase().trim(), pb));
+          const supaMap = new Map<string, any>();
+          brandsRes.data.forEach((sb: any) => supaMap.set((sb.name || '').toLowerCase().trim(), sb));
 
-          const mappedBrands: Brand[] = brandsRes.data.map((sb: any, idx: number) => {
-            const existing = fallbackMap.get((sb.name || '').toLowerCase().trim());
+          const mappedBrands: Brand[] = MASTER_BRANDS.map((mb: Brand, idx: number) => {
+            const sb = supaMap.get((mb.name || '').toLowerCase().trim());
+            if (!sb) return mb;
 
             // Find products for this brand
             const matchingProds = (prodsRes.data || []).filter((p: any) =>
@@ -1762,29 +1763,26 @@ export default function App() {
                   id: p.id,
                   name: p.name,
                   price: Number(p.price) || 1990,
-                  category: p.category || sb.category || 'General',
+                  category: p.category || mb.category || 'General',
                   image: p.image_url || undefined,
                   sizes: ['S', 'M', 'L', 'XL']
                 }))
-              : (existing?.items || []);
+              : (mb.items || []);
 
             return {
-              id: sb.id || `brand-${idx + 1}`,
-              name: sb.name || 'Brand Tenant',
-              category: sb.category || existing?.category || 'Fashion',
-              floor: sb.floor || existing?.floor || 'Ground Floor',
-              zone: sb.zone || existing?.zone || 'Central Atrium',
-              visitorsToday: Number(sb.visitors_today) || existing?.visitorsToday || 0,
-              ordersCount: Number(sb.orders_count) || existing?.ordersCount || 0,
-              revenueToday: Number(sb.revenue_today) || existing?.revenueToday || 0,
-              status: sb.status || existing?.status || 'Open',
-              openHours: sb.open_hours || existing?.openHours || '10:00 AM - 10:00 PM',
-              rating: typeof sb.rating === 'number' ? sb.rating : (existing?.rating || 4.8),
-              logoVariant: sb.logo_variant || existing?.logoVariant || 'default',
-              bannerUrl: sb.banner_url || existing?.bannerUrl,
-              logoUrl: sb.logo_url || existing?.logoUrl,
-              description: sb.description || existing?.description || `${sb.name} flagship boutique located at ${sb.floor || 'Ground Floor'}.`,
-              items: mappedItems
+              ...mb,
+              id: sb.id || mb.id || `brand-${idx + 1}`,
+              name: sb.name || mb.name,
+              category: mb.category || sb.category || 'Fashion',
+              floor: mb.floor || sb.floor || 'Ground Floor',
+              zone: mb.zone || sb.zone || 'Central Atrium',
+              status: sb.status || mb.status || 'Open',
+              openHours: sb.open_hours || mb.openHours || '10:00 AM - 10:00 PM',
+              rating: typeof sb.rating === 'number' ? sb.rating : (mb.rating || 4.8),
+              logoVariant: sb.logo_variant || mb.logoVariant || 'default',
+              bannerUrl: sb.banner_url || mb.bannerUrl,
+              logoUrl: sb.logo_url || mb.logoUrl,
+              items: mappedItems.length > 0 ? mappedItems : mb.items
             };
           });
 

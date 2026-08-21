@@ -350,10 +350,10 @@ export default function App() {
         title: 'Guest Disconnected / Logged Out',
         message: `${payload.user?.name || 'Guest'} session closed.`
       });
-    } else if (type === 'STORE_VISITED') {
-      const phone = payload.user_phone;
-      const name = payload.user_name;
-      const store = payload.store_name;
+    } else if (type === 'STORE_VISITED' || type === 'STORE_VISIT') {
+      const phone = payload.user_phone || payload.phone || (payload.user && payload.user.phone);
+      const name = payload.user_name || payload.userName || (payload.user && payload.user.name);
+      const store = payload.store_name || payload.storeName;
       if (!store) return;
 
       setUsersList(prev => prev.map((u, idx) => {
@@ -364,7 +364,20 @@ export default function App() {
         }
         return u;
       }));
-    } else if (type === 'ORDER_CREATED') {
+
+      setStoresList(prev => prev.map(s => {
+        if (s.name.toLowerCase() === store.toLowerCase() || s.id === store) {
+          const updated = {
+            ...s,
+            visitorsToday: (s.visitorsToday || 0) + 1
+          };
+          const mockIdx = MOCK_STORES.findIndex(ms => ms.name.toLowerCase() === s.name.toLowerCase());
+          if (mockIdx !== -1) MOCK_STORES[mockIdx] = updated;
+          return updated;
+        }
+        return s;
+      }));
+    } else if (type === 'ORDER_CREATED' || type === 'NEW_ORDER') {
       const orderPayload = payload.order || payload || {};
       const orderNum = orderPayload.orderNumber || orderPayload.order_number || `#AX-${Math.floor(1000 + Math.random() * 9000)}`;
       const targetStore = orderPayload.storeName || orderPayload.store_name || 'Starbucks Reserve';
@@ -410,6 +423,21 @@ export default function App() {
           return { ...u, visitedStores: stores, dataUsed: `${(stores.length * 25) + 20} MB` };
         }
         return u;
+      }));
+
+      // Update store revenue and orders live
+      setStoresList(prev => prev.map(s => {
+        if (s.name.toLowerCase() === targetStore.toLowerCase() || s.id === targetStore) {
+          const updated = {
+            ...s,
+            revenueToday: (s.revenueToday || 0) + newOrder.totalAmount,
+            ordersCount: (s.ordersCount || 0) + 1
+          };
+          const mockIdx = MOCK_STORES.findIndex(ms => ms.name.toLowerCase() === s.name.toLowerCase());
+          if (mockIdx !== -1) MOCK_STORES[mockIdx] = updated;
+          return updated;
+        }
+        return s;
       }));
 
       setLiveToast({
