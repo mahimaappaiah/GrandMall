@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MallFloorMap, StoreMapPin } from './MallFloorMap';
 import { Layers, MapPin, Activity, Flame, Shield, Search, Sparkles, Building2, Store } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 
 const MOCK_MALL_BRANDS: StoreMapPin[] = [
   // Ground Floor
@@ -31,14 +32,68 @@ const MOCK_MALL_BRANDS: StoreMapPin[] = [
 ];
 
 export default function App() {
+  const [brands, setBrands] = useState<StoreMapPin[]>(MOCK_MALL_BRANDS);
   const [currentFloor, setCurrentFloor] = useState<string>('Ground Floor');
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const selectedStore = MOCK_MALL_BRANDS.find(b => b.id === selectedStoreId);
+  const fetchLiveBrands = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('brands')
+        .select('*')
+        .order('name', { ascending: true });
 
-  const filteredBrands = MOCK_MALL_BRANDS.filter(b => {
+      if (!error && data && data.length > 0) {
+        const mockMap = new Map<string, StoreMapPin>();
+        MOCK_MALL_BRANDS.forEach(mb => mockMap.set(mb.name.toLowerCase().trim(), mb));
+
+        const liveBrands: StoreMapPin[] = data.map((b: any, idx: number) => {
+          const existing = mockMap.get((b.name || '').toLowerCase().trim());
+          return {
+            id: b.id || `brand-${idx + 1}`,
+            name: b.name || 'Store Tenant',
+            category: b.category || existing?.category || 'Fashion',
+            floor: b.floor || existing?.floor || 'Ground Floor',
+            zone: b.zone || existing?.zone || 'Central Atrium',
+            revenueToday: Number(b.revenue_today) || existing?.revenueToday || 0,
+            visitorsToday: Number(b.visitors_today) || existing?.visitorsToday || 0,
+            ordersCount: Number(b.orders_count) || existing?.ordersCount || 0,
+            status: b.status || existing?.status || 'Open',
+            rating: typeof b.rating === 'number' ? b.rating : (existing?.rating || 4.8),
+            logo: existing?.logo || b.logo_variant || (b.category === 'Food' ? '☕' : b.category === 'Fashion' ? '👗' : '🏬')
+          };
+        });
+
+        setBrands(liveBrands);
+      }
+    } catch (e) {
+      console.warn('[MallTwin] Supabase fetch error:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveBrands();
+
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel('mall-twin-brands-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'brands' }, () => {
+          fetchLiveBrands();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, []);
+
+  const selectedStore = brands.find(b => b.id === selectedStoreId);
+
+  const filteredBrands = brands.filter(b => {
     if (searchQuery) {
       return b.name.toLowerCase().includes(searchQuery.toLowerCase()) || b.category.toLowerCase().includes(searchQuery.toLowerCase());
     }
@@ -117,7 +172,7 @@ export default function App() {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl relative">
             <MallFloorMap
               currentFloor={currentFloor}
-              brands={MOCK_MALL_BRANDS}
+              brands={brands}
               onSelectStore={(id) => setSelectedStoreId(id)}
               onSelectZone={(z) => setSelectedZone(z)}
             />

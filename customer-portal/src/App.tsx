@@ -24,6 +24,7 @@ import {
   CustomerProfile,
   MallWalletData
 } from './services/supabaseService';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { BACKEND_URL } from './lib/config';
 
 const API_BASE = BACKEND_URL;
@@ -1712,45 +1713,49 @@ export default function App() {
         ]);
 
         if (brandsRes.data && brandsRes.isLive && brandsRes.data.length > 0) {
-          setBrands(prev => prev.map(pb => {
-            const supaBrand = brandsRes.data.find((b: any) => b.name.toLowerCase() === pb.name.toLowerCase());
-            if (supaBrand) {
-              return {
-                ...pb,
-                id: supaBrand.id,
-                name: supaBrand.name,
-                category: supaBrand.category || pb.category,
-                floor: supaBrand.floor || pb.floor,
-                zone: supaBrand.zone || pb.zone,
-                openHours: supaBrand.open_hours || pb.openHours,
-                rating: supaBrand.rating || pb.rating,
-                status: supaBrand.status || pb.status
-              };
-            }
-            return pb;
-          }));
-        }
+          const fallbackMap = new Map<string, Brand>();
+          BRANDS_DATA.forEach(pb => fallbackMap.set(pb.name.toLowerCase().trim(), pb));
 
-        if (prodsRes.data && prodsRes.isLive && prodsRes.data.length > 0) {
-          setBrands(prev => prev.map(pb => {
-            const brandProds = prodsRes.data.filter((p: any) => 
-              p.brand_id === pb.id || (p.brands?.name && p.brands.name.toLowerCase() === pb.name.toLowerCase())
+          const mappedBrands: Brand[] = brandsRes.data.map((sb: any, idx: number) => {
+            const existing = fallbackMap.get((sb.name || '').toLowerCase().trim());
+
+            // Find products for this brand
+            const matchingProds = (prodsRes.data || []).filter((p: any) =>
+              p.brand_id === sb.id || (p.brands?.name && p.brands.name.toLowerCase() === sb.name.toLowerCase())
             );
 
-            if (brandProds.length > 0) {
-              const mappedItems: BrandItem[] = brandProds.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                price: Number(p.price) || 1990,
-                category: p.category || 'General',
-                image: p.image_url || undefined,
-                sizes: ['S', 'M', 'L', 'XL']
-              }));
+            const mappedItems: BrandItem[] = matchingProds.length > 0
+              ? matchingProds.map((p: any) => ({
+                  id: p.id,
+                  name: p.name,
+                  price: Number(p.price) || 1990,
+                  category: p.category || sb.category || 'General',
+                  image: p.image_url || undefined,
+                  sizes: ['S', 'M', 'L', 'XL']
+                }))
+              : (existing?.items || []);
 
-              return { ...pb, items: mappedItems };
-            }
-            return pb;
-          }));
+            return {
+              id: sb.id || `brand-${idx + 1}`,
+              name: sb.name || 'Brand Tenant',
+              category: sb.category || existing?.category || 'Fashion',
+              floor: sb.floor || existing?.floor || 'Ground Floor',
+              zone: sb.zone || existing?.zone || 'Central Atrium',
+              visitorsToday: Number(sb.visitors_today) || existing?.visitorsToday || 0,
+              ordersCount: Number(sb.orders_count) || existing?.ordersCount || 0,
+              revenueToday: Number(sb.revenue_today) || existing?.revenueToday || 0,
+              status: sb.status || existing?.status || 'Open',
+              openHours: sb.open_hours || existing?.openHours || '10:00 AM - 10:00 PM',
+              rating: typeof sb.rating === 'number' ? sb.rating : (existing?.rating || 4.8),
+              logoVariant: sb.logo_variant || existing?.logoVariant || 'default',
+              bannerUrl: sb.banner_url || existing?.bannerUrl,
+              logoUrl: sb.logo_url || existing?.logoUrl,
+              description: sb.description || existing?.description || `${sb.name} flagship boutique located at ${sb.floor || 'Ground Floor'}.`,
+              items: mappedItems
+            };
+          });
+
+          setBrands(mappedBrands);
         }
       } catch (err) {
         console.warn('[CustomerPortal] Supabase initial load error:', err);
@@ -1759,25 +1764,21 @@ export default function App() {
 
     loadSupabaseData();
 
-    fetch(`${API_BASE}/api/brands`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.brands && data.brands.length > 0) {
-          setBrands(prev => prev.map(pb => {
-            const match = data.brands.find((ab: any) => ab.name.toLowerCase() === pb.name.toLowerCase());
-            if (match) {
-              return {
-                ...pb,
-                visitorsToday: match.visitorsToday || pb.visitorsToday,
-                revenueToday: match.revenueToday || pb.revenueToday,
-                ordersCount: match.ordersCount || pb.ordersCount
-              };
-            }
-            return pb;
-          }));
-        }
-      })
-      .catch(() => {});
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel('portal-brands-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'brands' }, () => {
+          loadSupabaseData();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+          loadSupabaseData();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   const validateLoginForm = (): boolean => {

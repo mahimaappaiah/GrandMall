@@ -1978,7 +1978,13 @@ app.post('/api/auth/visit-store', (req, res) => {
 });
 
 // 3. Brands & Store Directory Routes
-app.get('/api/brands', (req, res) => {
+app.get('/api/brands', async (req, res) => {
+  try {
+    const { data: supaBrands, error } = await supabase.from('brands').select('*').order('name', { ascending: true });
+    if (!error && supaBrands && supaBrands.length > 0) {
+      return res.json({ success: true, brands: supaBrands });
+    }
+  } catch (e) {}
   res.json({ success: true, brands: brands });
 });
 

@@ -75,15 +75,6 @@ function formatRelativeTime(dateStr?: string | null): string {
 // STORES / BRANDS SERVICE
 // ---------------------------------------------------------------------------
 export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive: boolean; error?: string }> {
-  let backendBrands: any[] = [];
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/brands`);
-    const bData = await res.json();
-    if (bData.success && Array.isArray(bData.brands)) {
-      backendBrands = bData.brands;
-    }
-  } catch (e) {}
-
   let supaBrands: any[] = [];
   let isLive = false;
 
@@ -103,63 +94,122 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
     }
   }
 
-  const storeMap = new Map<string, Store>();
+  // 1. Primary Source of Truth: Supabase Brands Table
+  if (supaBrands.length > 0) {
+    const mockMap = new Map<string, Store>();
+    MOCK_STORES.forEach(ms => mockMap.set(ms.name.toLowerCase().trim(), ms));
 
-  // 1. Seed with MOCK_STORES
-  MOCK_STORES.forEach(ms => {
-    storeMap.set(ms.name.toLowerCase().trim(), ms);
-  });
-
-  // 2. Merge Backend Brands
-  backendBrands.forEach(b => {
-    const key = (b.name || '').toLowerCase().trim();
-    const existing = storeMap.get(key);
-    storeMap.set(key, {
-      id: b.id || existing?.id || `store-${storeMap.size + 1}`,
-      name: b.name || existing?.name || 'Store Tenant',
-      logo: b.logoImg || b.logo_url || existing?.logo || getCategoryLogo(b.category),
-      category: (b.category as any) || existing?.category || 'Fashion',
-      floor: (b.floor as any) || existing?.floor || 'Ground Floor',
-      zone: (b.zone as any) || existing?.zone || 'Central Atrium',
-      visitorsToday: typeof b.visitorsToday === 'number' ? b.visitorsToday : (existing?.visitorsToday || 250),
-      ordersCount: typeof b.ordersCount === 'number' ? b.ordersCount : (existing?.ordersCount || 25),
-      reservationsCount: typeof b.reservationsCount === 'number' ? b.reservationsCount : (existing?.reservationsCount || 5),
-      conversionRate: typeof b.conversionRate === 'number' ? b.conversionRate : (existing?.conversionRate || 22.5),
-      revenueToday: typeof b.revenueToday === 'number' ? b.revenueToday : (existing?.revenueToday || 450000),
-      status: b.status === 'open' ? 'Open' : b.status === 'peak' ? 'Peak' : (b.status as any) || existing?.status || 'Open',
-      manager: b.manager || existing?.manager || 'Store Manager',
-      phone: b.phone || existing?.phone || '+91 98765 43210',
-      openHours: b.openHours || b.open_hours || existing?.openHours || '10:00 AM - 10:00 PM',
-      rating: typeof b.rating === 'number' ? b.rating : (existing?.rating || 4.8)
+    const finalStoresList: Store[] = supaBrands.map((b: any, idx: number) => {
+      const existing = mockMap.get((b.name || '').toLowerCase().trim());
+      return {
+        id: b.id || `store-supa-${idx + 1}`,
+        name: b.name || 'Store Tenant',
+        logo: b.logo_url || existing?.logo || getCategoryLogo(b.category),
+        category: (b.category as any) || existing?.category || 'Fashion',
+        floor: (b.floor as any) || existing?.floor || 'Ground Floor',
+        zone: (b.zone as any) || existing?.zone || 'Central Atrium',
+        visitorsToday: typeof b.visitors_today === 'number' ? b.visitors_today : (existing?.visitorsToday || 250),
+        ordersCount: typeof b.orders_count === 'number' ? b.orders_count : (existing?.ordersCount || 25),
+        reservationsCount: typeof b.reservations_count === 'number' ? b.reservations_count : (existing?.reservationsCount || 5),
+        conversionRate: typeof b.conversion_rate === 'number' ? b.conversion_rate : (existing?.conversionRate || 22.5),
+        revenueToday: typeof b.revenue_today === 'number' ? b.revenue_today : (existing?.revenueToday || 450000),
+        status: b.status === 'open' ? 'Open' : b.status === 'peak' ? 'Peak' : (b.status as any) || existing?.status || 'Open',
+        manager: b.manager || existing?.manager || 'Store Manager',
+        phone: b.phone || existing?.phone || '+91 98765 43210',
+        openHours: b.open_hours || existing?.openHours || '10:00 AM - 10:00 PM',
+        rating: typeof b.rating === 'number' ? b.rating : (existing?.rating || 4.8)
+      };
     });
-  });
 
-  // 3. Merge Supabase Brands
-  supaBrands.forEach((b: any, idx: number) => {
-    const key = (b.name || '').toLowerCase().trim();
-    const existing = storeMap.get(key);
-    storeMap.set(key, {
-      id: b.id || existing?.id || `store-supa-${idx + 1}`,
-      name: b.name || existing?.name || 'Store Tenant',
-      logo: b.logo_url || existing?.logo || getCategoryLogo(b.category),
-      category: (b.category as any) || existing?.category || 'Fashion',
-      floor: (b.floor as any) || existing?.floor || 'Ground Floor',
-      zone: (b.zone as any) || existing?.zone || 'Central Atrium',
-      visitorsToday: typeof b.visitors_today === 'number' ? b.visitors_today : (existing?.visitorsToday || 250),
-      ordersCount: typeof b.orders_count === 'number' ? b.orders_count : (existing?.ordersCount || 25),
-      reservationsCount: existing?.reservationsCount || 5,
-      conversionRate: existing?.conversionRate || 22.5,
-      revenueToday: typeof b.revenue_today === 'number' ? b.revenue_today : (existing?.revenueToday || 450000),
-      status: b.status === 'open' ? 'Open' : b.status === 'peak' ? 'Peak' : (b.status as any) || existing?.status || 'Open',
-      manager: b.manager || existing?.manager || 'Store Manager',
-      phone: b.phone || existing?.phone || '+91 98765 43210',
-      openHours: b.open_hours || existing?.openHours || '10:00 AM - 10:00 PM',
-      rating: typeof b.rating === 'number' ? b.rating : (existing?.rating || 4.8)
-    });
-  });
+    return { data: finalStoresList, isLive: true };
+  }
 
-  const finalStoresList = Array.from(storeMap.values());
-  return { data: finalStoresList, isLive: isLive || backendBrands.length > 0 };
+  // 2. Secondary Fallback: Backend Brands
+  let backendBrands: any[] = [];
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/brands`);
+    const bData = await res.json();
+    if (bData.success && Array.isArray(bData.brands) && bData.brands.length > 0) {
+      backendBrands = bData.brands;
+    }
+  } catch (e) {}
+
+  if (backendBrands.length > 0) {
+    const finalStoresList: Store[] = backendBrands.map((b: any, idx: number) => ({
+      id: b.id || `store-${idx + 1}`,
+      name: b.name || 'Store Tenant',
+      logo: b.logoImg || b.logo_url || getCategoryLogo(b.category),
+      category: (b.category as any) || 'Fashion',
+      floor: (b.floor as any) || 'Ground Floor',
+      zone: (b.zone as any) || 'Central Atrium',
+      visitorsToday: typeof b.visitorsToday === 'number' ? b.visitorsToday : 250,
+      ordersCount: typeof b.ordersCount === 'number' ? b.ordersCount : 25,
+      reservationsCount: typeof b.reservationsCount === 'number' ? b.reservationsCount : 5,
+      conversionRate: typeof b.conversionRate === 'number' ? b.conversionRate : 22.5,
+      revenueToday: typeof b.revenueToday === 'number' ? b.revenueToday : 450000,
+      status: b.status === 'open' ? 'Open' : b.status === 'peak' ? 'Peak' : (b.status as any) || 'Open',
+      manager: b.manager || 'Store Manager',
+      phone: b.phone || '+91 98765 43210',
+      openHours: b.openHours || b.open_hours || '10:00 AM - 10:00 PM',
+      rating: typeof b.rating === 'number' ? b.rating : 4.8
+    }));
+    return { data: finalStoresList, isLive: true };
+  }
+
+  // 3. Static Mock Fallback
+  return { data: MOCK_STORES, isLive: false };
+}
+
+export async function createBrandInSupabase(brandData: Partial<Store>): Promise<{ data: any; success: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { data: null, success: false, error: 'Supabase not configured' };
+  try {
+    const payload: any = {
+      name: brandData.name,
+      category: brandData.category || 'Fashion',
+      floor: brandData.floor || 'Ground Floor',
+      zone: brandData.zone || 'Central Atrium',
+      status: brandData.status || 'Open',
+      manager: brandData.manager || 'Store Manager',
+      phone: brandData.phone || '+91 98765 00000',
+      open_hours: brandData.openHours || '10:00 AM - 10:00 PM',
+      rating: brandData.rating || 4.8,
+      logo_url: brandData.logo
+    };
+    const { data, error } = await supabase.from('brands').insert(payload).select().single();
+    if (error) {
+      console.warn('[Supabase] createBrand error:', error.message);
+      return { data: null, success: false, error: error.message };
+    }
+    return { data, success: true };
+  } catch (err: any) {
+    return { data: null, success: false, error: err.message };
+  }
+}
+
+export async function updateBrandInSupabase(brandId: string, brandData: Partial<Store>): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+  try {
+    const payload: any = {};
+    if (brandData.name) payload.name = brandData.name;
+    if (brandData.category) payload.category = brandData.category;
+    if (brandData.floor) payload.floor = brandData.floor;
+    if (brandData.zone) payload.zone = brandData.zone;
+    if (brandData.status) payload.status = brandData.status;
+    if (brandData.manager) payload.manager = brandData.manager;
+    if (brandData.phone) payload.phone = brandData.phone;
+    if (brandData.openHours) payload.open_hours = brandData.openHours;
+    if (brandData.rating) payload.rating = brandData.rating;
+    if (brandData.logo) payload.logo_url = brandData.logo;
+
+    const { error } = await supabase.from('brands').update(payload).eq('id', brandId);
+    if (error) {
+      console.warn('[Supabase] updateBrand error:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 // ---------------------------------------------------------------------------

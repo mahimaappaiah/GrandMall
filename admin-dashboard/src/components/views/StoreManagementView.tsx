@@ -14,7 +14,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { MOCK_STORES } from '../../data/mockData';
-import { fetchStoresFromSupabase, recordAuditLog } from '../../services/supabaseService';
+import { fetchStoresFromSupabase, createBrandInSupabase, recordAuditLog } from '../../services/supabaseService';
 import { Store } from '../../types';
 
 export const StoreManagementView: React.FC = () => {
@@ -41,12 +41,11 @@ export const StoreManagementView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleRegisterStore = (e: React.FormEvent) => {
+  const handleRegisterStore = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStoreName) return;
 
     const newStore: any = {
-      id: 'store-' + (stores.length + 1),
       name: newStoreName,
       logo: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=100&h=100&fit=crop',
       category: newCategory,
@@ -64,8 +63,12 @@ export const StoreManagementView: React.FC = () => {
       rating: 4.8
     };
 
-    setStores([newStore, ...stores]);
-    recordAuditLog('STORE_APPROVED', 'store', newStore.id, { storeName: newStoreName, category: newCategory, floor: newFloor, package: newPackage });
+    const res = await createBrandInSupabase(newStore);
+    const assignedId = res.data?.id || 'store-' + (stores.length + 1);
+    const storeObj = { ...newStore, id: assignedId };
+
+    setStores([storeObj, ...stores]);
+    recordAuditLog('STORE_APPROVED', 'store', assignedId, { storeName: newStoreName, category: newCategory, floor: newFloor, package: newPackage });
     setShowRegisterModal(false);
     setNewStoreName('');
     showToast(`Store '${newStoreName}' registered & approved for ${newFloor}!`);

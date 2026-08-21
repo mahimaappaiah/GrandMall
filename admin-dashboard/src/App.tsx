@@ -46,6 +46,7 @@ import {
   onSupabaseAuthStateChange
 } from './services/supabaseService';
 import { realtimeManager } from './services/realtimeService';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { Bell, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -502,7 +503,7 @@ export default function App() {
     } catch (e) {}
   };
 
-  // Initial Supabase Data Fetching (Read-only data loading)
+  // Initial Supabase Data Fetching & Realtime listener for Brands and Products
   useEffect(() => {
     const loadSupabaseData = async () => {
       try {
@@ -536,6 +537,28 @@ export default function App() {
     };
 
     loadSupabaseData();
+
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel('admin-brands-products-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'brands' }, async () => {
+          const res = await fetchStoresFromSupabase();
+          if (res.data && res.data.length > 0) {
+            setStoresList(res.data);
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
+          const res = await fetchStoresFromSupabase();
+          if (res.data && res.data.length > 0) {
+            setStoresList(res.data);
+          }
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   useEffect(() => {
