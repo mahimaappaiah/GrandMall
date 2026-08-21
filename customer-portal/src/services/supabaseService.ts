@@ -37,62 +37,147 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
       userId = anonData?.user?.id || null;
     }
 
-    // 3. Query existing profile from public.profiles
+    // 3. Query existing profile from public.profiles by userId
     if (userId) {
-      const { data: profile } = await supabase
+      const { data: existingProfile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      if (profile) {
+      if (existingProfile) {
+        // Update existing record if actual real name, phone, or email is provided
+        const updates: any = {};
+        if (name && name.trim() && existingProfile.full_name !== name.trim()) {
+          updates.full_name = name.trim();
+        }
+        if (cleanPhone && cleanPhone.trim() && existingProfile.phone !== cleanPhone.trim()) {
+          updates.phone = cleanPhone.trim();
+        }
+        if (email && email.trim() && existingProfile.email !== email.trim()) {
+          updates.email = email.trim();
+        }
+
+        if (Object.keys(updates).length > 0) {
+          const { data: updatedRecord } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId)
+            .select()
+            .maybeSingle();
+
+          const resData = updatedRecord || existingProfile;
+          return {
+            profile: {
+              id: resData.id,
+              full_name: resData.full_name || name.trim(),
+              email: resData.email || email?.trim(),
+              phone: resData.phone || cleanPhone.trim(),
+              role: resData.role || 'customer',
+              loyalty_tier: resData.loyalty_tier || 'Bronze',
+              is_active: resData.is_active !== false
+            }
+          };
+        }
+
         return {
           profile: {
-            id: profile.id,
-            full_name: profile.full_name || name,
-            email: profile.email || email,
-            phone: profile.phone || cleanPhone,
-            role: profile.role || 'customer',
-            loyalty_tier: profile.loyalty_tier || 'Bronze',
-            is_active: profile.is_active !== false
+            id: existingProfile.id,
+            full_name: existingProfile.full_name || name.trim(),
+            email: existingProfile.email || email?.trim(),
+            phone: existingProfile.phone || cleanPhone.trim(),
+            role: existingProfile.role || 'customer',
+            loyalty_tier: existingProfile.loyalty_tier || 'Bronze',
+            is_active: existingProfile.is_active !== false
           }
         };
       }
 
-      // Upsert profile into public.profiles
-      const newProfile = {
+      // Check if a profile with this phone already exists to prevent duplicate profiles
+      if (cleanPhone) {
+        const { data: phoneMatch } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('phone', cleanPhone)
+          .maybeSingle();
+
+        if (phoneMatch) {
+          const updates: any = {};
+          if (name && name.trim() && phoneMatch.full_name !== name.trim()) {
+            updates.full_name = name.trim();
+          }
+          if (email && email.trim() && phoneMatch.email !== email.trim()) {
+            updates.email = email.trim();
+          }
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('profiles').update(updates).eq('id', phoneMatch.id);
+          }
+          return {
+            profile: {
+              id: phoneMatch.id,
+              full_name: name.trim() || phoneMatch.full_name || 'Mall Guest',
+              email: email?.trim() || phoneMatch.email,
+              phone: phoneMatch.phone || cleanPhone,
+              role: phoneMatch.role || 'customer',
+              loyalty_tier: phoneMatch.loyalty_tier || 'Bronze',
+              is_active: phoneMatch.is_active !== false
+            }
+          };
+        }
+      }
+
+      // Upsert profile into public.profiles with actual real customer information
+      const newProfile: any = {
         id: userId,
-        full_name: name,
-        email: email || undefined,
-        phone: cleanPhone,
+        full_name: name.trim() || 'Mall Guest',
+        phone: cleanPhone || undefined,
         role: 'customer',
         loyalty_tier: 'Bronze',
         is_active: true
       };
+      if (email && email.trim()) {
+        newProfile.email = email.trim();
+      }
 
-      const { data: upserted } = await supabase
+      const { data: upserted, error: upsertErr } = await supabase
         .from('profiles')
-        .upsert(newProfile)
+        .upsert(newProfile, { onConflict: 'id' })
         .select()
         .maybeSingle();
+
+      if (upsertErr) {
+        console.warn('[Supabase Profiles] Upsert error:', upsertErr.message);
+      }
 
       return { profile: upserted || newProfile };
     }
 
-    // Lookup existing profile by phone if auth failed
-    const { data: phoneProfile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('phone', cleanPhone)
-      .maybeSingle();
+    // Lookup existing profile by phone if auth session failed
+    if (cleanPhone) {
+      const { data: phoneProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('phone', cleanPhone)
+        .maybeSingle();
 
-    if (phoneProfile) {
-      return { profile: phoneProfile };
+      if (phoneProfile) {
+        return {
+          profile: {
+            id: phoneProfile.id,
+            full_name: phoneProfile.full_name || name.trim(),
+            email: phoneProfile.email || email?.trim(),
+            phone: phoneProfile.phone || cleanPhone,
+            role: phoneProfile.role || 'customer',
+            loyalty_tier: phoneProfile.loyalty_tier || 'Bronze',
+            is_active: phoneProfile.is_active !== false
+          }
+        };
+      }
     }
 
     return { profile: null };
   } catch (err: any) {
-    console.error('[Supabase Auth] Exception:', err);
+    console.error('[Supabase Auth] Exception in authenticateOrGetCustomerProfile:', err);
     return { profile: null, error: err.message };
   }
 }
