@@ -6,11 +6,10 @@
 --
 -- This script:
 -- 1. Enables RLS on public.coupon_redemptions.
--- 2. Allows authenticated customers to view their own redemptions (user_id = auth.uid())
---    and admins to view all redemptions.
--- 3. Allows authenticated customers & guest sessions to insert valid redemption records
---    linked to their checkout order.
--- 4. Prevents unauthorized modification/deletion of past redemption audit records.
+-- 2. SELECT Policy: Customers view own redemptions (user_id = auth.uid()); Admins view all.
+-- 3. INSERT Policy: Customers must be authenticated and can ONLY insert where user_id = auth.uid().
+--    Admin/Manager roles can insert on behalf of any customer.
+-- 4. UPDATE Policy: Modification restricted to Admins/Managers only.
 -- ============================================================================
 
 BEGIN;
@@ -36,14 +35,13 @@ BEGIN
         );
     END IF;
 
-    -- 2. INSERT Policy (Customers insert own; Guests insert NULL user_id; Admins insert any)
+    -- 2. INSERT Policy (Strictly authenticated: Customers insert only where user_id = auth.uid(); Admins insert on behalf of any customer)
     IF NOT EXISTS (
         SELECT 1 FROM pg_policies WHERE tablename = 'coupon_redemptions' AND policyname = 'coupon_redemptions_insert_policy'
     ) THEN
         CREATE POLICY "coupon_redemptions_insert_policy" ON public.coupon_redemptions
         FOR INSERT WITH CHECK (
-            (auth.uid() IS NOT NULL AND (user_id = auth.uid() OR user_id IS NULL))
-            OR (auth.uid() IS NULL AND user_id IS NULL)
+            (auth.uid() IS NOT NULL AND user_id = auth.uid())
             OR (
                 auth.uid() IS NOT NULL AND EXISTS (
                     SELECT 1 FROM public.profiles 
