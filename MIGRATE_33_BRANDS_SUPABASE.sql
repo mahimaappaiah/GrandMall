@@ -12,11 +12,9 @@
 
 BEGIN;
 
--- 1. Ensure RLS policies permit full public and application access on brands, profiles, coupons, and coupon_redemptions
+-- 1. Ensure RLS policies permit full public and application access on brands and profiles
 ALTER TABLE IF EXISTS public.brands ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.coupons ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.coupon_redemptions ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
@@ -57,89 +55,9 @@ BEGIN
     ) THEN
         CREATE POLICY "Allow public update on profiles" ON public.profiles FOR UPDATE USING (true);
     END IF;
-
-    -- Coupons policies
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'coupons' AND policyname = 'Allow public select on coupons'
-    ) THEN
-        CREATE POLICY "Allow public select on coupons" ON public.coupons FOR SELECT USING (true);
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'coupons' AND policyname = 'Allow public insert on coupons'
-    ) THEN
-        CREATE POLICY "Allow public insert on coupons" ON public.coupons FOR INSERT WITH CHECK (true);
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'coupons' AND policyname = 'Allow public update on coupons'
-    ) THEN
-        CREATE POLICY "Allow public update on coupons" ON public.coupons FOR UPDATE USING (true);
-    END IF;
-
-    -- Coupon Redemptions policies
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'coupon_redemptions' AND policyname = 'Allow public select on coupon_redemptions'
-    ) THEN
-        CREATE POLICY "Allow public select on coupon_redemptions" ON public.coupon_redemptions FOR SELECT USING (true);
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'coupon_redemptions' AND policyname = 'Allow public insert on coupon_redemptions'
-    ) THEN
-        CREATE POLICY "Allow public insert on coupon_redemptions" ON public.coupon_redemptions FOR INSERT WITH CHECK (true);
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'coupon_redemptions' AND policyname = 'Allow public update on coupon_redemptions'
-    ) THEN
-        CREATE POLICY "Allow public update on coupon_redemptions" ON public.coupon_redemptions FOR UPDATE USING (true);
-    END IF;
 END $$;
 
--- 2. Seed / Upsert Preloaded Coupons into public.coupons
-INSERT INTO public.coupons (
-    id,
-    code,
-    description,
-    discount_type,
-    discount_value,
-    max_redemptions,
-    is_active,
-    valid_from,
-    valid_until,
-    created_at
-) VALUES
-('70000000-0000-0000-0000-000000000001', 'GRAND50', 'Flat 50% Off Grand Welcome Promo (Orders Above ₹1,000)', 'percentage', 50.00, 5000, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000002', 'LUXE1000', 'Flat ₹1,000 Off Luxury Collections (Orders Above ₹3,000)', 'flat', 1000.00, 3000, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000003', 'FASHION20', 'Flat 20% Off All Fashion Boutiques (Orders Above ₹2,000)', 'percentage', 20.00, 4000, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000004', 'TASTE15', 'Flat 15% Off All Gourmet Dining & Cafes (Orders Above ₹500)', 'percentage', 15.00, 5000, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000005', 'GOLD5000', 'Flat ₹5,000 Off Fine Jewelry & Watches (Orders Above ₹50,000)', 'flat', 5000.00, 1000, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000006', 'NIKE20', 'Flat 20% Off Footwear & Sportswear at Nike Flagship', 'percentage', 20.00, 1500, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000007', 'ZARA15', 'Flat 15% Off Autumn Menswear & Dresses at Zara Flagship', 'percentage', 15.00, 1500, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000008', 'STARBUCKSBOGO', 'Flat ₹300 Off Artisan Cold Brew & Brunch at Starbucks Reserve', 'flat', 300.00, 2000, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000009', 'GUCCI5000', 'Flat ₹5,000 Off Luxury Leather Goods at Gucci Boutique', 'flat', 5000.00, 500, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW()),
-('70000000-0000-0000-0000-000000000010', 'APPLECARE500', 'Flat ₹500 Off Accessories at Apple Experience Store', 'flat', 500.00, 1000, true, NOW() - INTERVAL '10 days', NOW() + INTERVAL '90 days', NOW())
-ON CONFLICT (id) DO UPDATE SET
-    code = EXCLUDED.code,
-    description = EXCLUDED.description,
-    discount_type = EXCLUDED.discount_type,
-    discount_value = EXCLUDED.discount_value,
-    max_redemptions = EXCLUDED.max_redemptions,
-    is_active = EXCLUDED.is_active,
-    valid_until = EXCLUDED.valid_until;
-
--- 3. Link Brand IDs for Brand-Specific Coupons
-UPDATE public.coupons c
-SET brand_id = b.id
-FROM public.brands b
-WHERE (c.code = 'NIKE20' AND b.name = 'Nike Flagship')
-   OR (c.code = 'ZARA15' AND b.name = 'Zara Flagship')
-   OR (c.code = 'STARBUCKSBOGO' AND b.name = 'Starbucks Reserve')
-   OR (c.code = 'GUCCI5000' AND b.name = 'Gucci Boutique')
-   OR (c.code = 'APPLECARE500' AND b.name = 'Apple Experience Store');
-
--- 4. Seed / Upsert All 33 Flagship Stores
+-- 2. Seed / Upsert All 33 Flagship Stores
 INSERT INTO public.brands (
     id,
     name,

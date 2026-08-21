@@ -293,17 +293,8 @@ export async function createOrderInSupabase(orderData: {
 
       if (itemsErr) {
         console.warn('[Supabase] order_items insert error:', itemsErr.message);
+        return { order: null, error: `Order created, but items failed: ${itemsErr.message}` };
       }
-    }
-
-    // Record coupon redemption if order was placed with a coupon
-    if (createdOrder?.id && orderData.appliedCoupon) {
-      redeemCouponInSupabase({
-        couponCode: orderData.appliedCoupon,
-        userId: activeUserId,
-        orderId: createdOrder.id,
-        savingsAmount: orderData.discountAmount
-      }).catch(() => {});
     }
 
     return { order: createdOrder };
@@ -457,30 +448,18 @@ export async function redeemCouponInSupabase(redemptionData: {
   couponId?: string;
   couponCode: string;
   userId?: string;
-  orderId?: string;
   brandId?: string;
-  savingsAmount?: number;
+  savingsAmount: number;
 }): Promise<{ redemption: any | null; error?: string }> {
   if (!isSupabaseConfigured) return { redemption: null };
 
   try {
-    let resolvedCouponId = redemptionData.couponId;
-    if (!resolvedCouponId && redemptionData.couponCode) {
-      const { data: cpn } = await supabase
-        .from('coupons')
-        .select('id')
-        .eq('code', redemptionData.couponCode.trim().toUpperCase())
-        .maybeSingle();
-      if (cpn?.id) {
-        resolvedCouponId = cpn.id;
-      }
-    }
-
-    const row: any = {
-      coupon_id: resolvedCouponId || null,
+    const row = {
+      coupon_id: redemptionData.couponId || null,
       user_id: redemptionData.userId || null,
-      order_id: redemptionData.orderId || null,
-      redeemed_at: new Date().toISOString()
+      brand_id: redemptionData.brandId || null,
+      savings_amount: redemptionData.savingsAmount,
+      channel: 'WiFi Captive Portal'
     };
 
     const { data, error } = await supabase
