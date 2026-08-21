@@ -12,11 +12,13 @@
 
 BEGIN;
 
--- 1. Ensure RLS policies permit full public and application access
+-- 1. Ensure RLS policies permit full public and application access on brands and profiles
 ALTER TABLE IF EXISTS public.brands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.profiles ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
+    -- Brands policies
     IF NOT EXISTS (
         SELECT 1 FROM pg_policies WHERE tablename = 'brands' AND policyname = 'Allow public select on brands'
     ) THEN
@@ -33,6 +35,25 @@ BEGIN
         SELECT 1 FROM pg_policies WHERE tablename = 'brands' AND policyname = 'Allow public update on brands'
     ) THEN
         CREATE POLICY "Allow public update on brands" ON public.brands FOR UPDATE USING (true);
+    END IF;
+
+    -- Profiles policies
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Allow public select on profiles'
+    ) THEN
+        CREATE POLICY "Allow public select on profiles" ON public.profiles FOR SELECT USING (true);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Allow public insert on profiles'
+    ) THEN
+        CREATE POLICY "Allow public insert on profiles" ON public.profiles FOR INSERT WITH CHECK (true);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Allow public update on profiles'
+    ) THEN
+        CREATE POLICY "Allow public update on profiles" ON public.profiles FOR UPDATE USING (true);
     END IF;
 END $$;
 
