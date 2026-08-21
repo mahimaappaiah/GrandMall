@@ -2457,14 +2457,6 @@ export default function App() {
     const activeCustName = fullName.trim() || 'Reynold Ricky';
     const activeCustPhone = mobileNumber.trim() || '+91 98987 65432';
 
-    // Redeem Coupon in Supabase public.coupon_redemptions
-    redeemCouponInSupabase({
-      couponId: coupon.id,
-      couponCode: coupon.code,
-      userId: customerProfile?.id,
-      savingsAmount: coupon.discountValue || 1500
-    });
-
     const redemptionObj = {
       id: `rdm-${Date.now()}`,
       couponId: coupon.id || `cpn-${coupon.code}`,

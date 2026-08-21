@@ -293,8 +293,18 @@ export async function createOrderInSupabase(orderData: {
 
       if (itemsErr) {
         console.warn('[Supabase] order_items insert error:', itemsErr.message);
-        return { order: null, error: `Order created, but items failed: ${itemsErr.message}` };
       }
+    }
+
+    // Record coupon redemption if order was placed with a valid coupon
+    if (createdOrder?.id && orderData.appliedCoupon) {
+      redeemCouponInSupabase({
+        couponCode: orderData.appliedCoupon,
+        userId: activeUserId,
+        orderId: createdOrder.id
+      }).catch(err => {
+        console.warn('[Supabase] coupon redemption link notice:', err);
+      });
     }
 
     return { order: createdOrder };
@@ -487,20 +497,48 @@ export async function validateCouponInSupabase(couponCode: string): Promise<{ co
 
 export async function redeemCouponInSupabase(redemptionData: {
   couponId?: string;
-  couponCode: string;
+  couponCode?: string;
   userId?: string;
-  brandId?: string;
-  savingsAmount: number;
+  orderId?: string;
 }): Promise<{ redemption: any | null; error?: string }> {
   if (!isSupabaseConfigured) return { redemption: null };
 
   try {
-    const row = {
-      coupon_id: redemptionData.couponId || null,
+    let resolvedCouponId = redemptionData.couponId;
+    if (!resolvedCouponId && redemptionData.couponCode) {
+      const { data: cpn } = await supabase
+        .from('coupons')
+        .select('id')
+        .eq('code', redemptionData.couponCode.trim().toUpperCase())
+        .maybeSingle();
+      if (cpn?.id) {
+        resolvedCouponId = cpn.id;
+      }
+    }
+
+    if (!resolvedCouponId) {
+      return { redemption: null, error: 'Coupon not found in database' };
+    }
+
+    // Prevent duplicate redemptions for the same order and coupon
+    if (redemptionData.orderId) {
+      const { data: existing } = await supabase
+        .from('coupon_redemptions')
+        .select('*')
+        .eq('order_id', redemptionData.orderId)
+        .eq('coupon_id', resolvedCouponId)
+        .maybeSingle();
+
+      if (existing) {
+        return { redemption: existing };
+      }
+    }
+
+    const row: any = {
+      coupon_id: resolvedCouponId,
       user_id: redemptionData.userId || null,
-      brand_id: redemptionData.brandId || null,
-      savings_amount: redemptionData.savingsAmount,
-      channel: 'WiFi Captive Portal'
+      order_id: redemptionData.orderId || null,
+      redeemed_at: new Date().toISOString()
     };
 
     const { data, error } = await supabase
@@ -511,6 +549,7 @@ export async function redeemCouponInSupabase(redemptionData: {
 
     if (error) {
       console.warn('[Supabase] redeemCoupon error:', error.message);
+      return { redemption: null, error: error.message };
     }
 
     return { redemption: data };
