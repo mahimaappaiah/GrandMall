@@ -301,7 +301,9 @@ export async function createOrderInSupabase(orderData: {
       redeemCouponInSupabase({
         couponCode: orderData.appliedCoupon,
         userId: activeUserId,
-        orderId: createdOrder.id
+        orderId: createdOrder.id,
+        brandId: createdOrder.brand_id || undefined,
+        savingsAmount: orderData.discountAmount
       }).catch(err => {
         console.warn('[Supabase] coupon redemption link notice:', err);
       });
@@ -500,23 +502,31 @@ export async function redeemCouponInSupabase(redemptionData: {
   couponCode?: string;
   userId?: string;
   orderId?: string;
+  brandId?: string;
+  savingsAmount?: number;
+  discountApplied?: number;
 }): Promise<{ redemption: any | null; error?: string }> {
   if (!isSupabaseConfigured) return { redemption: null };
 
   try {
-    let resolvedCouponId = redemptionData.couponId;
-    if (!resolvedCouponId && redemptionData.couponCode) {
+    let resolvedCoupon: any = null;
+    if (redemptionData.couponId) {
       const { data: cpn } = await supabase
         .from('coupons')
-        .select('id')
+        .select('id, brand_id, discount_type, discount_value')
+        .eq('id', redemptionData.couponId)
+        .maybeSingle();
+      resolvedCoupon = cpn;
+    } else if (redemptionData.couponCode) {
+      const { data: cpn } = await supabase
+        .from('coupons')
+        .select('id, brand_id, discount_type, discount_value')
         .eq('code', redemptionData.couponCode.trim().toUpperCase())
         .maybeSingle();
-      if (cpn?.id) {
-        resolvedCouponId = cpn.id;
-      }
+      resolvedCoupon = cpn;
     }
 
-    if (!resolvedCouponId) {
+    if (!resolvedCoupon) {
       return { redemption: null, error: 'Coupon not found in database' };
     }
 
@@ -526,7 +536,7 @@ export async function redeemCouponInSupabase(redemptionData: {
         .from('coupon_redemptions')
         .select('*')
         .eq('order_id', redemptionData.orderId)
-        .eq('coupon_id', resolvedCouponId)
+        .eq('coupon_id', resolvedCoupon.id)
         .maybeSingle();
 
       if (existing) {
@@ -534,10 +544,22 @@ export async function redeemCouponInSupabase(redemptionData: {
       }
     }
 
+    // Resolve brand_id, discount_applied, and savings_amount from actual applied coupon & checkout calculation
+    const brandId = redemptionData.brandId || resolvedCoupon.brand_id || null;
+    const discountApplied = redemptionData.discountApplied !== undefined 
+      ? Number(redemptionData.discountApplied) 
+      : (Number(resolvedCoupon.discount_value) || 0);
+    const savingsAmount = redemptionData.savingsAmount !== undefined 
+      ? Number(redemptionData.savingsAmount) 
+      : (resolvedCoupon.discount_type === 'flat' ? Number(resolvedCoupon.discount_value) || 0 : 0);
+
     const row: any = {
-      coupon_id: resolvedCouponId,
+      coupon_id: resolvedCoupon.id,
       user_id: redemptionData.userId || null,
       order_id: redemptionData.orderId || null,
+      brand_id: brandId,
+      discount_applied: discountApplied,
+      savings_amount: savingsAmount,
       redeemed_at: new Date().toISOString()
     };
 
