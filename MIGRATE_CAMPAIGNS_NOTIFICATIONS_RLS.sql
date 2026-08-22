@@ -9,6 +9,7 @@
 -- 2. Campaigns Table:
 --    - SELECT: Open read access for dashboard / portal promotion visibility.
 --    - INSERT, UPDATE, DELETE: Strictly restricted to authorized Admin / Manager roles.
+--    - start_date and end_date: TIMESTAMPTZ matching actual database schema.
 -- 3. Notifications Table:
 --    - SELECT: Restricted to authenticated users and Admins.
 --    - INSERT, UPDATE, DELETE: Strictly restricted to authorized Admin / Manager roles.
@@ -49,8 +50,8 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
     coupons_redeemed BIGINT DEFAULT 0,
     revenue_generated NUMERIC DEFAULT 0,
     roi NUMERIC DEFAULT 0,
-    start_date TEXT,
-    end_date TEXT,
+    start_date TIMESTAMPTZ,
+    end_date TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -132,14 +133,14 @@ FOR DELETE USING (
     public.is_admin_or_manager()
 );
 
--- 7. Seed Initial Flagship Marketing Campaigns (Idempotent)
+-- 7. Seed Initial Flagship Marketing Campaigns (Idempotent with valid TIMESTAMPTZ)
 INSERT INTO public.campaigns (name, title, description, campaign_type, status, is_active, reach, impressions, qr_scans, coupons_redeemed, revenue_generated, roi, start_date, end_date)
 SELECT v.name, v.title, v.description, v.campaign_type, v.status, v.is_active, v.reach, v.impressions, v.qr_scans, v.coupons_redeemed, v.revenue_generated, v.roi, v.start_date, v.end_date
 FROM (VALUES
-  ('Summer Mega Shopping Fest 2026', 'Summer Mega Shopping Fest 2026', 'Mall-wide flash promotion with flat 20% off across all flagship fashion & dining stores.', 'Omnichannel Mall Fest', 'Active', true, 48500::bigint, 124000::bigint, 8400::bigint, 2450::bigint, 4280000::numeric, 380::numeric, '2026-08-01', '2026-08-15'),
-  ('Monsoon Gourmet Dining Delight', 'Monsoon Gourmet Dining Delight', 'Complimentary artisanal dessert or beverage on minimum spend of Rs. 1,000 at Food Court.', 'Food Court & Dining Push', 'Active', true, 22100::bigint, 56000::bigint, 4100::bigint, 1320::bigint, 1850000::numeric, 290::numeric, '2026-07-25', '2026-08-10'),
-  ('Back to School & Tech Expo', 'Back to School & Tech Expo', 'Special student discounts on laptops, electronics, and accessories at Apple & Samsung.', 'Electronics & Kids', 'Active', true, 18900::bigint, 42000::bigint, 2800::bigint, 640::bigint, 2950000::numeric, 410::numeric, '2026-08-01', '2026-08-20'),
-  ('Weekend Midnight Blockbuster Drive', 'Weekend Midnight Blockbuster Drive', 'Late night entertainment, IMAX screening combo deals, and cafe perks.', 'Multiplex & Night Dining', 'Completed', false, 15400::bigint, 38000::bigint, 2200::bigint, 810::bigint, 1210000::numeric, 240::numeric, '2026-07-28', '2026-07-31')
+  ('Summer Mega Shopping Fest 2026', 'Summer Mega Shopping Fest 2026', 'Mall-wide flash promotion with flat 20% off across all flagship fashion & dining stores.', 'Omnichannel Mall Fest', 'Active', true, 48500::bigint, 124000::bigint, 8400::bigint, 2450::bigint, 4280000::numeric, 380::numeric, '2026-08-01T00:00:00Z'::timestamptz, '2026-08-15T23:59:59Z'::timestamptz),
+  ('Monsoon Gourmet Dining Delight', 'Monsoon Gourmet Dining Delight', 'Complimentary artisanal dessert or beverage on minimum spend of Rs. 1,000 at Food Court.', 'Food Court & Dining Push', 'Active', true, 22100::bigint, 56000::bigint, 4100::bigint, 1320::bigint, 1850000::numeric, 290::numeric, '2026-07-25T00:00:00Z'::timestamptz, '2026-08-10T23:59:59Z'::timestamptz),
+  ('Back to School & Tech Expo', 'Back to School & Tech Expo', 'Special student discounts on laptops, electronics, and accessories at Apple & Samsung.', 'Electronics & Kids', 'Active', true, 18900::bigint, 42000::bigint, 2800::bigint, 640::bigint, 2950000::numeric, 410::numeric, '2026-08-01T00:00:00Z'::timestamptz, '2026-08-20T23:59:59Z'::timestamptz),
+  ('Weekend Midnight Blockbuster Drive', 'Weekend Midnight Blockbuster Drive', 'Late night entertainment, IMAX screening combo deals, and cafe perks.', 'Multiplex & Night Dining', 'Completed', false, 15400::bigint, 38000::bigint, 2200::bigint, 810::bigint, 1210000::numeric, 240::numeric, '2026-07-28T00:00:00Z'::timestamptz, '2026-07-31T23:59:59Z'::timestamptz)
 ) AS v(name, title, description, campaign_type, status, is_active, reach, impressions, qr_scans, coupons_redeemed, revenue_generated, roi, start_date, end_date)
 WHERE NOT EXISTS (
   SELECT 1 FROM public.campaigns c WHERE c.title = v.title OR c.name = v.name
