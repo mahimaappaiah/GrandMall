@@ -621,17 +621,29 @@ export async function recordStoreVisitInSupabase(
   if (!isSupabaseConfigured || !brandIdOrName) return { visit: null };
   try {
     let resolvedBrandId = brandIdOrName;
+    let storeName = typeof brandIdOrName === 'string' && !brandIdOrName.includes('-') ? brandIdOrName : '';
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandIdOrName);
+    
     if (!isUuid) {
       const { data: b } = await supabase
         .from('brands')
-        .select('id')
+        .select('id, name')
         .ilike('name', brandIdOrName.trim())
         .maybeSingle();
       if (b?.id) {
         resolvedBrandId = b.id;
+        storeName = b.name || brandIdOrName;
       } else {
         return { visit: null, error: `Brand not found: ${brandIdOrName}` };
+      }
+    } else {
+      const { data: b } = await supabase
+        .from('brands')
+        .select('name')
+        .eq('id', brandIdOrName)
+        .maybeSingle();
+      if (b?.name) {
+        storeName = b.name;
       }
     }
 
@@ -665,6 +677,20 @@ export async function recordStoreVisitInSupabase(
 
       if (journeyErr) {
         console.warn('[Supabase] recordStoreVisit (customer_journey) error:', journeyErr.message);
+      }
+
+      // Persist to activity_logs only when an authenticated userId exists
+      const { error: activityErr } = await logActivityInSupabase({
+        userId,
+        action: 'visited',
+        detail: 'Store Visit',
+        details: `Visited ${storeName || 'store'} at The Grand Mall.`,
+        storeName: storeName || undefined,
+        createdAt: row.created_at
+      });
+
+      if (activityErr) {
+        console.warn('[Supabase] recordStoreVisit (activity_logs) error:', activityErr);
       }
     }
 
