@@ -61,6 +61,23 @@ export const TenantDashboardView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const isAllStoresMode = selectedStoreId === 'ALL';
+  const currentStore: Store = isAllStoresMode
+    ? {
+        id: 'ALL',
+        name: 'All Stores (Live Mall Feed)',
+        floor: 'All Floors (GF, L1, L2, L3)',
+        category: 'Mall-Wide Live Activity',
+        zone: 'Whole Mall',
+        revenueToday: storesList.reduce((acc, s) => acc + (s.revenueToday || 0), 0),
+        rating: 4.9,
+        image: 'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?w=600&auto=format&fit=crop&q=80',
+        activeOccupancy: 120,
+        status: 'Open',
+        contactPhone: '+91 80 4900 1200'
+      }
+    : (storesList.find(s => s.id === selectedStoreId) || storesList[0] || MOCK_STORES[0]);
+
   // Comprehensive Data Fetch & Sync with Backend REST + Supabase + LocalStorage
   const fetchLiveTenantData = useCallback(async () => {
     // 1. Fetch live stores
@@ -284,23 +301,6 @@ export const TenantDashboardView: React.FC = () => {
       window.removeEventListener('axionix_reservation_created', fetchLiveTenantData);
     };
   }, [fetchLiveTenantData]);
-
-  const isAllStoresMode = selectedStoreId === 'ALL';
-  const currentStore: Store = isAllStoresMode
-    ? {
-        id: 'ALL',
-        name: 'All Stores (Live Mall Feed)',
-        floor: 'All Floors (GF, L1, L2, L3)',
-        category: 'Mall-Wide Live Activity',
-        zone: 'Whole Mall',
-        revenueToday: storesList.reduce((acc, s) => acc + (s.revenueToday || 0), 0),
-        rating: 4.9,
-        image: 'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?w=600&auto=format&fit=crop&q=80',
-        activeOccupancy: 120,
-        status: 'Open',
-        contactPhone: '+91 80 4900 1200'
-      }
-    : (storesList.find(s => s.id === selectedStoreId) || storesList[0] || MOCK_STORES[0]);
 
   // Filter orders and reservations strictly for the currently selected store (or ALL stores when in Live mode)
   const storeOrders = isAllStoresMode ? allLiveOrders : allLiveOrders.filter(o => {
