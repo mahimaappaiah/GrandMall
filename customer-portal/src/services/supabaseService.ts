@@ -314,7 +314,9 @@ export async function createOrderInSupabase(orderData: {
       logActivityInSupabase({
         userId: activeUserId || undefined,
         action: 'ordered',
-        details: `${orderData.customerName || 'Mall Guest'} completed order #${createdOrder.order_number || '#AX-Order'} at ${orderData.storeName || 'Mall Store'} for ₹${orderData.totalAmount.toLocaleString()}.`
+        detail: 'Placed Order',
+        details: `${orderData.customerName || 'Mall Guest'} completed order #${createdOrder.order_number || '#AX-Order'} at ${orderData.storeName || 'Mall Store'} for ₹${orderData.totalAmount.toLocaleString()}.`,
+        storeName: orderData.storeName || undefined
       }).catch(() => {});
     }
 
