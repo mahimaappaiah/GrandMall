@@ -7,7 +7,14 @@ dist/
 coverage/
 .DS_Store
 *.log
+.vercel
+**/.vercel/
+.env
+.env.*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+**/.env
+**/.env.*
+!**/.env.example

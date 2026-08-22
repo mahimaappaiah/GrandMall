@@ -316,7 +316,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const handleTriggerBackup = async () => {
     setBackingUp(true);
     try {
-      const res = await fetch('http://localhost:3000/api/admin/backup', { method: 'POST' });
+      const res = await fetch(`${BACKEND_URL}/api/admin/backup`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         showToast('Database snapshot created successfully! Download URL ready.');
