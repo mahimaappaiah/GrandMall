@@ -656,9 +656,9 @@ export async function fetchOrdersFromSupabase(brandIdOrName?: string): Promise<{
       const totalAmt = Number(o.total_amount) || Number(o.subtotal) || 0;
       const rawStatus = (o.status || '').toLowerCase();
       const statusTitle = rawStatus === 'completed' ? 'Completed' :
-                          rawStatus === 'processing' ? 'Processing' :
-                          rawStatus === 'pending' ? 'Pending' :
-                          rawStatus === 'cancelled' ? 'Cancelled' : 'Completed';
+                          rawStatus === 'ready for pickup' || rawStatus === 'ready' ? 'Ready for Pickup' :
+                          rawStatus === 'processing' || rawStatus === 'preparing' ? 'Preparing' :
+                          rawStatus === 'cancelled' ? 'Cancelled' : 'Pending';
 
       return {
         id: o.id,

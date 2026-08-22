@@ -247,7 +247,7 @@ export async function createOrderInSupabase(orderData: {
       order_type: 'Click & Collect',
       payment_method: orderData.paymentMethod,
       payment_status: 'Paid',
-      status: 'Completed'
+      status: 'Pending'
     };
 
     const { data: createdOrder, error: orderErr } = await supabase

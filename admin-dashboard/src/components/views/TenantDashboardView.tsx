@@ -61,8 +61,6 @@ export const TenantDashboardView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const currentStore = storesList.find(s => s.id === selectedStoreId) || storesList[0] || MOCK_STORES[0];
-
   // Comprehensive Data Fetch & Sync with Backend REST + Supabase + LocalStorage
   const fetchLiveTenantData = useCallback(async () => {
     // 1. Fetch live stores
@@ -287,8 +285,25 @@ export const TenantDashboardView: React.FC = () => {
     };
   }, [fetchLiveTenantData]);
 
-  // Filter orders and reservations strictly for the currently selected store (including multi-store orders)
-  const storeOrders = allLiveOrders.filter(o => {
+  const isAllStoresMode = selectedStoreId === 'ALL';
+  const currentStore: Store = isAllStoresMode
+    ? {
+        id: 'ALL',
+        name: 'All Stores (Live Mall Feed)',
+        floor: 'All Floors (GF, L1, L2, L3)',
+        category: 'Mall-Wide Live Activity',
+        zone: 'Whole Mall',
+        revenueToday: storesList.reduce((acc, s) => acc + (s.revenueToday || 0), 0),
+        rating: 4.9,
+        image: 'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?w=600&auto=format&fit=crop&q=80',
+        activeOccupancy: 120,
+        status: 'Open',
+        contactPhone: '+91 80 4900 1200'
+      }
+    : (storesList.find(s => s.id === selectedStoreId) || storesList[0] || MOCK_STORES[0]);
+
+  // Filter orders and reservations strictly for the currently selected store (or ALL stores when in Live mode)
+  const storeOrders = isAllStoresMode ? allLiveOrders : allLiveOrders.filter(o => {
     const oStore = (o.storeName || '').toLowerCase().trim();
     const currName = (currentStore?.name || '').toLowerCase().trim();
     const hasItemStore = Array.isArray(o.items) && o.items.some((it: any) => {
@@ -298,27 +313,32 @@ export const TenantDashboardView: React.FC = () => {
     return oStore === currName || oStore.includes(currName) || currName.includes(oStore) || hasItemStore;
   });
 
-  const storeReservations = allLiveReservations.filter(r => {
+  const storeReservations = isAllStoresMode ? allLiveReservations : allLiveReservations.filter(r => {
     const rStore = (r.storeName || '').toLowerCase().trim();
     const currName = (currentStore?.name || '').toLowerCase().trim();
     return rStore === currName || rStore.includes(currName) || currName.includes(rStore);
   });
 
-  // Calculate live dynamic metrics for current boutique
+  // Calculate live dynamic metrics for current boutique (or combined across mall)
   const dynamicOrdersRevenue = storeOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
   const displayRevenue = (currentStore.revenueToday || 0) + dynamicOrdersRevenue;
-  const activeOrdersCount = storeOrders.filter(o => o.status !== 'Completed' && o.status !== 'Delivered').length;
+  const activeOrdersCount = storeOrders.filter(o => o.status !== 'Completed' && o.status !== 'Delivered' && o.status !== 'Cancelled').length;
   const activeReservationsCount = storeReservations.filter(r => r.status !== 'Cancelled' && r.status !== 'No Show').length;
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: any) => {
+    const targetOrder = allLiveOrders.find(o => o.id === orderId || o.orderNumber === orderId);
+    const targetStore = targetOrder?.storeName || currentStore.name;
+
     setAllLiveOrders(prev => prev.map(o => o.id === orderId || o.orderNumber === orderId ? { ...o, status: newStatus } : o));
-    showToast(`Order ${orderId} status updated to '${newStatus}'`);
+    showToast(`Order ${targetOrder?.orderNumber || orderId} status updated to '${newStatus}'`);
 
     broadcastEvent('ORDER_STATUS_UPDATE', { 
       id: orderId, 
-      orderNumber: orderId, 
+      orderNumber: targetOrder?.orderNumber || orderId, 
+      customerName: targetOrder?.customerName,
+      customerPhone: targetOrder?.customerPhone,
       status: newStatus, 
-      storeName: currentStore.name 
+      storeName: targetStore 
     });
 
     try {
@@ -331,14 +351,17 @@ export const TenantDashboardView: React.FC = () => {
   };
 
   const handleUpdateReservationStatus = async (resId: string, newStatus: string) => {
+    const targetRes = allLiveReservations.find(r => r.id === resId || r.refCode === resId);
+    const targetStore = targetRes?.storeName || currentStore.name;
+
     setAllLiveReservations(prev => prev.map(r => r.id === resId || r.refCode === resId ? { ...r, status: newStatus as any } : r));
     showToast(`Reservation updated to '${newStatus}'`);
 
     broadcastEvent('RESERVATION_STATUS_UPDATE', { 
       id: resId, 
-      refCode: resId, 
+      refCode: targetRes?.refCode || resId, 
       status: newStatus, 
-      storeName: currentStore.name 
+      storeName: targetStore 
     });
 
     try {
@@ -351,6 +374,9 @@ export const TenantDashboardView: React.FC = () => {
   };
 
   const handleMarkNoShow = async (resId: string, refCode: string) => {
+    const targetRes = allLiveReservations.find(r => r.id === resId || r.refCode === resId);
+    const targetStore = targetRes?.storeName || currentStore.name;
+
     setAllLiveReservations(prev => prev.map(r => r.id === resId || r.refCode === resId ? { ...r, status: 'No Show' as any } : r));
     showToast(`❌ Marked ${refCode} as No-Show. Slot freed!`, 'warning');
 
@@ -358,7 +384,7 @@ export const TenantDashboardView: React.FC = () => {
       id: resId, 
       refCode: refCode, 
       status: 'No Show', 
-      storeName: currentStore.name 
+      storeName: targetStore 
     });
 
     try {
@@ -491,7 +517,20 @@ export const TenantDashboardView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setSelectedStoreId('ALL')}
+            className={`px-3.5 py-2.5 text-xs font-black rounded-2xl border transition-all cursor-pointer flex items-center gap-2 shadow-xs active:scale-95 ${
+              selectedStoreId === 'ALL'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400/40'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100/80'
+            }`}
+            title="View Live activity across ALL mall stores"
+          >
+            <span className={`w-2 h-2 rounded-full ${selectedStoreId === 'ALL' ? 'bg-white' : 'bg-emerald-600'} animate-ping`} />
+            <span>⚡ Live (All Stores)</span>
+          </button>
+
           <button
             onClick={() => {
               setIsRefreshing(true);
@@ -500,19 +539,20 @@ export const TenantDashboardView: React.FC = () => {
                 showToast('Refreshed live tenant feed!');
               });
             }}
-            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer"
+            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition-all cursor-pointer border border-slate-200"
             title="Refresh Live Feed"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
           </button>
 
           <div className="flex items-center space-x-2">
-            <span className="text-xs text-slate-500 font-bold hidden sm:inline">Switch Tenant Boutique:</span>
+            <span className="text-xs text-slate-500 font-bold hidden sm:inline">Boutique:</span>
             <select
               value={selectedStoreId}
               onChange={e => setSelectedStoreId(e.target.value)}
               className="px-4 py-2.5 text-xs font-extrabold border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50 text-slate-900 cursor-pointer shadow-xs"
             >
+              <option value="ALL">🌐 All Stores (Live Mall Feed)</option>
               {storesList.map(s => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.floor})
@@ -629,14 +669,19 @@ export const TenantDashboardView: React.FC = () => {
                 <p className="text-[11px]">Orders placed from Customer Portal will appear here in real time.</p>
               </div>
             ) : (
-              storeOrders.slice(0, 6).map(order => (
+              storeOrders.slice(0, 10).map(order => (
                 <div key={order.id} className="p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/70 flex items-center justify-between gap-3 transition-colors">
                   <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                       <span className="font-black text-xs text-slate-900">{order.customerName}</span>
                       <span className="text-[10px] font-mono text-blue-600 font-bold">({order.orderNumber})</span>
+                      <span className="text-[10px] bg-slate-200/80 text-slate-800 font-extrabold px-2 py-0.5 rounded-md border border-slate-300/60">
+                        {order.storeName}
+                      </span>
                       <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
                         order.status === 'Completed' || order.status === 'Delivered'
+                          ? 'bg-slate-200 text-slate-700'
+                          : order.status === 'Ready for Pickup' || order.status === 'Ready'
                           ? 'bg-emerald-100 text-emerald-800'
                           : order.status === 'Processing' || order.status === 'Preparing'
                           ? 'bg-amber-100 text-amber-800'
@@ -740,12 +785,15 @@ export const TenantDashboardView: React.FC = () => {
               storeReservations.slice(0, 6).map(res => (
                 <div key={res.id} className="p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/70 flex items-center justify-between gap-3 transition-colors">
                   <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                       <span className="font-black text-xs text-slate-900">{res.guestName}</span>
                       <span className="text-[10px] bg-purple-100 text-purple-800 font-extrabold px-2 py-0.5 rounded-md">
                         {res.partySize} {res.partySize === 1 ? 'Guest' : 'Guests'}
                       </span>
                       <span className="text-[10px] font-mono text-slate-400 font-bold">({res.refCode})</span>
+                      <span className="text-[10px] bg-purple-50 text-purple-700 font-extrabold px-2 py-0.5 rounded-md border border-purple-200">
+                        {res.storeName}
+                      </span>
                     </div>
                     <p className="text-xs text-slate-700 font-medium">
                       Slot: <strong className="text-slate-900">{res.timeSlot}</strong> ({res.date || 'Today'}) • {res.guestPhone}
