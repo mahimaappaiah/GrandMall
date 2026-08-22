@@ -630,6 +630,12 @@ export async function recordStoreVisitInSupabase(
       .select()
       .maybeSingle();
 
+    // Also persist customer journey trajectory record into public.customer_journey table
+    await supabase
+      .from('customer_journey')
+      .insert(row)
+      .catch(() => {});
+
     if (error) {
       console.warn('[Supabase] recordStoreVisit error:', error.message);
       return { visit: null, error: error.message };
@@ -646,7 +652,7 @@ export async function fetchCustomerJourneyFromSupabase(userId?: string): Promise
 
   try {
     let query = supabase
-      .from('store_visits')
+      .from('customer_journey')
       .select('*, brands:brand_id(id, name, category, floor, zone)')
       .order('created_at', { ascending: false });
 
@@ -657,8 +663,25 @@ export async function fetchCustomerJourneyFromSupabase(userId?: string): Promise
       }
     }
 
-    const { data, error } = await query;
-    if (error) {
+    let { data, error } = await query;
+
+    // Fallback to store_visits if customer_journey has no records yet
+    if (!error && (!data || data.length === 0)) {
+      let svQuery = supabase
+        .from('store_visits')
+        .select('*, brands:brand_id(id, name, category, floor, zone)')
+        .order('created_at', { ascending: false });
+
+      if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+        svQuery = svQuery.eq('user_id', userId);
+      }
+      const svRes = await svQuery;
+      if (svRes.data && svRes.data.length > 0) {
+        data = svRes.data;
+      }
+    }
+
+    if (error && (!data || data.length === 0)) {
       console.warn('[Supabase] fetchCustomerJourney error:', error.message);
       return { data: [], isLive: false, error: error.message };
     }
