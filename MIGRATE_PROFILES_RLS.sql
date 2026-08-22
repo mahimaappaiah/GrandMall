@@ -5,19 +5,20 @@
 -- https://supabase.com/dashboard/project/gulrhstrgfjosxhinehv/sql
 --
 -- Security & Access Model:
--- 1. Helper function: SECURITY DEFINER 'is_admin_or_manager()' prevents RLS recursion.
--- 2. SELECT Policy:
+-- 1. Dynamic + Explicit Cleanup: Removes ALL existing RLS policies from public.profiles.
+-- 2. Helper function: SECURITY DEFINER 'is_admin_or_manager()' prevents RLS recursion.
+-- 3. SELECT Policy:
 --    - Customers can SELECT ONLY their own profile (id = auth.uid()).
 --    - Authorized Admins/Managers can SELECT ALL profiles.
 --    - Anonymous / unauthenticated access is strictly blocked (returns 0 rows).
--- 3. INSERT Policy:
+-- 4. INSERT Policy:
 --    - Authenticated users can insert ONLY their own profile (id = auth.uid()).
 --    - Admins/Managers can insert profiles on behalf of any customer.
 --    - Anonymous unauthenticated inserts are strictly blocked.
--- 4. UPDATE Policy:
+-- 5. UPDATE Policy:
 --    - Customers can update ONLY their own profile (id = auth.uid()).
 --    - Admins/Managers can update any profile.
--- 5. No DELETE policy is created (profiles cannot be deleted).
+-- 6. No DELETE policy is created (profiles cannot be deleted).
 -- ============================================================================
 
 BEGIN;
@@ -40,7 +41,21 @@ $$;
 -- 2. Enable Row-Level Security on public.profiles
 ALTER TABLE IF EXISTS public.profiles ENABLE ROW LEVEL SECURITY;
 
--- 3. Clean up any existing or conflicting legacy policies
+-- 3. Wipe out EVERY existing policy on public.profiles dynamically
+DO $$
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN (
+        SELECT policyname 
+        FROM pg_policies 
+        WHERE schemaname = 'public' AND tablename = 'profiles'
+    ) LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.profiles;', pol.policyname);
+    END LOOP;
+END $$;
+
+-- Explicit drops for standard known policy names as a fallback
 DROP POLICY IF EXISTS "profiles_select_policy" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_insert_policy" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_update_policy" ON public.profiles;
@@ -51,6 +66,7 @@ DROP POLICY IF EXISTS "Allow public update on profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 
 -- 4. SELECT Policy: Customer reads ONLY own row (id = auth.uid()); Admin/Manager reads ALL
 CREATE POLICY "profiles_select_policy" ON public.profiles
