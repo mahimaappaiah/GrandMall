@@ -153,7 +153,19 @@ export const TenantDashboardView: React.FC = () => {
         });
       }
     }
-    setAllLiveOrders(formattedOrders);
+    setAllLiveOrders(prev => {
+      const map = new Map<string, Order>();
+      prev.forEach(o => {
+        const k = (o.orderNumber || o.id || '').trim();
+        if (k) map.set(k, o);
+      });
+      formattedOrders.forEach(o => {
+        const k = (o.orderNumber || o.id || '').trim();
+        const existing = map.get(k);
+        map.set(k, { ...existing, ...o });
+      });
+      return Array.from(map.values());
+    });
 
     // 3. Fetch live reservations
     let backendRes: any[] = [];
@@ -216,7 +228,19 @@ export const TenantDashboardView: React.FC = () => {
         });
       }
     }
-    setAllLiveReservations(formattedRes);
+    setAllLiveReservations(prev => {
+      const map = new Map<string, Reservation>();
+      prev.forEach(r => {
+        const k = (r.refCode || r.id || '').trim();
+        if (k) map.set(k, r);
+      });
+      formattedRes.forEach(r => {
+        const k = (r.refCode || r.id || '').trim();
+        const existing = map.get(k);
+        map.set(k, { ...existing, ...r });
+      });
+      return Array.from(map.values());
+    });
   }, []);
 
   // Sync Inventory for the selected store

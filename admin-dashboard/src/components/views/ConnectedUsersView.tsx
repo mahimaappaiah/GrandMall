@@ -92,7 +92,27 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
       }
     }
 
-    setLiveUsersList(Array.from(userMap.values()));
+    setLiveUsersList(prev => {
+      const map = new Map<string, ConnectedUser>();
+      prev.forEach(u => {
+        const phoneClean = (u.phone || '').replace(/\D/g, '').slice(-10);
+        const key = phoneClean || (u.name || '').toLowerCase() || u.id;
+        if (key) map.set(key, u);
+      });
+      for (const [key, u] of userMap.entries()) {
+        const existing = map.get(key);
+        const existingStores = existing?.visitedStores || [];
+        const incomingStores = u.visitedStores || [];
+        const mergedStores = Array.from(new Set([...existingStores, ...incomingStores]));
+        map.set(key, {
+          ...existing,
+          ...u,
+          visitedStores: mergedStores,
+          status: (u.status === 'Active' || existing?.status === 'Active') ? 'Active' : (u.status || 'Disconnected')
+        });
+      }
+      return Array.from(map.values());
+    });
   };
 
   useEffect(() => {

@@ -267,7 +267,19 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
       }
     }
 
-    setLiveReservations(formatted);
+    setLiveReservations(prev => {
+      const map = new Map<string, Reservation>();
+      prev.forEach(r => {
+        const k = (r.refCode || r.id || '').trim();
+        if (k) map.set(k, r);
+      });
+      formatted.forEach(r => {
+        const k = (r.refCode || r.id || '').trim();
+        const existing = map.get(k);
+        map.set(k, { ...existing, ...r });
+      });
+      return Array.from(map.values());
+    });
   };
 
   useEffect(() => {

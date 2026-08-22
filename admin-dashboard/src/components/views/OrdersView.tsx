@@ -114,7 +114,11 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
       });
     }
 
-    const parseOrderTimeRank = (ord: Order): number => {
+    const parseOrderTimeRank = (ord: any): number => {
+      if (ord.created_at) {
+        const timeNum = new Date(ord.created_at).getTime();
+        if (!isNaN(timeNum)) return timeNum;
+      }
       const ts = String(ord.timestamp || '').toLowerCase();
       if (ts.includes('just now')) return 2000000000000;
       if (ts.includes('pm') || ts.includes('am')) return 1900000000000;
@@ -129,8 +133,18 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
       return 1000000000000;
     };
 
-    const sortedList = Array.from(orderMap.values()).sort((a, b) => parseOrderTimeRank(b) - parseOrderTimeRank(a));
-    setLiveOrdersList(sortedList);
+    setLiveOrdersList(prev => {
+      const map = new Map<string, Order>();
+      prev.forEach(o => {
+        const key = (o.orderNumber || o.id || '').trim();
+        if (key) map.set(key, o);
+      });
+      for (const [key, o] of orderMap.entries()) {
+        const existing = map.get(key);
+        map.set(key, { ...existing, ...o });
+      }
+      return Array.from(map.values()).sort((a, b) => parseOrderTimeRank(b) - parseOrderTimeRank(a));
+    });
   };
 
   const handleUpdateOrderStatus = (orderId: string, nextStatus: string) => {

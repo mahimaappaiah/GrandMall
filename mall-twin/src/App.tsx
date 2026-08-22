@@ -72,19 +72,31 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveBrands();
+    const interval = setInterval(fetchLiveBrands, 3000);
 
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('axionix_events');
+      bc.onmessage = () => {
+        fetchLiveBrands();
+      };
+    } catch (e) {}
+
+    let channel: any = null;
     if (isSupabaseConfigured) {
-      const channel = supabase
+      channel = supabase
         .channel('mall-twin-brands-realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'brands' }, () => {
           fetchLiveBrands();
         })
         .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     }
+
+    return () => {
+      clearInterval(interval);
+      bc?.close();
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   const selectedStore = brands.find(b => b.id === selectedStoreId);

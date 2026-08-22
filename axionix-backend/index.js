@@ -1934,8 +1934,71 @@ app.post('/api/auth/disconnect', (req, res) => {
   res.status(404).json({ success: false, message: 'User not found' });
 });
 
-app.get('/api/auth/connected-users', (req, res) => {
-  res.json({ success: true, users: connectedUsers });
+app.get('/api/auth/connected-users', async (req, res) => {
+  try {
+    const [profilesRes, visitsRes] = await Promise.all([
+      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+      supabase.from('store_visits').select('user_id, created_at, brands(name)').order('created_at', { ascending: false })
+    ]);
+
+    const userVisitsMap = new Map();
+    if (visitsRes.data) {
+      visitsRes.data.forEach(v => {
+        if (v.user_id && v.brands?.name) {
+          const arr = userVisitsMap.get(v.user_id) || [];
+          if (!arr.includes(v.brands.name)) arr.push(v.brands.name);
+          userVisitsMap.set(v.user_id, arr);
+        }
+      });
+    }
+
+    const userMap = new Map();
+
+    if (profilesRes.data && Array.isArray(profilesRes.data)) {
+      profilesRes.data.forEach((p, idx) => {
+        const cleanP = (p.phone || '').replace(/\D/g, '').slice(-10);
+        const key = cleanP || (p.full_name || '').toLowerCase() || p.id;
+        userMap.set(key, {
+          id: p.id || `usr-${idx + 1}`,
+          user_id: p.id,
+          name: p.full_name || 'Valued Guest',
+          phone: p.phone || '+91 98000 00000',
+          email: p.email,
+          macAddress: 'FE:88:99:A1:B2:C3',
+          ipAddress: '192.168.10.142',
+          connectionTime: p.created_at ? new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today',
+          sessionDuration: '30m',
+          visitedStores: userVisitsMap.get(p.id) || [],
+          dataUsed: '180 MB',
+          status: p.is_active !== false ? 'Active' : 'Disconnected',
+          vipStatus: true,
+          loyaltyTier: p.loyalty_tier || 'Bronze',
+          zone: 'Ground Floor Atrium',
+          deviceType: 'iOS'
+        });
+      });
+    }
+
+    connectedUsers.forEach(u => {
+      const cleanP = (u.phone || '').replace(/\D/g, '').slice(-10);
+      const key = cleanP || (u.name || '').toLowerCase() || u.id;
+      const existing = userMap.get(key);
+      const existingStores = existing?.visitedStores || [];
+      const newStores = Array.isArray(u.visitedStores) ? u.visitedStores : [];
+      const mergedStores = Array.from(new Set([...existingStores, ...newStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+      userMap.set(key, {
+        ...existing,
+        ...u,
+        visitedStores: mergedStores,
+        status: u.status || existing?.status || 'Active'
+      });
+    });
+
+    res.json({ success: true, users: Array.from(userMap.values()) });
+  } catch (e) {
+    res.json({ success: true, users: connectedUsers });
+  }
 });
 
 app.post('/api/auth/visit-store', (req, res) => {
@@ -2051,8 +2114,46 @@ app.get('/api/coupons', (req, res) => {
   res.json({ success: true, coupons: coupons });
 });
 
-app.get('/api/auth/coupon-redemptions', (req, res) => {
-  res.json({ success: true, redemptions: couponRedemptions });
+app.get('/api/auth/coupon-redemptions', async (req, res) => {
+  try {
+    const { data: supaRedemptions } = await supabase
+      .from('coupon_redemptions')
+      .select('*, profiles:user_id(full_name, phone), coupons:coupon_id(code, title, discount_value, discount_type), brands:brand_id(name)')
+      .order('redeemed_at', { ascending: false });
+
+    const rdmMap = new Map();
+
+    if (supaRedemptions && Array.isArray(supaRedemptions)) {
+      supaRedemptions.forEach(r => {
+        const key = r.id;
+        rdmMap.set(key, {
+          id: r.id,
+          couponId: r.coupon_id,
+          couponCode: r.coupons?.code || 'PROMO',
+          customerName: r.profiles?.full_name || 'Valued Guest',
+          customerPhone: r.profiles?.phone || '+91 98987 65432',
+          redeemedAt: r.redeemed_at ? new Date(r.redeemed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+          storeName: r.brands?.name || 'Mall Store',
+          discountApplied: r.discount_applied || `${r.coupons?.discount_value || 15}% OFF`,
+          savingsAmount: r.savings_amount ? `₹${Number(r.savings_amount).toLocaleString()} Saved` : '₹1,500 Saved',
+          channel: 'WiFi Captive Portal',
+          orderNumber: '#AX-' + String(r.id).slice(0, 4).toUpperCase(),
+          vipStatus: true
+        });
+      });
+    }
+
+    couponRedemptions.forEach(r => {
+      const key = r.id || `${r.customerPhone}_${r.couponCode}`;
+      if (!rdmMap.has(key)) {
+        rdmMap.set(key, r);
+      }
+    });
+
+    res.json({ success: true, redemptions: Array.from(rdmMap.values()) });
+  } catch (e) {
+    res.json({ success: true, redemptions: couponRedemptions });
+  }
 });
 
 app.post('/api/auth/apply-coupon', (req, res) => {
@@ -2095,8 +2196,56 @@ app.post('/api/auth/apply-coupon', (req, res) => {
 
 
 // 5. Orders & POS Transactions Routes
-app.get('/api/orders', (req, res) => {
-  res.json({ success: true, orders: orders });
+app.get('/api/orders', async (req, res) => {
+  try {
+    const { data: supaOrders } = await supabase
+      .from('orders')
+      .select('*, order_items(*, products(*))')
+      .order('created_at', { ascending: false });
+
+    const orderMap = new Map();
+
+    if (supaOrders && Array.isArray(supaOrders)) {
+      supaOrders.forEach(o => {
+        const orderNum = o.order_number || `#AX-${(o.id || '').slice(0, 4).toUpperCase()}`;
+        const key = orderNum.trim();
+        const rawItems = o.order_items?.map(i => ({
+          name: i.products?.name || 'Designer Item',
+          price: Number(i.unit_price || i.subtotal || 2495),
+          quantity: Number(i.quantity || 1),
+          storeName: o.store_name || 'Mall Store',
+          brandName: o.store_name || 'Mall Store'
+        })) || [];
+        orderMap.set(key, {
+          id: o.id,
+          orderNumber: orderNum,
+          customerName: o.customer_name || 'Mall Guest',
+          customerPhone: o.customer_phone || '+91 98000 00000',
+          storeName: o.store_name || 'Mall Store',
+          storeCategory: 'Fashion',
+          itemsCount: rawItems.length > 0 ? rawItems.reduce((a, b) => a + b.quantity, 0) : 1,
+          itemsList: rawItems.length > 0 ? rawItems.map(i => `${i.name} (x${i.quantity})`) : ['Store Purchase'],
+          items: rawItems,
+          totalAmount: Number(o.total_amount) || Number(o.subtotal) || 0,
+          orderType: o.order_type || 'Click & Collect',
+          paymentMethod: o.payment_method || 'UPI / Mall Wallet',
+          timestamp: o.created_at ? new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+          status: o.status || 'Completed'
+        });
+      });
+    }
+
+    orders.forEach(o => {
+      const key = (o.orderNumber || o.id || '').trim();
+      if (!orderMap.has(key)) {
+        orderMap.set(key, o);
+      }
+    });
+
+    res.json({ success: true, orders: Array.from(orderMap.values()) });
+  } catch (e) {
+    res.json({ success: true, orders });
+  }
 });
 
 app.post('/api/orders', (req, res) => {
@@ -2311,8 +2460,45 @@ function calculateStoreAvailability(storeName, targetDate) {
 }
 
 // 6. VIP Reservations Routes
-app.get('/api/reservations', (req, res) => {
-  res.json({ success: true, reservations: reservations });
+app.get('/api/reservations', async (req, res) => {
+  try {
+    const { data: supaRes } = await supabase
+      .from('reservations')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    const resMap = new Map();
+
+    if (supaRes && Array.isArray(supaRes)) {
+      supaRes.forEach(r => {
+        const ref = r.ref_code || `RES-${(r.id || '').slice(0, 4).toUpperCase()}`;
+        const key = ref.trim();
+        resMap.set(key, {
+          id: r.id,
+          refCode: ref,
+          guestName: r.guest_name || 'Guest User',
+          guestPhone: r.guest_phone || '+91 98000 00000',
+          storeName: r.store_name || 'Mall Store',
+          partySize: Number(r.party_size) || 2,
+          timeSlot: r.time_slot || '17:00 PM',
+          date: r.created_at ? r.created_at.split('T')[0] : 'Today',
+          status: r.status || 'Confirmed',
+          specialNotes: r.notes || 'VIP Fitting Suite'
+        });
+      });
+    }
+
+    reservations.forEach(r => {
+      const key = (r.refCode || r.id || '').trim();
+      if (!resMap.has(key)) {
+        resMap.set(key, r);
+      }
+    });
+
+    res.json({ success: true, reservations: Array.from(resMap.values()) });
+  } catch (e) {
+    res.json({ success: true, reservations: reservations });
+  }
 });
 
 // Slot Availability Check Endpoint (Feature 08)
