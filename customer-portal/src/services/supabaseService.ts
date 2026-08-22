@@ -53,15 +53,19 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
           userId = returningProfile.id;
         }
       } else {
-        // For a new customer, check if current session already has an existing profile with a different phone
+        // For a new customer, check if current session already belongs to another profile
         const { data: currentSessionProf } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', currentAuthUser.id)
           .maybeSingle();
 
-        if (currentSessionProf && currentSessionProf.phone && currentSessionProf.phone.replace(/\D/g, '') !== cleanPhone) {
-          // Different customer in same browser: sign out to create fresh distinct user
+        const curPhone = currentSessionProf?.phone ? currentSessionProf.phone.replace(/\D/g, '') : '';
+        const curName = (currentSessionProf?.full_name || '').trim().toLowerCase();
+        const incomingName = (name || '').trim().toLowerCase();
+
+        // If the current browser session belongs to a different customer, sign out and mint fresh user
+        if (currentSessionProf && ((curPhone && curPhone !== cleanPhone) || (curName && incomingName && curName !== incomingName))) {
           await supabase.auth.signOut().catch(() => {});
           const { data: anonData } = await supabase.auth.signInAnonymously();
           userId = anonData?.user?.id || null;
@@ -73,7 +77,7 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
       if (returningProfile) {
         userId = returningProfile.id;
       } else {
-        // Genuinely new customer with no active session
+        // Genuinely new customer with no active session: mint fresh user
         const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
         if (anonErr) {
           console.warn('[Supabase Auth] signInAnonymously:', anonErr.message);
