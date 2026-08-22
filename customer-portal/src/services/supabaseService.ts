@@ -48,12 +48,12 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
         if (currentAuthUser.id === returningProfile.id) {
           userId = currentAuthUser.id;
         } else {
-          // Current session belongs to someone else; sign out and establish returning customer session
+          // Current session belongs to someone else; sign out and use returning customer ID
           await supabase.auth.signOut().catch(() => {});
           userId = returningProfile.id;
         }
       } else {
-        // For a new customer, check if current session already belongs to another profile
+        // For a new customer: if there is an active session from a previous user, sign out and mint a fresh user
         const { data: currentSessionProf } = await supabase
           .from('profiles')
           .select('*')
@@ -64,10 +64,11 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
         const curName = (currentSessionProf?.full_name || '').trim().toLowerCase();
         const incomingName = (name || '').trim().toLowerCase();
 
-        // If the current browser session belongs to a different customer, sign out and mint fresh user
-        if (currentSessionProf && ((curPhone && curPhone !== cleanPhone) || (curName && incomingName && curName !== incomingName))) {
+        // If session was previously used by someone else, reset session
+        if (currentSessionProf && (curPhone || curName) && (curPhone !== cleanPhone || curName !== incomingName)) {
           await supabase.auth.signOut().catch(() => {});
-          const { data: anonData } = await supabase.auth.signInAnonymously();
+          const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
+          if (anonErr) console.warn('[Supabase Auth] signInAnonymously error:', anonErr.message);
           userId = anonData?.user?.id || null;
         } else {
           userId = currentAuthUser.id;
@@ -77,7 +78,7 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
       if (returningProfile) {
         userId = returningProfile.id;
       } else {
-        // Genuinely new customer with no active session: mint fresh user
+        // Genuinely new customer with no active session: mint fresh anonymous user
         const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
         if (anonErr) {
           console.warn('[Supabase Auth] signInAnonymously:', anonErr.message);
@@ -121,7 +122,7 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
       };
     }
 
-    // 4. Genuinely NEW customer: Insert brand new permanent profile into public.profiles
+    // 4. Genuinely NEW customer: Populate profile row created by Supabase's user trigger
     if (userId) {
       const newProfile: any = {
         id: userId,
@@ -135,21 +136,14 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
         newProfile.email = email.trim();
       }
 
-      const { data: inserted, error: insertErr } = await supabase
+      const { data: upserted, error: upsertErr } = await supabase
         .from('profiles')
-        .insert(newProfile)
+        .upsert(newProfile, { onConflict: 'id' })
         .select()
         .maybeSingle();
 
-      if (insertErr) {
-        console.warn('[Supabase Profiles] Insert notice:', insertErr.message);
-        const { data: upserted } = await supabase
-          .from('profiles')
-          .upsert(newProfile, { onConflict: 'id' })
-          .select()
-          .maybeSingle();
-        
-        return { profile: upserted || newProfile };
+      if (upsertErr) {
+        console.warn('[Supabase Profiles] Upsert error:', upsertErr.message);
       }
 
       // Log WiFi connection activity for new customer
@@ -161,7 +155,7 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
         storeName: 'The Grand Mall'
       }).catch(() => {});
 
-      return { profile: inserted || newProfile };
+      return { profile: upserted || newProfile };
     }
 
     return { profile: null };
