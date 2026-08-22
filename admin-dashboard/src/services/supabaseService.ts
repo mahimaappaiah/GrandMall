@@ -1182,6 +1182,7 @@ export async function fetchCouponRedemptionsCountFromSupabase(): Promise<{ count
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // CAMPAIGNS SERVICE
 // ---------------------------------------------------------------------------
 export async function fetchCampaignsFromSupabase(): Promise<{ data: Campaign[]; isLive: boolean; error?: string }> {
@@ -1197,8 +1198,18 @@ export async function fetchCampaignsFromSupabase(): Promise<{ data: Campaign[]; 
         created_at,
         brand_id,
         name,
+        title,
         description,
         campaign_type,
+        status,
+        reach,
+        impressions,
+        qr_scans,
+        coupons_redeemed,
+        revenue_generated,
+        roi,
+        start_date,
+        end_date,
         is_active,
         brands (id, name, category, floor, zone)
       `)
@@ -1212,29 +1223,29 @@ export async function fetchCampaignsFromSupabase(): Promise<{ data: Campaign[]; 
       const mockMatch = MOCK_CAMPAIGNS[idx % MOCK_CAMPAIGNS.length];
       const brandName = c.brands?.name || 'All Mall Stores';
       const typeLabel = c.campaign_type || 'Omnichannel Mall Promotion';
-      const createdDate = c.created_at ? c.created_at.split('T')[0] : '2026-08-01';
+      const createdDate = c.start_date || (c.created_at ? c.created_at.split('T')[0] : '2026-08-01');
 
       return {
         id: c.id,
-        title: c.name || mockMatch?.title || 'Mall Marketing Campaign',
-        name: c.name,
-        description: c.description,
+        title: c.title || c.name || mockMatch?.title || 'Mall Marketing Campaign',
+        name: c.name || c.title,
+        description: c.description || '',
         type: typeLabel,
         campaign_type: c.campaign_type,
         brand_id: c.brand_id,
         storeName: brandName,
         brandName: c.brands?.name,
         brandCategory: c.brands?.category,
-        is_active: c.is_active,
-        reach: mockMatch?.reach || 25000,
-        impressions: mockMatch?.impressions || 68000,
-        qrScans: mockMatch?.qrScans || 3400,
-        couponsRedeemed: mockMatch?.couponsRedeemed || 1200,
-        revenueGenerated: mockMatch?.revenueGenerated || 2800000,
-        roi: mockMatch?.roi || 340,
-        status: c.is_active !== false ? 'Active' : 'Completed',
+        is_active: c.is_active !== false,
+        reach: Number(c.reach ?? mockMatch?.reach ?? 25000),
+        impressions: Number(c.impressions ?? mockMatch?.impressions ?? 68000),
+        qrScans: Number(c.qr_scans ?? mockMatch?.qrScans ?? 3400),
+        couponsRedeemed: Number(c.coupons_redeemed ?? mockMatch?.couponsRedeemed ?? 1200),
+        revenueGenerated: Number(c.revenue_generated ?? mockMatch?.revenueGenerated ?? 2800000),
+        roi: Number(c.roi ?? mockMatch?.roi ?? 340),
+        status: c.status || (c.is_active !== false ? 'Active' : 'Completed'),
         startDate: createdDate,
-        endDate: '2026-08-31',
+        endDate: c.end_date || '2026-08-31',
         created_at: c.created_at
       };
     });
@@ -1242,6 +1253,92 @@ export async function fetchCampaignsFromSupabase(): Promise<{ data: Campaign[]; 
     return { data: mappedCampaigns, isLive: true };
   } catch (err: any) {
     return { data: MOCK_CAMPAIGNS, isLive: false, error: err.message };
+  }
+}
+
+export async function createCampaignInSupabase(campaign: Partial<Campaign>): Promise<{ data: Campaign | null; error?: string }> {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: 'Supabase not configured' };
+  }
+
+  try {
+    const payload = {
+      title: campaign.title || campaign.name || 'Mall Marketing Campaign',
+      name: campaign.name || campaign.title || 'Mall Marketing Campaign',
+      description: campaign.description || '',
+      campaign_type: campaign.type || campaign.campaign_type || 'Omnichannel Mall Fest',
+      brand_id: campaign.brand_id || undefined,
+      status: campaign.status || 'Active',
+      is_active: campaign.is_active !== false,
+      reach: campaign.reach || 0,
+      impressions: campaign.impressions || 0,
+      qr_scans: campaign.qrScans || 0,
+      coupons_redeemed: campaign.couponsRedeemed || 0,
+      revenue_generated: campaign.revenueGenerated || 0,
+      roi: campaign.roi || 0,
+      start_date: campaign.startDate || new Date().toISOString().split('T')[0],
+      end_date: campaign.endDate || '2026-08-31'
+    };
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .insert(payload)
+      .select(`
+        id,
+        created_at,
+        brand_id,
+        name,
+        title,
+        description,
+        campaign_type,
+        status,
+        reach,
+        impressions,
+        qr_scans,
+        coupons_redeemed,
+        revenue_generated,
+        roi,
+        start_date,
+        end_date,
+        is_active,
+        brands (id, name, category, floor, zone)
+      `)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[Supabase Campaigns] Create error:', error.message);
+      return { data: null, error: error.message };
+    }
+
+    if (!data) return { data: null };
+
+    const mapped: Campaign = {
+      id: data.id,
+      title: data.title || data.name,
+      name: data.name,
+      description: data.description,
+      type: data.campaign_type || 'Omnichannel Mall Fest',
+      campaign_type: data.campaign_type,
+      brand_id: data.brand_id,
+      storeName: data.brands?.name || 'All Mall Stores',
+      brandName: data.brands?.name,
+      brandCategory: data.brands?.category,
+      is_active: data.is_active,
+      reach: Number(data.reach || 0),
+      impressions: Number(data.impressions || 0),
+      qrScans: Number(data.qr_scans || 0),
+      couponsRedeemed: Number(data.coupons_redeemed || 0),
+      revenueGenerated: Number(data.revenue_generated || 0),
+      roi: Number(data.roi || 0),
+      status: data.status || 'Active',
+      startDate: data.start_date || new Date().toISOString().split('T')[0],
+      endDate: data.end_date || '2026-08-31',
+      created_at: data.created_at
+    };
+
+    return { data: mapped };
+  } catch (err: any) {
+    return { data: null, error: err.message };
   }
 }
 
@@ -1263,7 +1360,9 @@ export async function fetchNotificationsFromSupabase(): Promise<{ data: SystemAl
         title,
         message,
         notification_type,
+        severity,
         is_read,
+        location,
         profiles:user_id (id, full_name, phone, email)
       `)
       .order('created_at', { ascending: false });
@@ -1275,8 +1374,8 @@ export async function fetchNotificationsFromSupabase(): Promise<{ data: SystemAl
     const mappedAlerts: SystemAlert[] = dbNotes.map((n: any) => {
       const notifType = (n.notification_type || '').toLowerCase();
       const severity: 'critical' | 'warning' | 'info' =
-        notifType === 'critical' || notifType === 'alert' || notifType === 'danger' ? 'critical' :
-        notifType === 'warning' || notifType === 'warn' ? 'warning' : 'info';
+        n.severity === 'critical' || notifType === 'critical' || notifType === 'alert' || notifType === 'danger' ? 'critical' :
+        n.severity === 'warning' || notifType === 'warning' || notifType === 'warn' ? 'warning' : 'info';
 
       const category: 'Footfall' | 'Network' | 'Inventory' | 'Campaign' | 'Security' =
         notifType === 'network' ? 'Network' :
@@ -1297,13 +1396,90 @@ export async function fetchNotificationsFromSupabase(): Promise<{ data: SystemAl
         category,
         read: Boolean(n.is_read),
         is_read: Boolean(n.is_read),
-        location: 'Phoenix Marketcity Bengaluru'
+        location: n.location || 'The Grand Mall'
       };
     });
 
     return { data: mappedAlerts, isLive: true };
   } catch (err: any) {
     return { data: MOCK_ALERTS, isLive: false, error: err.message };
+  }
+}
+
+export async function createNotificationInSupabase(notif: Partial<SystemAlert>): Promise<{ data: SystemAlert | null; error?: string }> {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: 'Supabase not configured' };
+  }
+
+  try {
+    const payload = {
+      user_id: notif.user_id || undefined,
+      title: notif.title || 'System Alert',
+      message: notif.message || notif.description || 'Notification detail',
+      notification_type: notif.notification_type || notif.category || 'Footfall',
+      severity: notif.severity || 'info',
+      is_read: notif.read || notif.is_read || false,
+      location: notif.location || 'The Grand Mall'
+    };
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert(payload)
+      .select()
+      .maybeSingle();
+
+    if (error) return { data: null, error: error.message };
+    if (!data) return { data: null };
+
+    return {
+      data: {
+        id: data.id,
+        user_id: data.user_id,
+        title: data.title,
+        description: data.message,
+        message: data.message,
+        notification_type: data.notification_type,
+        timestamp: data.created_at ? formatRelativeTime(data.created_at) : 'Just now',
+        created_at: data.created_at,
+        severity: data.severity || 'info',
+        category: (data.notification_type || 'Footfall') as any,
+        read: Boolean(data.is_read),
+        is_read: Boolean(data.is_read),
+        location: data.location || 'The Grand Mall'
+      }
+    };
+  } catch (err: any) {
+    return { data: null, error: err.message };
+  }
+}
+
+export async function markNotificationAsReadInSupabase(id: string): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { success: true };
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function markAllNotificationsAsReadInSupabase(): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { success: true };
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('is_read', false);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }
 

@@ -40,6 +40,8 @@ import {
   fetchReservationsFromSupabase, 
   fetchCouponsFromSupabase,
   fetchNotificationsFromSupabase,
+  markNotificationAsReadInSupabase,
+  markAllNotificationsAsReadInSupabase,
   getSupabaseAuthSession,
   verifyAdminUser,
   signOutAdmin,
@@ -73,10 +75,12 @@ export default function App() {
 
   const handleDismissAlert = (id: string) => {
     setAlertsList(prev => prev.filter(a => a.id !== id));
+    markNotificationAsReadInSupabase(id).catch(() => {});
   };
 
   const handleMarkAllAlertsRead = () => {
-    setAlertsList(prev => prev.map(a => ({ ...a, read: true })));
+    setAlertsList(prev => prev.map(a => ({ ...a, read: true, is_read: true })));
+    markAllNotificationsAsReadInSupabase().catch(() => {});
   };
 
   // Stores List State (Loaded from Supabase brands, falling back to mock)

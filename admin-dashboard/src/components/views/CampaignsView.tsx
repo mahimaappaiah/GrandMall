@@ -3,7 +3,7 @@ import { Megaphone, Search, Plus, TrendingUp, Users, QrCode, Ticket, IndianRupee
 import { MOCK_CAMPAIGNS } from '../../data/mockData';
 import { Campaign } from '../../types';
 import { downloadCampaignsCSV } from '../../utils/exportUtils';
-import { fetchCampaignsFromSupabase } from '../../services/supabaseService';
+import { fetchCampaignsFromSupabase, createCampaignInSupabase } from '../../services/supabaseService';
 
 export const CampaignsView: React.FC = () => {
   const [campaigns, setCampaigns] = useState<Campaign[]>(MOCK_CAMPAIGNS);
@@ -31,14 +31,15 @@ export const CampaignsView: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) return;
 
-    const created: Campaign = {
-      id: `cmp-${Date.now()}`,
+    const campaignPayload: Partial<Campaign> = {
       title,
+      name: title,
       type,
+      campaign_type: type,
       reach: 12000,
       impressions: 34000,
       qrScans: 1500,
@@ -46,9 +47,15 @@ export const CampaignsView: React.FC = () => {
       revenueGenerated: 850000,
       roi: 310,
       status: 'Active',
-      startDate: '2026-08-03',
+      startDate: new Date().toISOString().split('T')[0],
       endDate: '2026-08-31'
     };
+
+    const res = await createCampaignInSupabase(campaignPayload);
+    const created = res.data || {
+      id: `cmp-${Date.now()}`,
+      ...campaignPayload
+    } as Campaign;
 
     setCampaigns([created, ...campaigns]);
     setShowCreateModal(false);
