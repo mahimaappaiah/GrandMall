@@ -1321,13 +1321,15 @@ export async function fetchActivityLogsFromSupabase(): Promise<{ data: ActivityL
       .select(`
         id,
         user_id,
-        details,
         action,
-        timestamp,
+        detail,
+        details,
+        store_name,
+        created_at,
         profiles:user_id (id, full_name, phone, email)
       `)
-      .order('timestamp', { ascending: false })
-      .limit(20);
+      .order('created_at', { ascending: false })
+      .limit(25);
 
     if (error) {
       console.warn('[Supabase] fetchActivityLogs error:', error.message);
@@ -1349,11 +1351,13 @@ export async function fetchActivityLogsFromSupabase(): Promise<{ data: ActivityL
       return {
         id: l.id,
         user_id: l.user_id,
-        timestamp: l.timestamp ? formatRelativeTime(l.timestamp) : 'Just now',
+        timestamp: l.created_at ? formatRelativeTime(l.created_at) : 'Just now',
+        created_at: l.created_at,
         userName: l.profiles?.full_name || l.profiles?.name || 'Mall Guest',
         action: (l.action as any) || 'connected',
-        detail: l.details || 'Guest activity recorded in mall network',
-        details: l.details,
+        detail: l.detail || l.details || 'Guest activity recorded in mall network',
+        details: l.details || l.detail,
+        store_name: l.store_name,
         badgeType
       };
     });

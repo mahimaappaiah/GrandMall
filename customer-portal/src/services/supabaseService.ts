@@ -729,8 +729,10 @@ export async function fetchCustomerJourneyFromSupabase(userId?: string): Promise
 export async function logActivityInSupabase(activity: {
   userId?: string;
   action: 'connected' | 'visited' | 'ordered' | 'redeemed_coupon' | 'reserved' | 'scanned_qr' | string;
+  detail?: string;
   details: string;
-  timestamp?: string;
+  storeName?: string;
+  createdAt?: string;
 }): Promise<{ log: any | null; error?: string }> {
   if (!isSupabaseConfigured) return { log: null };
 
@@ -738,8 +740,10 @@ export async function logActivityInSupabase(activity: {
     const row = {
       user_id: activity.userId || null,
       action: activity.action,
+      detail: activity.detail || activity.action.replace('_', ' ').toUpperCase(),
       details: activity.details,
-      timestamp: activity.timestamp || new Date().toISOString()
+      store_name: activity.storeName || null,
+      created_at: activity.createdAt || new Date().toISOString()
     };
 
     const { data, error } = await supabase
@@ -765,8 +769,8 @@ export async function fetchActivityLogsFromSupabase(): Promise<{ data: any[]; is
   try {
     const { data, error } = await supabase
       .from('activity_logs')
-      .select('*, profiles:user_id(id, full_name, phone, email)')
-      .order('timestamp', { ascending: false })
+      .select('id, user_id, action, detail, details, store_name, created_at, profiles:user_id(id, full_name, phone, email)')
+      .order('created_at', { ascending: false })
       .limit(30);
 
     if (error) {
