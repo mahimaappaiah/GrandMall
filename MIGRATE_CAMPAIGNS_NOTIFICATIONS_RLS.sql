@@ -12,8 +12,8 @@
 -- 3. Notifications Table:
 --    - SELECT: Restricted to authenticated users and Admins.
 --    - INSERT, UPDATE, DELETE: Strictly restricted to authorized Admin / Manager roles.
--- 4. Initial Seed Data:
---    - Flagship marketing campaigns and system operational alerts.
+-- 4. Idempotent Seed Data:
+--    - Uses WHERE NOT EXISTS on title/name to guarantee rerunning never creates duplicates.
 -- ============================================================================
 
 BEGIN;
@@ -132,20 +132,30 @@ FOR DELETE USING (
     public.is_admin_or_manager()
 );
 
--- 7. Seed Initial Flagship Marketing Campaigns
+-- 7. Seed Initial Flagship Marketing Campaigns (Idempotent)
 INSERT INTO public.campaigns (name, title, description, campaign_type, status, is_active, reach, impressions, qr_scans, coupons_redeemed, revenue_generated, roi, start_date, end_date)
-VALUES
-  ('Summer Mega Shopping Fest 2026', 'Summer Mega Shopping Fest 2026', 'Mall-wide flash promotion with flat 20% off across all flagship fashion & dining stores.', 'Omnichannel Mall Fest', 'Active', true, 48500, 124000, 8400, 2450, 4280000, 380, '2026-08-01', '2026-08-15'),
-  ('Monsoon Gourmet Dining Delight', 'Monsoon Gourmet Dining Delight', 'Complimentary artisanal dessert or beverage on minimum spend of Rs. 1,000 at Food Court.', 'Food Court & Dining Push', 'Active', true, 22100, 56000, 4100, 1320, 1850000, 290, '2026-07-25', '2026-08-10'),
-  ('Back to School & Tech Expo', 'Back to School & Tech Expo', 'Special student discounts on laptops, electronics, and accessories at Apple & Samsung.', 'Electronics & Kids', 'Active', true, 18900, 42000, 2800, 640, 2950000, 410, '2026-08-01', '2026-08-20'),
-  ('Weekend Midnight Blockbuster Drive', 'Weekend Midnight Blockbuster Drive', 'Late night entertainment, IMAX screening combo deals, and cafe perks.', 'Multiplex & Night Dining', 'Completed', false, 15400, 38000, 2200, 810, 1210000, 240, '2026-07-28', '2026-07-31');
+SELECT v.name, v.title, v.description, v.campaign_type, v.status, v.is_active, v.reach, v.impressions, v.qr_scans, v.coupons_redeemed, v.revenue_generated, v.roi, v.start_date, v.end_date
+FROM (VALUES
+  ('Summer Mega Shopping Fest 2026', 'Summer Mega Shopping Fest 2026', 'Mall-wide flash promotion with flat 20% off across all flagship fashion & dining stores.', 'Omnichannel Mall Fest', 'Active', true, 48500::bigint, 124000::bigint, 8400::bigint, 2450::bigint, 4280000::numeric, 380::numeric, '2026-08-01', '2026-08-15'),
+  ('Monsoon Gourmet Dining Delight', 'Monsoon Gourmet Dining Delight', 'Complimentary artisanal dessert or beverage on minimum spend of Rs. 1,000 at Food Court.', 'Food Court & Dining Push', 'Active', true, 22100::bigint, 56000::bigint, 4100::bigint, 1320::bigint, 1850000::numeric, 290::numeric, '2026-07-25', '2026-08-10'),
+  ('Back to School & Tech Expo', 'Back to School & Tech Expo', 'Special student discounts on laptops, electronics, and accessories at Apple & Samsung.', 'Electronics & Kids', 'Active', true, 18900::bigint, 42000::bigint, 2800::bigint, 640::bigint, 2950000::numeric, 410::numeric, '2026-08-01', '2026-08-20'),
+  ('Weekend Midnight Blockbuster Drive', 'Weekend Midnight Blockbuster Drive', 'Late night entertainment, IMAX screening combo deals, and cafe perks.', 'Multiplex & Night Dining', 'Completed', false, 15400::bigint, 38000::bigint, 2200::bigint, 810::bigint, 1210000::numeric, 240::numeric, '2026-07-28', '2026-07-31')
+) AS v(name, title, description, campaign_type, status, is_active, reach, impressions, qr_scans, coupons_redeemed, revenue_generated, roi, start_date, end_date)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.campaigns c WHERE c.title = v.title OR c.name = v.name
+);
 
--- 8. Seed Initial System Notifications & Operational Alerts
+-- 8. Seed Initial System Notifications & Operational Alerts (Idempotent)
 INSERT INTO public.notifications (title, message, notification_type, severity, is_read, location)
-VALUES
+SELECT v.title, v.message, v.notification_type, v.severity, v.is_read, v.location
+FROM (VALUES
   ('High Footfall Spike Detected', 'Central Atrium occupancy crossed 85% capacity threshold (1,400 visitors). Security and guest flow managers alerted.', 'Footfall', 'warning', false, 'Central Atrium Ground Floor'),
   ('WiFi AP-3 Gateway Offline Warning', 'Access Point 3 in East Wing Food Court experiencing latency (>120ms). Auto-failover to backup link active.', 'Network', 'warning', false, 'Food Court East Wing Floor 2'),
   ('Zara Flagship Restock Request', 'Summer Linen Shirt SKU-ZR-104 inventory fallen below safety threshold (8 units remaining).', 'Inventory', 'info', false, 'Zara Store Level 1'),
-  ('Summer Fest Flash Promotion Triggered', 'Automated push alert sent to 450+ connected captive portal shoppers.', 'Campaign', 'info', true, 'Grand Mall Wi-Fi Network');
+  ('Summer Fest Flash Promotion Triggered', 'Automated push alert sent to 450+ connected captive portal shoppers.', 'Campaign', 'info', true, 'Grand Mall Wi-Fi Network')
+) AS v(title, message, notification_type, severity, is_read, location)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.notifications n WHERE n.title = v.title
+);
 
 COMMIT;
