@@ -309,6 +309,15 @@ export async function createOrderInSupabase(orderData: {
       });
     }
 
+    // Log Activity for Live Admin Feed
+    if (createdOrder?.id) {
+      logActivityInSupabase({
+        userId: activeUserId || undefined,
+        action: 'ordered',
+        details: `${orderData.customerName || 'Mall Guest'} completed order #${createdOrder.order_number || '#AX-Order'} at ${orderData.storeName || 'Mall Store'} for ₹${orderData.totalAmount.toLocaleString()}.`
+      }).catch(() => {});
+    }
+
     return { order: createdOrder };
   } catch (err: any) {
     console.error('[Supabase] Exception in createOrder:', err);
@@ -359,6 +368,15 @@ export async function createReservationInSupabase(resData: {
     if (error) {
       console.error('[Supabase] createReservation error:', error.message);
       return { reservation: null, error: error.message };
+    }
+
+    // Log Activity for Live Admin Feed
+    if (createdRes?.id) {
+      logActivityInSupabase({
+        userId: resData.userId || undefined,
+        action: 'reserved',
+        details: `${resData.guestName || 'VIP Guest'} booked a table/slot at ${resData.storeName} (${resData.timeSlot}, party of ${resData.partySize}).`
+      }).catch(() => {});
     }
 
     return { reservation: createdRes };
@@ -696,6 +714,63 @@ export async function fetchCustomerJourneyFromSupabase(userId?: string): Promise
 
     if (error && (!data || data.length === 0)) {
       console.warn('[Supabase] fetchCustomerJourney error:', error.message);
+      return { data: [], isLive: false, error: error.message };
+    }
+
+    return { data: data || [], isLive: true };
+  } catch (err: any) {
+    return { data: [], isLive: false, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ACTIVITY LOGS SERVICE
+// ---------------------------------------------------------------------------
+export async function logActivityInSupabase(activity: {
+  userId?: string;
+  action: 'connected' | 'visited' | 'ordered' | 'redeemed_coupon' | 'reserved' | 'scanned_qr' | string;
+  details: string;
+  timestamp?: string;
+}): Promise<{ log: any | null; error?: string }> {
+  if (!isSupabaseConfigured) return { log: null };
+
+  try {
+    const row = {
+      user_id: activity.userId || null,
+      action: activity.action,
+      details: activity.details,
+      timestamp: activity.timestamp || new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('activity_logs')
+      .insert(row)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[Supabase] logActivity error:', error.message);
+      return { log: null, error: error.message };
+    }
+
+    return { log: data };
+  } catch (err: any) {
+    return { log: null, error: err.message };
+  }
+}
+
+export async function fetchActivityLogsFromSupabase(): Promise<{ data: any[]; isLive: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { data: [], isLive: false };
+
+  try {
+    const { data, error } = await supabase
+      .from('activity_logs')
+      .select('*, profiles:user_id(id, full_name, phone, email)')
+      .order('timestamp', { ascending: false })
+      .limit(30);
+
+    if (error) {
+      console.warn('[Supabase] fetchActivityLogs error:', error.message);
       return { data: [], isLive: false, error: error.message };
     }
 
