@@ -175,7 +175,7 @@ export async function fetchBrandsFromSupabase(): Promise<{ data: any[]; isLive: 
     const { data, error } = await supabase
       .from('brands')
       .select('id, name, category, floor, zone, logo_url, logo_variant, banner_url, open_hours, rating, status')
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (error || !data) {
       console.warn('[Supabase] fetchBrands error:', error?.message);
@@ -195,7 +195,7 @@ export async function fetchProductsFromSupabase(): Promise<{ data: any[]; isLive
     const { data, error } = await supabase
       .from('products')
       .select('id, brand_id, name, category, description, price, image_url, sku, stock_quantity, is_available, brands(id, name)')
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (error || !data) {
       console.warn('[Supabase] fetchProducts error:', error?.message);

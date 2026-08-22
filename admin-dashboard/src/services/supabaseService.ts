@@ -83,7 +83,7 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
       const { data, error } = await supabase
         .from('brands')
         .select('*')
-        .order('name', { ascending: true });
+        .order('created_at', { ascending: false });
 
       if (!error && data && data.length > 0) {
         supaBrands = data;
@@ -261,7 +261,7 @@ export async function fetchProductsFromSupabase(brandIdOrName?: string): Promise
     let query = supabase
       .from('products')
       .select('id, brand_id, name, category, description, price, image_url, sku, stock_quantity, is_available, brands(id, name, category)')
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (brandIdOrName && brandIdOrName !== 'all') {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandIdOrName);
@@ -497,7 +497,7 @@ export async function fetchDashboardAnalyticsChartsFromSupabase(): Promise<{
     const { data: brands, error } = await supabase
       .from('brands')
       .select('id, name, category, revenue_today, visitors_today, orders_count')
-      .order('name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (error || !brands || brands.length === 0) {
       return {
