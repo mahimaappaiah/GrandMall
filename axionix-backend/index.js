@@ -2176,14 +2176,35 @@ app.post('/api/orders', (req, res) => {
   res.json({ success: true, order: newOrder });
 });
 
-app.patch('/api/orders/:id/status', (req, res) => {
-  const order = orders.find(o => o.id === req.params.id);
+app.patch('/api/orders/:id/status', async (req, res) => {
+  const targetId = req.params.id;
+  const newStatus = req.body.status;
+  let order = orders.find(o => o.id === targetId || o.orderNumber === targetId);
+  
   if (order) {
-    order.status = req.body.status;
-    broadcastEvent('ORDER_STATUS_UPDATE', order);
-    return res.json({ success: true, order });
+    order.status = newStatus;
+  } else {
+    order = {
+      id: targetId,
+      orderNumber: req.body.orderNumber || targetId,
+      customerName: req.body.customerName || 'Customer',
+      customerPhone: req.body.customerPhone || '',
+      storeName: req.body.storeName || 'Store',
+      status: newStatus,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    orders.unshift(order);
   }
-  res.status(404).json({ success: false, message: 'Order not found' });
+
+  broadcastEvent('ORDER_STATUS_UPDATE', order);
+
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.from('orders').update({ status: newStatus }).or(`id.eq.${targetId},order_number.eq.${targetId}`);
+    } catch (e) {}
+  }
+
+  return res.json({ success: true, order });
 });
 
 // ----------------------------------------------------------------------------

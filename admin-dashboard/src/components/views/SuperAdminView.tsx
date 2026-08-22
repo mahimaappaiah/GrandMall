@@ -33,6 +33,7 @@ import { fetchAuditLogsFromSupabase } from '../../services/supabaseService';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { AdminAuditLog } from '../../types';
 import { downloadAuditLogsCSV, downloadMallPayLedgerCSV } from '../../utils/exportUtils';
+import { BACKEND_URL } from '../../lib/config';
 
 interface LiveMallPayTx {
   id: string;
@@ -158,12 +159,12 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
     // 3. Fetch from Express Backend API (Filter strictly for Mall Pay)
     try {
-      const res = await fetch('http://localhost:3000/api/orders');
+      const res = await fetch(`${BACKEND_URL}/api/orders`);
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
         data.orders.forEach((o: any) => {
-          const pMethod = (o.paymentMethod || '').toLowerCase();
-          if (pMethod.includes('mall pay') || pMethod.includes('unified') || pMethod.includes('mallpay')) {
+          const pMethod = (o.paymentMethod || o.payment_method || '').toLowerCase();
+          if (pMethod.includes('mall pay') || pMethod.includes('unified') || pMethod.includes('mallpay') || pMethod.includes('wallet')) {
             liveTxs.push({
               id: o.id || `ord-${Date.now()}`,
               timestamp: o.timestamp || 'Just now',
@@ -171,7 +172,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
               customerName: o.customerName || 'Valued Guest',
               type: 'DEBIT',
               description: `Order Checkout at ${o.storeName || 'Store'} (${o.orderNumber || '#AX-ORD'})`,
-              amount: Number(o.totalAmount || 0),
+              amount: Number(o.totalAmount || o.rawAmount || 0),
               multiplier: '⚡ 2x VIP Points'
             });
           }
@@ -719,6 +720,10 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
               return 'bg-blue-50 text-blue-700 border-blue-200';
             case 'ORDER_STATUS_CHANGED':
               return 'bg-amber-50 text-amber-700 border-amber-200';
+            case 'MALL_PAY_TRANSACTION':
+              return 'bg-purple-50 text-purple-700 border-purple-200';
+            case 'MALL_PAY_TOPUP':
+              return 'bg-emerald-50 text-emerald-700 border-emerald-200';
             default:
               return 'bg-slate-100 text-slate-700 border-slate-200';
           }
@@ -774,6 +779,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                   className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
                 >
                   <option value="ALL">All Action Types</option>
+                  <option value="MALL_PAY_TRANSACTION">MALL_PAY_TRANSACTION (Mall Pay POS Checkout)</option>
+                  <option value="MALL_PAY_TOPUP">MALL_PAY_TOPUP (Mall Pay Wallet Top-Up)</option>
                   <option value="STORE_APPROVED">STORE_APPROVED (Store Registration)</option>
                   <option value="COUPON_CREATED">COUPON_CREATED (Coupon Creation)</option>
                   <option value="COUPON_DELETED">COUPON_DELETED (Coupon Deletion)</option>

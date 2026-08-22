@@ -1717,12 +1717,14 @@ export default function App() {
                             (activeName && ordCustName && (activeName === ordCustName || activeName.includes(ordCustName) || ordCustName.includes(activeName)));
 
             if (isMatch || !activePhoneClean) {
-              if (ord.status === 'Completed' || ord.status === 'Ready' || ord.status === 'Ready for Pickup') {
+              if (ord.status === 'Ready for Pickup' || ord.status === 'Ready') {
                 setToastMessage(`🛍️ Order Update: Your Order #${ord.orderNumber || ord.id} at ${ord.storeName || 'Store'} is READY FOR PICKUP!`);
               } else if (ord.status === 'Processing' || ord.status === 'Preparing') {
-                setToastMessage(`👨‍🍳 Order Update: Order #${ord.orderNumber || ord.id} is now being prepared at ${ord.storeName}!`);
-              } else if (ord.status === 'Delivered') {
-                setToastMessage(`✅ Order Delivered! Thank you for shopping with ${ord.storeName}.`);
+                setToastMessage(`👨‍🍳 Order Update: Order #${ord.orderNumber || ord.id} is now being prepared at ${ord.storeName || 'Store'}!`);
+              } else if (ord.status === 'Completed' || ord.status === 'Delivered') {
+                setToastMessage(`✅ Order Delivered! Thank you for picking up your order #${ord.orderNumber || ord.id} from ${ord.storeName || 'Store'}.`);
+              } else if (ord.status === 'Declined' || ord.status === 'Cancelled') {
+                setToastMessage(`❌ Order Update: Order #${ord.orderNumber || ord.id} was declined/cancelled by ${ord.storeName || 'Store'}.`);
               }
             }
           } else if (data.type === 'RESERVATION_STATUS_UPDATE') {
@@ -1745,8 +1747,39 @@ export default function App() {
         } catch (e) {}
       };
     } catch (e) {}
+
+    let bcEvents: BroadcastChannel | null = null;
+    let bcOrders: BroadcastChannel | null = null;
+    try {
+      const handleBroadcast = (ev: any) => {
+        const payload = ev.data;
+        if (!payload) return;
+        if (payload.type === 'ORDER_STATUS_UPDATE' || payload.type === 'RESERVATION_STATUS_UPDATE') {
+          const ord = payload.data || payload.order || payload;
+          if (payload.type === 'ORDER_STATUS_UPDATE') {
+            if (ord.status === 'Ready for Pickup' || ord.status === 'Ready') {
+              setToastMessage(`🛍️ Order Update: Your Order #${ord.orderNumber || ord.id} at ${ord.storeName || 'Store'} is READY FOR PICKUP!`);
+            } else if (ord.status === 'Processing' || ord.status === 'Preparing') {
+              setToastMessage(`👨‍🍳 Order Update: Order #${ord.orderNumber || ord.id} is now being prepared at ${ord.storeName || 'Store'}!`);
+            } else if (ord.status === 'Completed' || ord.status === 'Delivered') {
+              setToastMessage(`✅ Order Delivered! Thank you for picking up your order #${ord.orderNumber || ord.id} from ${ord.storeName || 'Store'}.`);
+            } else if (ord.status === 'Declined' || ord.status === 'Cancelled') {
+              setToastMessage(`❌ Order Update: Order #${ord.orderNumber || ord.id} was declined/cancelled by ${ord.storeName || 'Store'}.`);
+            }
+          }
+        }
+      };
+
+      bcEvents = new BroadcastChannel('axionix_events');
+      bcEvents.onmessage = handleBroadcast;
+      bcOrders = new BroadcastChannel('axionix_order_events');
+      bcOrders.onmessage = handleBroadcast;
+    } catch (e) {}
+
     return () => {
       es?.close();
+      bcEvents?.close();
+      bcOrders?.close();
     };
   }, [mobileNumber, fullName, resModalOpen, resSelectedBrand, resDate]);
 
