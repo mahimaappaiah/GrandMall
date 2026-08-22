@@ -4,11 +4,16 @@
 -- Run this in your Supabase SQL Editor:
 -- https://supabase.com/dashboard/project/gulrhstrgfjosxhinehv/sql
 --
--- This script:
--- 1. Creates/ensures public.campaigns and public.notifications table schemas.
--- 2. Dynamically drops all legacy/conflicting RLS policies on both tables.
--- 3. Enables RLS on public.campaigns and public.notifications with secure policies.
--- 4. Seeds initial flagship mall marketing campaigns and system notifications.
+-- Security & Access Model:
+-- 1. Helper function: SECURITY DEFINER 'is_admin_or_manager()' prevents RLS recursion.
+-- 2. Campaigns Table:
+--    - SELECT: Open read access for dashboard / portal promotion visibility.
+--    - INSERT, UPDATE, DELETE: Strictly restricted to authorized Admin / Manager roles.
+-- 3. Notifications Table:
+--    - SELECT: Restricted to authenticated users and Admins.
+--    - INSERT, UPDATE, DELETE: Strictly restricted to authorized Admin / Manager roles.
+-- 4. Initial Seed Data:
+--    - Flagship marketing campaigns and system operational alerts.
 -- ============================================================================
 
 BEGIN;
@@ -79,42 +84,52 @@ BEGIN
     END LOOP;
 END $$;
 
--- 5. RLS Policies for public.campaigns
+-- 5. Strict RLS Policies for public.campaigns
+-- Read access for dashboard view
 CREATE POLICY "campaigns_select_policy" ON public.campaigns
 FOR SELECT USING (true);
 
+-- Only Admin / Manager can create campaigns
 CREATE POLICY "campaigns_insert_policy" ON public.campaigns
 FOR INSERT WITH CHECK (
-    (auth.uid() IS NOT NULL) OR public.is_admin_or_manager() OR true
+    public.is_admin_or_manager()
 );
 
+-- Only Admin / Manager can update campaigns
 CREATE POLICY "campaigns_update_policy" ON public.campaigns
 FOR UPDATE USING (
-    (auth.uid() IS NOT NULL) OR public.is_admin_or_manager() OR true
+    public.is_admin_or_manager()
 );
 
+-- Only Admin / Manager can delete campaigns
 CREATE POLICY "campaigns_delete_policy" ON public.campaigns
 FOR DELETE USING (
-    (auth.uid() IS NOT NULL) OR public.is_admin_or_manager() OR true
+    public.is_admin_or_manager()
 );
 
--- 6. RLS Policies for public.notifications
+-- 6. Strict RLS Policies for public.notifications
+-- Authenticated users and Admins can read notifications
 CREATE POLICY "notifications_select_policy" ON public.notifications
-FOR SELECT USING (true);
+FOR SELECT USING (
+    (auth.uid() IS NOT NULL) OR public.is_admin_or_manager()
+);
 
+-- Only Admin / Manager can create system notifications
 CREATE POLICY "notifications_insert_policy" ON public.notifications
 FOR INSERT WITH CHECK (
-    (auth.uid() IS NOT NULL) OR public.is_admin_or_manager() OR true
+    public.is_admin_or_manager()
 );
 
+-- Only Admin / Manager can update notification state (mark read / dismiss)
 CREATE POLICY "notifications_update_policy" ON public.notifications
 FOR UPDATE USING (
-    (auth.uid() IS NOT NULL) OR public.is_admin_or_manager() OR true
+    public.is_admin_or_manager()
 );
 
+-- Only Admin / Manager can delete notifications
 CREATE POLICY "notifications_delete_policy" ON public.notifications
 FOR DELETE USING (
-    (auth.uid() IS NOT NULL) OR public.is_admin_or_manager() OR true
+    public.is_admin_or_manager()
 );
 
 -- 7. Seed Initial Flagship Marketing Campaigns
