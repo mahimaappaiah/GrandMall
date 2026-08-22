@@ -287,11 +287,15 @@ export const TenantDashboardView: React.FC = () => {
     };
   }, [fetchLiveTenantData]);
 
-  // Filter orders and reservations strictly for the currently selected store
+  // Filter orders and reservations strictly for the currently selected store (including multi-store orders)
   const storeOrders = allLiveOrders.filter(o => {
     const oStore = (o.storeName || '').toLowerCase().trim();
     const currName = (currentStore?.name || '').toLowerCase().trim();
-    return oStore === currName || oStore.includes(currName) || currName.includes(oStore);
+    const hasItemStore = Array.isArray(o.items) && o.items.some((it: any) => {
+      const itSt = (it.storeName || it.brandName || '').toLowerCase().trim();
+      return itSt === currName || itSt.includes(currName) || currName.includes(itSt);
+    });
+    return oStore === currName || oStore.includes(currName) || currName.includes(oStore) || hasItemStore;
   });
 
   const storeReservations = allLiveReservations.filter(r => {
@@ -310,6 +314,13 @@ export const TenantDashboardView: React.FC = () => {
     setAllLiveOrders(prev => prev.map(o => o.id === orderId || o.orderNumber === orderId ? { ...o, status: newStatus } : o));
     showToast(`Order ${orderId} status updated to '${newStatus}'`);
 
+    broadcastEvent('ORDER_STATUS_UPDATE', { 
+      id: orderId, 
+      orderNumber: orderId, 
+      status: newStatus, 
+      storeName: currentStore.name 
+    });
+
     try {
       await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
         method: 'PATCH',
@@ -323,6 +334,13 @@ export const TenantDashboardView: React.FC = () => {
     setAllLiveReservations(prev => prev.map(r => r.id === resId || r.refCode === resId ? { ...r, status: newStatus as any } : r));
     showToast(`Reservation updated to '${newStatus}'`);
 
+    broadcastEvent('RESERVATION_STATUS_UPDATE', { 
+      id: resId, 
+      refCode: resId, 
+      status: newStatus, 
+      storeName: currentStore.name 
+    });
+
     try {
       await fetch(`${BACKEND_URL}/api/reservations/${resId}/status`, {
         method: 'PATCH',
@@ -335,6 +353,13 @@ export const TenantDashboardView: React.FC = () => {
   const handleMarkNoShow = async (resId: string, refCode: string) => {
     setAllLiveReservations(prev => prev.map(r => r.id === resId || r.refCode === resId ? { ...r, status: 'No Show' as any } : r));
     showToast(`❌ Marked ${refCode} as No-Show. Slot freed!`, 'warning');
+
+    broadcastEvent('RESERVATION_STATUS_UPDATE', { 
+      id: resId, 
+      refCode: refCode, 
+      status: 'No Show', 
+      storeName: currentStore.name 
+    });
 
     try {
       await fetch(`${BACKEND_URL}/api/reservations/${resId}/no-show`, {
@@ -498,9 +523,13 @@ export const TenantDashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* TENANT STATS METRICS (DYNAMIC LIVE DATA) */}
+      {/* TENANT STATS METRICS (DYNAMIC LIVE DATA - CLICKABLE) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5">
+        <div 
+          onClick={() => showToast(`💰 ${currentStore.name} Total Daily Sales: ₹${displayRevenue.toLocaleString()} across ${storeOrders.length} orders.`)}
+          className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-98"
+          title="Click to view Revenue summary"
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Today's Revenue</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
@@ -514,7 +543,15 @@ export const TenantDashboardView: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5">
+        <div 
+          onClick={() => {
+            const el = document.getElementById('tenant-orders-queue');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+            showToast(`📦 ${activeOrdersCount} pending active orders in queue for ${currentStore.name}`);
+          }}
+          className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all active:scale-98"
+          title="Click to jump to Orders Queue"
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Active Queue</span>
             <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
@@ -525,7 +562,15 @@ export const TenantDashboardView: React.FC = () => {
           <span className="text-xs text-slate-500 font-medium">Avg Prep: 12 mins • {storeOrders.length} Total</span>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5">
+        <div 
+          onClick={() => {
+            const el = document.getElementById('tenant-reservations-queue');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+            showToast(`📅 ${activeReservationsCount} scheduled appointments for ${currentStore.name}`);
+          }}
+          className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-purple-300 hover:shadow-md transition-all active:scale-98"
+          title="Click to jump to Reservations"
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
               {currentStore.category === 'Food' ? 'Table Reservations' : 'Fitting Reservations'}
@@ -540,7 +585,11 @@ export const TenantDashboardView: React.FC = () => {
           </span>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5">
+        <div 
+          onClick={() => showToast(`⭐ ${currentStore.name} Verified Rating: ${currentStore.rating || 4.9} / 5.0 (98% Customer Satisfaction)`)}
+          className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-1.5 cursor-pointer hover:border-amber-300 hover:shadow-md transition-all active:scale-98"
+          title="Click to view Customer Satisfaction"
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Customer Rating</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
@@ -556,7 +605,88 @@ export const TenantDashboardView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* IN-MALL ORDERS QUEUE FOR THIS TENANT */}
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 space-y-4 shadow-xs">
+        <div id="tenant-orders-queue" className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 space-y-4 shadow-xs">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <ShoppingBag className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Concierge Delivery Orders Queue</h3>
+                <p className="text-[11px] text-slate-400 font-medium">Live orders placed for {currentStore.name}</p>
+              </div>
+            </div>
+            <span className="text-xs bg-blue-50 text-blue-700 font-extrabold px-3 py-1 rounded-full border border-blue-100 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
+              Live Feed ({storeOrders.length})
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {storeOrders.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs font-medium space-y-1">
+                <p className="font-bold text-slate-600">No pending orders for {currentStore.name}</p>
+                <p className="text-[11px]">Orders placed from Customer Portal will appear here in real time.</p>
+              </div>
+            ) : (
+              storeOrders.slice(0, 6).map(order => (
+                <div key={order.id} className="p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/70 flex items-center justify-between gap-3 transition-colors">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-black text-xs text-slate-900">{order.customerName}</span>
+                      <span className="text-[10px] font-mono text-blue-600 font-bold">({order.orderNumber})</span>
+                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                        order.status === 'Completed' || order.status === 'Delivered'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : order.status === 'Processing' || order.status === 'Preparing'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700 font-medium">
+                      {Array.isArray(order.itemsList) ? order.itemsList.join(', ') : 'Signature Item'}
+                    </p>
+                    <span className="text-[10px] text-slate-400 font-medium block">
+                      {order.timestamp} • {order.orderType} • <span className="text-slate-500 font-semibold">{order.deliveryLocation}</span>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-end space-y-2">
+                    <span className="font-black text-sm text-slate-900">₹{order.totalAmount?.toLocaleString()}</span>
+                    <div className="flex space-x-1.5">
+                      {order.status === 'Pending' && (
+                        <button 
+                          onClick={() => handleUpdateOrderStatus(order.id, 'Processing')}
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black rounded-lg shadow-xs cursor-pointer active:scale-95"
+                        >
+                          Accept
+                        </button>
+                      )}
+                      {(order.status === 'Processing' || order.status === 'Pending') && (
+                        <button 
+                          onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg shadow-xs cursor-pointer active:scale-95"
+                        >
+                          Ready
+                        </button>
+                      )}
+                      {order.status === 'Completed' && (
+                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg border border-emerald-200">
+                          Ready for Pickup ✓
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* FITTING ROOM / DINING APPOINTMENTS FOR THIS TENANT */}
+        <div id="tenant-reservations-queue" className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
             <div className="flex items-center space-x-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">

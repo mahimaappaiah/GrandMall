@@ -1688,7 +1688,7 @@ export default function App() {
     }
   }, [resModalOpen, resSelectedBrand, resDate]);
 
-  // Feature 08: Real-Time SSE Stream Listener for Waitlist Promotions & Freed Slots
+  // Feature 08: Real-Time SSE Stream Listener for Waitlist Promotions, Freed Slots & Tenant Approvals
   useEffect(() => {
     let es: EventSource | null = null;
     try {
@@ -1696,16 +1696,50 @@ export default function App() {
       es.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          const activePhoneClean = (mobileNumber || localStorage.getItem('axionix_active_guest_phone') || '').replace(/\D/g, '');
+          const activeName = (fullName || localStorage.getItem('axionix_active_guest_name') || '').trim().toLowerCase();
+
           if (data.type === 'WAITLIST_PROMOTED' || data.type === 'RESERVATION_SLOT_FREED') {
-            const userPhoneClean = (mobileNumber || localStorage.getItem('axionix_active_guest_phone') || '').replace(/\D/g, '');
             const targetPhoneClean = (data.data?.guestPhone || '').replace(/\D/g, '');
-            if (userPhoneClean && targetPhoneClean && (userPhoneClean.endsWith(targetPhoneClean) || targetPhoneClean.endsWith(userPhoneClean))) {
+            if (activePhoneClean && targetPhoneClean && (activePhoneClean.endsWith(targetPhoneClean) || targetPhoneClean.endsWith(activePhoneClean))) {
               setWaitlistPromotedBanner(data.data);
               setToastMessage(`🎉 Great news! Table/suite opened at ${data.data.storeName} (${data.data.timeSlot}). Your reservation is confirmed!`);
             } else if (resModalOpen && resSelectedBrand === data.data?.storeName) {
               fetchReservationAvailability(resSelectedBrand, resDate).then(d => {
                 if (d?.slots) setAvailableSlots(d.slots);
               });
+            }
+          } else if (data.type === 'ORDER_STATUS_UPDATE') {
+            const ord = data.order || data.data || {};
+            const ordCustPhone = (ord.customerPhone || ord.user_phone || '').replace(/\D/g, '');
+            const ordCustName = (ord.customerName || ord.user_name || '').trim().toLowerCase();
+            const isMatch = (activePhoneClean && ordCustPhone && (activePhoneClean.endsWith(ordCustPhone) || ordCustPhone.endsWith(activePhoneClean))) ||
+                            (activeName && ordCustName && (activeName === ordCustName || activeName.includes(ordCustName) || ordCustName.includes(activeName)));
+
+            if (isMatch || !activePhoneClean) {
+              if (ord.status === 'Completed' || ord.status === 'Ready' || ord.status === 'Ready for Pickup') {
+                setToastMessage(`🛍️ Order Update: Your Order #${ord.orderNumber || ord.id} at ${ord.storeName || 'Store'} is READY FOR PICKUP!`);
+              } else if (ord.status === 'Processing' || ord.status === 'Preparing') {
+                setToastMessage(`👨‍🍳 Order Update: Order #${ord.orderNumber || ord.id} is now being prepared at ${ord.storeName}!`);
+              } else if (ord.status === 'Delivered') {
+                setToastMessage(`✅ Order Delivered! Thank you for shopping with ${ord.storeName}.`);
+              }
+            }
+          } else if (data.type === 'RESERVATION_STATUS_UPDATE') {
+            const resData = data.reservation || data.data?.reservation || data.data || {};
+            const resPhone = (resData.guestPhone || resData.user_phone || '').replace(/\D/g, '');
+            const resGuest = (resData.guestName || resData.user_name || '').trim().toLowerCase();
+            const isMatch = (activePhoneClean && resPhone && (activePhoneClean.endsWith(resPhone) || resPhone.endsWith(activePhoneClean))) ||
+                            (activeName && resGuest && (activeName === resGuest || activeName.includes(resGuest) || resGuest.includes(activeName)));
+
+            if (isMatch || !activePhoneClean) {
+              if (resData.status === 'Checked-in' || resData.status === 'Checked-In') {
+                setToastMessage(`✨ Welcome! Your reservation (${resData.refCode || 'Booking'}) at ${resData.storeName || 'Boutique'} is CHECKED IN. Please proceed inside!`);
+              } else if (resData.status === 'Completed') {
+                setToastMessage(`🎉 Thank you for visiting ${resData.storeName || 'Boutique'}! Your appointment (${resData.refCode || 'Booking'}) is completed.`);
+              } else if (resData.status === 'No Show') {
+                setToastMessage(`⚠️ Notice: Reservation (${resData.refCode || 'Booking'}) at ${resData.storeName || 'Boutique'} was marked as No-Show.`);
+              }
             }
           }
         } catch (e) {}
@@ -1714,7 +1748,7 @@ export default function App() {
     return () => {
       es?.close();
     };
-  }, [mobileNumber, resModalOpen, resSelectedBrand, resDate]);
+  }, [mobileNumber, fullName, resModalOpen, resSelectedBrand, resDate]);
 
   useEffect(() => {
     const cleanPhone = mobileNumber.replace(/\D/g, '');
@@ -2329,6 +2363,8 @@ export default function App() {
     setToastMessage(`Added ${itemWithOptions.name} (₹${unitPrice.toLocaleString()}) to cart!`);
     setTimeout(() => setToastMessage(null), 3500);
     setSelectedProductForOptions(null);
+    setActiveBrandModal(null);
+    setCurrentStep('stores');
   };
 
   const handleAddToCart = (item: BrandItem, storeName: string) => {
