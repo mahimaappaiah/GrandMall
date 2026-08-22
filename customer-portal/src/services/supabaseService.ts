@@ -24,109 +24,101 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
     const cleanPhone = phone.replace(/\D/g, '');
     let userId: string | null = null;
 
-    // 1. Check existing Auth session
-    const { data: sessData } = await supabase.auth.getSession();
-    if (sessData?.session?.user) {
-      userId = sessData.session.user.id;
-    } else {
-      // 2. Sign In Anonymously if no active session
-      const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
-      if (anonErr) {
-        console.warn('[Supabase Auth] signInAnonymously:', anonErr.message);
-      }
-      userId = anonData?.user?.id || null;
-    }
-
-    // 3. Query existing profile from public.profiles by userId
-    if (userId) {
-      const { data: existingProfile } = await supabase
+    // 1. Check if a profile with this phone already exists in public.profiles (returning customer)
+    let returningProfile: any = null;
+    if (cleanPhone) {
+      const { data: phoneMatch } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('phone', cleanPhone)
         .maybeSingle();
 
-      if (existingProfile) {
-        // Update existing record if actual real name, phone, or email is provided
-        const updates: any = {};
-        if (name && name.trim() && existingProfile.full_name !== name.trim()) {
-          updates.full_name = name.trim();
-        }
-        if (cleanPhone && cleanPhone.trim() && existingProfile.phone !== cleanPhone.trim()) {
-          updates.phone = cleanPhone.trim();
-        }
-        if (email && email.trim() && existingProfile.email !== email.trim()) {
-          updates.email = email.trim();
-        }
-
-        if (Object.keys(updates).length > 0) {
-          const { data: updatedRecord } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', userId)
-            .select()
-            .maybeSingle();
-
-          const resData = updatedRecord || existingProfile;
-          return {
-            profile: {
-              id: resData.id,
-              full_name: resData.full_name || name.trim(),
-              email: resData.email || email?.trim(),
-              phone: resData.phone || cleanPhone.trim(),
-              role: resData.role || 'customer',
-              loyalty_tier: resData.loyalty_tier || 'Bronze',
-              is_active: resData.is_active !== false
-            }
-          };
-        }
-
-        return {
-          profile: {
-            id: existingProfile.id,
-            full_name: existingProfile.full_name || name.trim(),
-            email: existingProfile.email || email?.trim(),
-            phone: existingProfile.phone || cleanPhone.trim(),
-            role: existingProfile.role || 'customer',
-            loyalty_tier: existingProfile.loyalty_tier || 'Bronze',
-            is_active: existingProfile.is_active !== false
-          }
-        };
+      if (phoneMatch) {
+        returningProfile = phoneMatch;
       }
+    }
 
-      // Check if a profile with this phone already exists to prevent duplicate profiles
-      if (cleanPhone) {
-        const { data: phoneMatch } = await supabase
+    // 2. Check active Supabase Auth session
+    const { data: sessData } = await supabase.auth.getSession();
+    const currentAuthUser = sessData?.session?.user;
+
+    if (currentAuthUser) {
+      if (returningProfile) {
+        // If current session already belongs to this returning customer
+        if (currentAuthUser.id === returningProfile.id) {
+          userId = currentAuthUser.id;
+        } else {
+          // Current session belongs to someone else; sign out and establish returning customer session
+          await supabase.auth.signOut().catch(() => {});
+          userId = returningProfile.id;
+        }
+      } else {
+        // For a new customer, check if current session already has an existing profile with a different phone
+        const { data: currentSessionProf } = await supabase
           .from('profiles')
           .select('*')
-          .eq('phone', cleanPhone)
+          .eq('id', currentAuthUser.id)
           .maybeSingle();
 
-        if (phoneMatch) {
-          const updates: any = {};
-          if (name && name.trim() && phoneMatch.full_name !== name.trim()) {
-            updates.full_name = name.trim();
-          }
-          if (email && email.trim() && phoneMatch.email !== email.trim()) {
-            updates.email = email.trim();
-          }
-          if (Object.keys(updates).length > 0) {
-            await supabase.from('profiles').update(updates).eq('id', phoneMatch.id);
-          }
-          return {
-            profile: {
-              id: phoneMatch.id,
-              full_name: name.trim() || phoneMatch.full_name || 'Mall Guest',
-              email: email?.trim() || phoneMatch.email,
-              phone: phoneMatch.phone || cleanPhone,
-              role: phoneMatch.role || 'customer',
-              loyalty_tier: phoneMatch.loyalty_tier || 'Bronze',
-              is_active: phoneMatch.is_active !== false
-            }
-          };
+        if (currentSessionProf && currentSessionProf.phone && currentSessionProf.phone.replace(/\D/g, '') !== cleanPhone) {
+          // Different customer in same browser: sign out to create fresh distinct user
+          await supabase.auth.signOut().catch(() => {});
+          const { data: anonData } = await supabase.auth.signInAnonymously();
+          userId = anonData?.user?.id || null;
+        } else {
+          userId = currentAuthUser.id;
         }
       }
+    } else {
+      if (returningProfile) {
+        userId = returningProfile.id;
+      } else {
+        // Genuinely new customer with no active session
+        const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
+        if (anonErr) {
+          console.warn('[Supabase Auth] signInAnonymously:', anonErr.message);
+        }
+        userId = anonData?.user?.id || null;
+      }
+    }
 
-      // Upsert profile into public.profiles with actual real customer information
+    // 3. Handle Returning Customer: preserve historical record and only enrich non-empty details
+    if (returningProfile) {
+      const updates: any = {};
+      if (name && name.trim() && returningProfile.full_name !== name.trim()) {
+        updates.full_name = name.trim();
+      }
+      if (email && email.trim() && returningProfile.email !== email.trim()) {
+        updates.email = email.trim();
+      }
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('profiles').update(updates).eq('id', returningProfile.id);
+      }
+
+      // Log WiFi connection activity
+      logActivityInSupabase({
+        userId: returningProfile.id,
+        action: 'connected',
+        detail: 'Wi-Fi Connected',
+        details: `${name.trim() || returningProfile.full_name || 'Valued Guest'} connected to AXIONIX High-Speed Mall WiFi.`,
+        storeName: 'The Grand Mall'
+      }).catch(() => {});
+
+      return {
+        profile: {
+          id: returningProfile.id,
+          full_name: name.trim() || returningProfile.full_name || 'Mall Guest',
+          email: email?.trim() || returningProfile.email,
+          phone: returningProfile.phone || cleanPhone,
+          role: returningProfile.role || 'customer',
+          loyalty_tier: returningProfile.loyalty_tier || 'Bronze',
+          is_active: returningProfile.is_active !== false
+        }
+      };
+    }
+
+    // 4. Genuinely NEW customer: Insert brand new permanent profile into public.profiles
+    if (userId) {
       const newProfile: any = {
         id: userId,
         full_name: name.trim() || 'Mall Guest',
@@ -139,40 +131,33 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
         newProfile.email = email.trim();
       }
 
-      const { data: upserted, error: upsertErr } = await supabase
+      const { data: inserted, error: insertErr } = await supabase
         .from('profiles')
-        .upsert(newProfile, { onConflict: 'id' })
+        .insert(newProfile)
         .select()
         .maybeSingle();
 
-      if (upsertErr) {
-        console.warn('[Supabase Profiles] Upsert error:', upsertErr.message);
+      if (insertErr) {
+        console.warn('[Supabase Profiles] Insert notice:', insertErr.message);
+        const { data: upserted } = await supabase
+          .from('profiles')
+          .upsert(newProfile, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
+        
+        return { profile: upserted || newProfile };
       }
 
-      return { profile: upserted || newProfile };
-    }
+      // Log WiFi connection activity for new customer
+      logActivityInSupabase({
+        userId,
+        action: 'connected',
+        detail: 'Wi-Fi Connected',
+        details: `${name.trim() || 'Valued Guest'} connected to AXIONIX High-Speed Mall WiFi.`,
+        storeName: 'The Grand Mall'
+      }).catch(() => {});
 
-    // Lookup existing profile by phone if auth session failed
-    if (cleanPhone) {
-      const { data: phoneProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('phone', cleanPhone)
-        .maybeSingle();
-
-      if (phoneProfile) {
-        return {
-          profile: {
-            id: phoneProfile.id,
-            full_name: phoneProfile.full_name || name.trim(),
-            email: phoneProfile.email || email?.trim(),
-            phone: phoneProfile.phone || cleanPhone,
-            role: phoneProfile.role || 'customer',
-            loyalty_tier: phoneProfile.loyalty_tier || 'Bronze',
-            is_active: phoneProfile.is_active !== false
-          }
-        };
-      }
+      return { profile: inserted || newProfile };
     }
 
     return { profile: null };
