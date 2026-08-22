@@ -1883,9 +1883,11 @@ app.post('/api/auth/verify-otp', (req, res) => {
   if (phone) delete pendingOtps[phone];
 
   const guestName = name || 'Valued Shopper';
+  const cleanPhone = rawClean;
   let existingUser = connectedUsers.find(u => {
     const uClean = (u.phone || '').replace(/\D/g, '').slice(-10);
-    return (cleanPhone && uClean === cleanPhone) || 
+    return (last10 && uClean === last10) || 
+           (cleanPhone && (u.phone || '').replace(/\D/g, '') === cleanPhone) ||
            u.phone === phone || 
            (name && u.name && u.name.toLowerCase() === name.toLowerCase());
   });
@@ -1894,7 +1896,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
     existingUser = {
       id: 'usr-' + Date.now(),
       name: guestName,
-      phone: phone || `+91 ${cleanPhone}`,
+      phone: phone || `+91 ${cleanPhone || '9876543210'}`,
       macAddress: 'FE:88:99:A1:B2:C3',
       ipAddress: '192.168.10.' + (Math.floor(Math.random() * 150) + 100),
       connectionTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
