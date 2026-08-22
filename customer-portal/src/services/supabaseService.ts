@@ -630,14 +630,27 @@ export async function recordStoreVisitInSupabase(
       .select()
       .maybeSingle();
 
-    // Also persist customer journey trajectory record into public.customer_journey table
-    await supabase
-      .from('customer_journey')
-      .insert(row)
-      .catch(() => {});
+    if (error) {
+      console.warn('[Supabase] recordStoreVisit (store_visits) error:', error.message);
+    }
+
+    // Persist to customer_journey only when an authenticated userId exists
+    if (userId) {
+      const { error: journeyErr } = await supabase
+        .from('customer_journey')
+        .insert({
+          user_id: userId,
+          brand_id: resolvedBrandId,
+          duration_seconds: durationSeconds,
+          created_at: row.created_at
+        });
+
+      if (journeyErr) {
+        console.warn('[Supabase] recordStoreVisit (customer_journey) error:', journeyErr.message);
+      }
+    }
 
     if (error) {
-      console.warn('[Supabase] recordStoreVisit error:', error.message);
       return { visit: null, error: error.message };
     }
 
