@@ -641,6 +641,34 @@ export async function recordStoreVisitInSupabase(
   }
 }
 
+export async function fetchCustomerJourneyFromSupabase(userId?: string): Promise<{ data: any[]; isLive: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { data: [], isLive: false };
+
+  try {
+    let query = supabase
+      .from('store_visits')
+      .select('*, brands:brand_id(id, name, category, floor, zone)')
+      .order('created_at', { ascending: false });
+
+    if (userId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      if (isUuid) {
+        query = query.eq('user_id', userId);
+      }
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('[Supabase] fetchCustomerJourney error:', error.message);
+      return { data: [], isLive: false, error: error.message };
+    }
+
+    return { data: data || [], isLive: true };
+  } catch (err: any) {
+    return { data: [], isLive: false, error: err.message };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // LOYALTY POINTS & REWARDS API HELPERS
 // ---------------------------------------------------------------------------
