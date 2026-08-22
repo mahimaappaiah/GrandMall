@@ -384,32 +384,42 @@ export default function App() {
     } else if (type === 'ORDER_CREATED' || type === 'NEW_ORDER') {
       const orderPayload = payload.order || payload || {};
       const orderNum = orderPayload.orderNumber || orderPayload.order_number || `#AX-${Math.floor(1000 + Math.random() * 9000)}`;
-      const targetStore = orderPayload.storeName || orderPayload.store_name || 'Starbucks Reserve';
+      const targetStore = orderPayload.storeName || orderPayload.store_name || 'The Grand Mall Store';
       const custName = orderPayload.customerName || orderPayload.user_name || orderPayload.guest_name || 'Valued Guest';
       const custPhone = orderPayload.customerPhone || orderPayload.user_phone || '+91 84950 93170';
 
-      const itemsList = Array.isArray(orderPayload.itemsList) ? orderPayload.itemsList :
-                        Array.isArray(orderPayload.items) ? orderPayload.items.map((i: any) => `${i.name || i.item_name} (x${i.quantity || i.qty || 1})`) :
-                        [orderPayload.item_name ? `${orderPayload.item_name} (x${orderPayload.quantity || 1})` : 'Designer Fashion Item'];
-
-      const rawItems = Array.isArray(orderPayload.items) && orderPayload.items.length > 0 ? orderPayload.items.map((i: any) => ({
-        name: i.name || i.item_name || 'Designer Item',
-        quantity: Number(i.quantity || i.qty || 1),
-        price: Number(i.price || 2495)
-      })) : [
-        { name: orderPayload.item_name || 'Designer Item', quantity: Number(orderPayload.quantity || 1), price: Number(orderPayload.totalAmount || 2495) }
+      const rawItems = Array.isArray(orderPayload.items) && orderPayload.items.length > 0 ? orderPayload.items.map((i: any) => {
+        const itemName = i.name || (i.item && i.item.name) || i.item_name || 'Designer Item';
+        const itemPrice = Number(i.price !== undefined ? i.price : (i.item && i.item.price !== undefined ? i.item.price : 2495));
+        const itemQty = Number(i.quantity || i.qty || 1);
+        const itemStore = i.brandName || (i.item && i.item.brandName) || i.storeName || i.store_name || targetStore;
+        return {
+          name: itemName,
+          quantity: itemQty,
+          price: itemPrice,
+          brandName: itemStore,
+          storeName: itemStore
+        };
+      }) : [
+        { name: orderPayload.item_name || 'Designer Item', quantity: Number(orderPayload.quantity || 1), price: Number(orderPayload.totalAmount || 2495), storeName: targetStore, brandName: targetStore }
       ];
+
+      const itemStores = Array.from(new Set(rawItems.map((it: any) => it.storeName || it.brandName).filter(Boolean)));
+      const combinedStoreName = targetStore || (itemStores.length > 1 ? itemStores.join(', ') : (itemStores[0] || 'The Grand Mall Store'));
+
+      const itemsList = Array.isArray(orderPayload.itemsList) ? orderPayload.itemsList :
+                        rawItems.map((i: any) => `${i.name} (x${i.quantity})`);
 
       const newOrder: Order = {
         id: String(orderPayload.id || 'ord-' + Date.now()),
         orderNumber: orderNum,
         customerName: custName,
         customerPhone: custPhone,
-        storeName: targetStore,
+        storeName: combinedStoreName,
         storeCategory: orderPayload.storeCategory || 'Fashion',
         orderType: orderPayload.orderType || 'Click & Collect',
         paymentMethod: orderPayload.paymentMethod || 'UPI / GPay',
-        totalAmount: Number(orderPayload.totalAmount || orderPayload.total_amount || 2495),
+        totalAmount: Number(orderPayload.totalAmount || orderPayload.total_amount || rawItems.reduce((acc: number, i: any) => acc + (i.price * i.quantity), 0)),
         itemsCount: Number(orderPayload.itemsCount || rawItems.reduce((acc: number, i: any) => acc + i.quantity, 0)),
         timestamp: orderPayload.timestamp || 'Just now',
         status: 'Completed',
@@ -423,7 +433,8 @@ export default function App() {
       setUsersList(prev => prev.map((u, idx) => {
         if (matchUser(u, custPhone, custName) || idx === 0) {
           const currentStores = (u.visitedStores || []).filter(s => s !== 'Wi-Fi Captive Portal');
-          const stores = currentStores.includes(targetStore) ? currentStores : [...currentStores, targetStore];
+          const storesToAdd = itemStores.length > 0 ? itemStores : [combinedStoreName];
+          const stores = Array.from(new Set([...currentStores, ...storesToAdd]));
           return { ...u, visitedStores: stores, dataUsed: `${(stores.length * 25) + 20} MB` };
         }
         return u;

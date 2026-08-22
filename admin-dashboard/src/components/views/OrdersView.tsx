@@ -59,10 +59,27 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
 
       const custName = String(o.customerName || o.user_name || 'Valued Guest').trim();
       const custPhone = o.customerPhone || o.user_phone || '+91 84950 93170';
-      const storeName = o.storeName || o.store_name || 'Nike Flagship';
+      const rawItems = Array.isArray(o.items) && o.items.length > 0 ? o.items.map((i: any) => {
+        const itemName = i.name || (i.item && i.item.name) || i.item_name || 'Designer Item';
+        const itemPrice = Number(i.price !== undefined ? i.price : (i.item && i.item.price !== undefined ? i.item.price : 2495));
+        const itemQty = Number(i.quantity || i.qty || 1);
+        const itemStore = i.brandName || (i.item && i.item.brandName) || i.storeName || i.store_name || o.storeName || o.store_name || 'Grand Mall Store';
+        return {
+          name: itemName,
+          quantity: itemQty,
+          price: itemPrice,
+          brandName: itemStore,
+          storeName: itemStore
+        };
+      }) : [
+        { name: o.item_name || 'Designer Item', quantity: Number(o.quantity || o.itemsCount || 1), price: Number(o.totalAmount || 2495), storeName: o.storeName || o.store_name || 'Grand Mall Store', brandName: o.storeName || o.store_name || 'Grand Mall Store' }
+      ];
+
+      const itemStores = Array.from(new Set(rawItems.map((it: any) => it.storeName || it.brandName).filter(Boolean)));
+      const finalStoreName = o.storeName || (itemStores.length > 1 ? itemStores.join(', ') : (itemStores[0] || (o.store_name || 'Nike Flagship')));
 
       let storeCategory = o.storeCategory || 'Fashion';
-      const snLower = storeName.toLowerCase();
+      const snLower = finalStoreName.toLowerCase();
       if (snLower.includes('starbucks') || snLower.includes('dintai') || snLower.includes('kfc') || snLower.includes('cirque') || snLower.includes('haagen') || snLower.includes('food')) {
         storeCategory = 'Food';
       } else if (snLower.includes('rolex') || snLower.includes('tag') || snLower.includes('leather') || snLower.includes('cartier') || snLower.includes('tiffany') || snLower.includes('sunglass') || snLower.includes('ray-ban')) {
@@ -72,14 +89,6 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
       } else if (snLower.includes('spa') || snLower.includes('salon')) {
         storeCategory = 'Services';
       }
-
-      const rawItems = Array.isArray(o.items) && o.items.length > 0 ? o.items.map((i: any) => ({
-        name: i.name || i.item_name || 'Designer Item',
-        quantity: Number(i.quantity || i.qty || 1),
-        price: Number(i.price || 2495)
-      })) : [
-        { name: o.item_name || 'Designer Item', quantity: Number(o.quantity || o.itemsCount || 1), price: Number(o.totalAmount || 2495) }
-      ];
 
       const itemsList = Array.isArray(o.itemsList) ? o.itemsList : 
                         rawItems.map((i: any) => `${i.name} (x${i.quantity})`);
@@ -92,7 +101,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
         orderNumber: orderNum,
         customerName: custName,
         customerPhone: custPhone,
-        storeName: storeName,
+        storeName: finalStoreName,
         storeCategory: storeCategory,
         orderType: o.orderType || o.order_type || 'Click & Collect',
         paymentMethod: o.paymentMethod || o.payment_method || 'UPI / GPay',
@@ -403,9 +412,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
                     <span className="text-slate-500 font-medium">Mobile Phone:</span>
                     <strong className="text-slate-900 font-semibold">{selectedOrder.customerPhone}</strong>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-start">
                     <span className="text-slate-500 font-medium">Store Venue:</span>
-                    <strong className="text-slate-900 font-bold">{selectedOrder.storeName}</strong>
+                    <strong className="text-slate-900 font-bold text-right max-w-[65%]">{selectedOrder.storeName}</strong>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-medium">Payment Mode:</span>
@@ -420,17 +429,27 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
                     <span>Price</span>
                   </div>
 
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                     {selectedOrder.items && selectedOrder.items.length > 0 ? (
-                      selectedOrder.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-slate-50">
-                          <div>
-                            <div className="font-semibold text-slate-800">{item.name}</div>
-                            <div className="text-[10px] text-slate-400">Qty: {item.quantity} • ₹{item.price.toLocaleString()} each</div>
+                      selectedOrder.items.map((item: any, idx: number) => {
+                        const itName = item.name || item.item?.name || item.item_name || 'Item';
+                        const itQty = Number(item.quantity || item.qty || 1);
+                        const itPrice = Number(item.price !== undefined ? item.price : (item.item?.price !== undefined ? item.item.price : 0));
+                        const itStore = item.storeName || item.brandName || item.item?.brandName || selectedOrder.storeName;
+
+                        return (
+                          <div key={idx} className="flex justify-between items-start text-xs py-1.5 border-b border-slate-50">
+                            <div className="pr-2">
+                              <div className="font-semibold text-slate-800 leading-snug">{itName}</div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                {itStore ? <span className="font-medium text-blue-600 mr-1.5">{itStore} •</span> : null}
+                                Qty: {itQty} • ₹{itPrice.toLocaleString()} each
+                              </div>
+                            </div>
+                            <span className="font-bold text-slate-900 flex-shrink-0">₹{(itPrice * itQty).toLocaleString()}</span>
                           </div>
-                          <span className="font-bold text-slate-900">₹{(item.price * item.quantity).toLocaleString()}</span>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       (selectedOrder.itemsList || []).map((itemStr, idx) => (
                         <div key={idx} className="flex justify-between text-xs py-1 border-b border-slate-50">

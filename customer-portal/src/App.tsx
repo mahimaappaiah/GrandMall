@@ -2571,15 +2571,18 @@ export default function App() {
 
     setIsPlacingOrder(true);
 
-    const mainStore = cart.length > 0 ? cart[0].brandName : 'The Grand Mall Store';
-    if (mainStore) {
-      recordUserStoreVisit(mainStore);
-    }
+    const storeNames = Array.from(new Set(cart.map(c => c.brandName).filter(Boolean)));
+    const mainStore = storeNames.length > 1 ? storeNames.join(', ') : (storeNames[0] || 'The Grand Mall Store');
+    storeNames.forEach(st => {
+      recordUserStoreVisit(st);
+    });
+
     const itemsList = cart.map(c => ({
       name: c.item.name,
       quantity: c.quantity,
       price: c.item.price,
-      brandName: c.brandName
+      brandName: c.brandName,
+      storeName: c.brandName
     }));
 
     const paymentMethodLabel = selectedPaymentOption === 'mallpay' 
@@ -2640,12 +2643,17 @@ export default function App() {
       customerName: activeName,
       customerPhone: activePhone,
       storeName: mainStore,
+      stores: storeNames,
       appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
       discountAmount: discountAmount,
       items: cart.map(c => ({
-        item: { name: c.item.name, price: c.item.price, image: c.item.image },
+        name: c.item.name,
+        price: c.item.price,
+        quantity: c.quantity,
         brandName: c.brandName,
-        quantity: c.quantity
+        storeName: c.brandName,
+        image: c.item.image,
+        item: { name: c.item.name, price: c.item.price, image: c.item.image }
       })),
       paymentMethod: paymentMethodLabel,
       timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })

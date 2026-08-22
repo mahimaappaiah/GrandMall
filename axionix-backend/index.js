@@ -2088,17 +2088,39 @@ app.get('/api/orders', (req, res) => {
 });
 
 app.post('/api/orders', (req, res) => {
-  const { storeName, customerName, customerPhone, items, totalAmount, paymentMethod, appliedCoupon } = req.body;
+  const { storeName, customerName, customerPhone, items, totalAmount, paymentMethod, appliedCoupon, stores } = req.body;
+
+  const normalizedItems = Array.isArray(items) && items.length > 0 ? items.map(i => {
+    const itemName = i.name || (i.item && i.item.name) || i.item_name || 'Designer Item';
+    const itemPrice = Number(i.price !== undefined ? i.price : (i.item && i.item.price !== undefined ? i.item.price : 2495));
+    const itemQty = Number(i.quantity || i.qty || 1);
+    const itemStore = i.brandName || (i.item && i.item.brandName) || i.storeName || storeName || 'Grand Mall Store';
+    return {
+      name: itemName,
+      price: itemPrice,
+      quantity: itemQty,
+      brandName: itemStore,
+      storeName: itemStore
+    };
+  }) : [];
+
+  const distinctStores = Array.isArray(stores) && stores.length > 0 
+    ? stores 
+    : Array.from(new Set(normalizedItems.map(i => i.storeName).filter(Boolean)));
+
+  const finalStoreName = storeName || (distinctStores.length > 1 ? distinctStores.join(', ') : (distinctStores[0] || 'Grand Mall Concierge'));
+
   const newOrder = {
     id: 'ORD-' + (orders.length + 1091),
-    orderNumber: '#AX-' + (orders.length + 1091),
+    orderNumber: req.body.orderNumber || ('#AX-' + (orders.length + 1091)),
     customerName: customerName && customerName.trim() ? customerName : 'Reynold Ricky',
     customerPhone: customerPhone || '+91 98987 65432',
-    storeName: storeName || 'Grand Mall Concierge',
+    storeName: finalStoreName,
+    stores: distinctStores,
     storeCategory: 'Fashion',
-    itemsCount: items ? items.reduce((a, b) => a + (b.quantity || 1), 0) : 1,
-    itemsList: items ? items.map(i => `${i.name} (x${i.quantity || 1})`) : ['Concierge Item'],
-    items: items || [],
+    itemsCount: normalizedItems.length > 0 ? normalizedItems.reduce((a, b) => a + (b.quantity || 1), 0) : 1,
+    itemsList: normalizedItems.length > 0 ? normalizedItems.map(i => `${i.name} (x${i.quantity || 1})`) : ['Concierge Item'],
+    items: normalizedItems,
     totalAmount: Number(totalAmount) || 1200,
     appliedCoupon: appliedCoupon || null,
     orderType: 'Store Pickup',
@@ -2117,7 +2139,7 @@ app.post('/api/orders', (req, res) => {
       customerName: customerName && customerName.trim() ? customerName : 'Reynold Ricky',
       customerPhone: customerPhone || '+91 98987 65432',
       redeemedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      storeName: storeName,
+      storeName: finalStoreName,
       discountApplied: 'Applied at Checkout',
       savingsAmount: `₹${req.body.discountAmount ? Number(req.body.discountAmount).toLocaleString() : '1,500'} Saved`,
       channel: 'WiFi Captive Portal',
@@ -2128,10 +2150,15 @@ app.post('/api/orders', (req, res) => {
     broadcastEvent('COUPON_REDEEMED', couponRedemption);
   }
 
-  const brand = brands.find(b => b.name === storeName);
-  if (brand) {
-    brand.revenueToday += newOrder.totalAmount;
-    brand.ordersCount += 1;
+  // Update revenue today for involved brands
+  if (distinctStores.length > 0) {
+    distinctStores.forEach(st => {
+      const brand = brands.find(b => b.name.toLowerCase() === st.toLowerCase());
+      if (brand) {
+        brand.revenueToday += Math.round(newOrder.totalAmount / distinctStores.length);
+        brand.ordersCount += 1;
+      }
+    });
   }
 
   const log = {
@@ -2139,8 +2166,8 @@ app.post('/api/orders', (req, res) => {
     timestamp: newOrder.timestamp,
     userName: newOrder.customerName,
     action: 'ordered',
-    detail: `Order ${newOrder.orderNumber} at ${storeName} (₹${newOrder.totalAmount.toLocaleString()})`,
-    storeName: storeName,
+    detail: `Order ${newOrder.orderNumber} at ${finalStoreName} (₹${newOrder.totalAmount.toLocaleString()})`,
+    storeName: finalStoreName,
     badgeType: 'purple'
   };
   activityLogs.unshift(log);

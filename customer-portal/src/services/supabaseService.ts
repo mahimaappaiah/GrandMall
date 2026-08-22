@@ -239,6 +239,7 @@ export async function createOrderInSupabase(orderData: {
       customer_name: orderData.customerName,
       customer_phone: orderData.customerPhone,
       customer_email: orderData.customerEmail || null,
+      store_name: orderData.storeName || 'The Grand Mall',
       subtotal: orderData.rawAmount,
       tax: 0,
       discount_amount: orderData.discountAmount || 0,
