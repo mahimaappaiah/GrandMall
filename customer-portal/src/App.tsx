@@ -2682,6 +2682,7 @@ export default function App() {
       stores: storeNames,
       appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
       discountAmount: discountAmount,
+      status: 'Pending',
       items: cart.map(c => ({
         name: c.item.name,
         price: c.item.price,
@@ -5403,14 +5404,28 @@ export default function App() {
         </div>
       )}
 
-      {/* Global Toast Notification Banner */}
+      {/* Global Live Toast Notification Banner (Neat & Prominent) */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] max-w-md w-[90%] bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center justify-between text-xs font-bold animate-in fade-in slide-in-from-bottom-4 duration-200 backdrop-blur-md">
-          <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-            <Sparkles className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <span className="truncate">{toastMessage}</span>
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] max-w-lg w-[92%] sm:w-auto bg-slate-900/98 text-white px-5 py-4 rounded-3xl shadow-2xl border-2 border-amber-400/40 flex items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300 backdrop-blur-xl">
+          <div className="flex items-start sm:items-center space-x-3.5 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300 flex-shrink-0 mt-0.5 sm:mt-0">
+              <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+            </div>
+            <div className="space-y-0.5 flex-1">
+              <div className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                Live Concierge Alert
+              </div>
+              <p className="text-xs sm:text-sm font-bold text-slate-100 leading-snug break-words">
+                {toastMessage}
+              </p>
+            </div>
           </div>
-          <button onClick={() => setToastMessage(null)} className="text-slate-400 hover:text-white p-1 cursor-pointer">
+          <button 
+            onClick={() => setToastMessage(null)} 
+            className="text-slate-400 hover:text-white p-1.5 bg-slate-800/80 hover:bg-slate-700 rounded-xl transition-all cursor-pointer flex-shrink-0 self-start sm:self-center"
+            title="Dismiss"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>

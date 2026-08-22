@@ -2126,7 +2126,7 @@ app.post('/api/orders', (req, res) => {
     orderType: 'Store Pickup',
     paymentMethod: paymentMethod || 'AXIONIX Verified POS',
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'Completed'
+    status: req.body.status || 'Pending'
   };
 
   orders.unshift(newOrder);
@@ -2631,9 +2631,9 @@ app.get('/api/admin/metrics', (req, res) => {
 });
 
 let loyaltyAccounts = [
-  { userId: '10000000-0000-0000-0000-000000000001', pointsBalance: 1850, tier: 'Silver', lifetimePoints: 3450 },
-  { userId: '10000000-0000-0000-0000-000000000005', pointsBalance: 6200, tier: 'Gold', lifetimePoints: 9800 },
-  { userId: '10000000-0000-0000-0000-000000000009', pointsBalance: 16400, tier: 'Platinum', lifetimePoints: 22100 }
+  { userId: '10000000-0000-0000-0000-000000000001', userName: 'Rahul Sengupta', userPhone: '+91 98300 90123', pointsBalance: 1850, tier: 'Silver', lifetimePoints: 3450 },
+  { userId: '10000000-0000-0000-0000-000000000005', userName: 'Ananya Iyer', userPhone: '+91 98450 23456', pointsBalance: 6200, tier: 'Gold', lifetimePoints: 9800 },
+  { userId: '10000000-0000-0000-0000-000000000009', userName: 'Vikram Malhotra', userPhone: '+91 98210 56789', pointsBalance: 16400, tier: 'Platinum', lifetimePoints: 22100 }
 ];
 
 function computeTierFromPoints(points) {
@@ -2646,10 +2646,12 @@ function computeTierFromPoints(points) {
 // 8. Loyalty Points & Rewards System Routes
 app.get('/api/loyalty/:userId', (req, res) => {
   const { userId } = req.params;
-  let account = loyaltyAccounts.find(a => a.userId === userId);
+  let account = loyaltyAccounts.find(a => a.userId === userId || a.userPhone === userId);
   if (!account) {
     account = {
       userId,
+      userName: req.query.name || 'Shopper',
+      userPhone: req.query.phone || '+91 98000 00000',
       pointsBalance: 250, // Welcome bonus
       tier: 'Bronze',
       lifetimePoints: 250
@@ -2660,32 +2662,51 @@ app.get('/api/loyalty/:userId', (req, res) => {
 });
 
 app.post('/api/loyalty/earn', (req, res) => {
-  const { userId, amountSpent } = req.body;
+  const { userId, userName, userPhone, amountSpent } = req.body;
   if (!userId) return res.status(400).json({ success: false, message: 'userId is required' });
 
   const pointsEarned = Math.floor((Number(amountSpent) || 0) / 10); // ₹100 = 10 pts
-  let account = loyaltyAccounts.find(a => a.userId === userId);
+  let account = loyaltyAccounts.find(a => a.userId === userId || (userPhone && a.userPhone === userPhone));
 
   if (!account) {
     account = {
       userId,
+      userName: userName || 'Shopper',
+      userPhone: userPhone || '+91 98000 00000',
       pointsBalance: 250 + pointsEarned,
       tier: computeTierFromPoints(250 + pointsEarned),
       lifetimePoints: 250 + pointsEarned
     };
     loyaltyAccounts.push(account);
   } else {
+    if (userName) account.userName = userName;
+    if (userPhone) account.userPhone = userPhone;
     account.pointsBalance += pointsEarned;
     account.lifetimePoints += pointsEarned;
     const newTier = computeTierFromPoints(account.lifetimePoints);
     if (newTier !== account.tier) {
       account.tier = newTier;
-      broadcastEvent('LOYALTY_UPGRADE', { userId, newTier, pointsBalance: account.pointsBalance });
+      broadcastEvent('LOYALTY_UPGRADE', { userId, userName: account.userName, newTier, pointsBalance: account.pointsBalance });
     }
   }
 
-  broadcastEvent('POINTS_EARNED', { userId, pointsEarned, pointsBalance: account.pointsBalance, tier: account.tier });
+  broadcastEvent('POINTS_EARNED', { userId, userName: account.userName, pointsEarned, pointsBalance: account.pointsBalance, tier: account.tier });
   res.json({ success: true, account, pointsEarned });
+});
+
+app.post('/api/loyalty/bonus', (req, res) => {
+  const { userId, bonusPoints, reason } = req.body;
+  let account = loyaltyAccounts.find(a => a.userId === userId);
+  if (!account) {
+    return res.status(404).json({ success: false, message: 'Account not found' });
+  }
+  const pts = Number(bonusPoints) || 500;
+  account.pointsBalance += pts;
+  account.lifetimePoints += pts;
+  account.tier = computeTierFromPoints(account.lifetimePoints);
+
+  broadcastEvent('POINTS_EARNED', { userId, pointsEarned: pts, pointsBalance: account.pointsBalance, tier: account.tier, reason });
+  res.json({ success: true, account });
 });
 
 app.post('/api/loyalty/redeem', (req, res) => {
@@ -2723,7 +2744,7 @@ app.get('/api/loyalty/admin/stats', (req, res) => {
       totalPointsBalance,
       totalLifetimePoints,
       tierDistribution,
-      topEarners: [...loyaltyAccounts].sort((a, b) => b.lifetimePoints - a.lifetimePoints).slice(0, 5)
+      topEarners: [...loyaltyAccounts].sort((a, b) => b.lifetimePoints - a.lifetimePoints).slice(0, 10)
     }
   });
 });

@@ -655,26 +655,51 @@ export const TenantDashboardView: React.FC = () => {
 
                   <div className="flex flex-col items-end space-y-2">
                     <span className="font-black text-sm text-slate-900">₹{order.totalAmount?.toLocaleString()}</span>
-                    <div className="flex space-x-1.5">
+                    <div className="flex items-center space-x-1.5 flex-wrap justify-end gap-y-1">
                       {order.status === 'Pending' && (
+                        <>
+                          <button 
+                            onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}
+                            className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all"
+                            title="Accept and start preparing order"
+                          >
+                            Accept
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateOrderStatus(order.id, 'Ready for Pickup')}
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all"
+                            title="Mark order ready for customer collection"
+                          >
+                            Ready for Pickup
+                          </button>
+                        </>
+                      )}
+                      {(order.status === 'Processing' || order.status === 'Preparing') && (
                         <button 
-                          onClick={() => handleUpdateOrderStatus(order.id, 'Processing')}
-                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black rounded-lg shadow-xs cursor-pointer active:scale-95"
+                          onClick={() => handleUpdateOrderStatus(order.id, 'Ready for Pickup')}
+                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all"
+                          title="Mark order ready for customer collection"
                         >
-                          Accept
+                          Ready for Pickup
                         </button>
                       )}
-                      {(order.status === 'Processing' || order.status === 'Pending') && (
-                        <button 
-                          onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg shadow-xs cursor-pointer active:scale-95"
-                        >
-                          Ready
-                        </button>
+                      {(order.status === 'Ready for Pickup' || order.status === 'Ready') && (
+                        <>
+                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg border border-emerald-200">
+                            Ready for Pickup ✓
+                          </span>
+                          <button 
+                            onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
+                            className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all"
+                            title="Hand over to customer & complete"
+                          >
+                            Handed Over
+                          </button>
+                        </>
                       )}
-                      {order.status === 'Completed' && (
-                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg border border-emerald-200">
-                          Ready for Pickup ✓
+                      {(order.status === 'Completed' || order.status === 'Delivered') && (
+                        <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[10px] font-black rounded-lg border border-slate-200">
+                          Completed ✓
                         </span>
                       )}
                     </div>
@@ -687,87 +712,6 @@ export const TenantDashboardView: React.FC = () => {
 
         {/* FITTING ROOM / DINING APPOINTMENTS FOR THIS TENANT */}
         <div id="tenant-reservations-queue" className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 space-y-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <ShoppingBag className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-sm">Concierge Delivery Orders Queue</h3>
-                <p className="text-[11px] text-slate-400 font-medium">Live orders placed for {currentStore.name}</p>
-              </div>
-            </div>
-            <span className="text-xs bg-blue-50 text-blue-700 font-extrabold px-3 py-1 rounded-full border border-blue-100 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
-              Live Feed ({storeOrders.length})
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {storeOrders.length === 0 ? (
-              <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs font-medium space-y-1">
-                <p className="font-bold text-slate-600">No pending orders for {currentStore.name}</p>
-                <p className="text-[11px]">Orders placed from Customer Portal will appear here in real time.</p>
-              </div>
-            ) : (
-              storeOrders.slice(0, 6).map(order => (
-                <div key={order.id} className="p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/70 flex items-center justify-between gap-3 transition-colors">
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-black text-xs text-slate-900">{order.customerName}</span>
-                      <span className="text-[10px] font-mono text-blue-600 font-bold">({order.orderNumber})</span>
-                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                        order.status === 'Completed' || order.status === 'Delivered'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : order.status === 'Processing' || order.status === 'Preparing'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {order.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-700 font-medium">
-                      {Array.isArray(order.itemsList) ? order.itemsList.join(', ') : 'Signature Item'}
-                    </p>
-                    <span className="text-[10px] text-slate-400 font-medium block">
-                      {order.timestamp} • {order.orderType} • <span className="text-slate-500 font-semibold">{order.deliveryLocation}</span>
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col items-end space-y-2">
-                    <span className="font-black text-sm text-slate-900">₹{order.totalAmount?.toLocaleString()}</span>
-                    <div className="flex space-x-1.5">
-                      {order.status === 'Pending' && (
-                        <button 
-                          onClick={() => handleUpdateOrderStatus(order.id, 'Processing')}
-                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black rounded-lg shadow-xs cursor-pointer active:scale-95"
-                        >
-                          Accept
-                        </button>
-                      )}
-                      {(order.status === 'Processing' || order.status === 'Pending') && (
-                        <button 
-                          onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg shadow-xs cursor-pointer active:scale-95"
-                        >
-                          Ready
-                        </button>
-                      )}
-                      {order.status === 'Completed' && (
-                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg border border-emerald-200">
-                          Ready for Pickup ✓
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* FITTING ROOM / DINING APPOINTMENTS FOR THIS TENANT */}
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
             <div className="flex items-center space-x-2.5">
               <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
