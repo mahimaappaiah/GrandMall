@@ -595,16 +595,50 @@ export async function recordWifiSessionInSupabase(userId?: string, phone?: strin
   } catch (e) {}
 }
 
-export async function recordStoreVisitInSupabase(userId?: string, brandId?: string): Promise<void> {
-  if (!isSupabaseConfigured) return;
+export async function recordStoreVisitInSupabase(
+  userId?: string,
+  brandIdOrName?: string,
+  durationSeconds: number = 1800
+): Promise<{ visit: any | null; error?: string }> {
+  if (!isSupabaseConfigured || !brandIdOrName) return { visit: null };
   try {
-    if (brandId) {
-      await supabase.from('store_visits').insert({
-        user_id: userId || null,
-        brand_id: brandId
-      });
+    let resolvedBrandId = brandIdOrName;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandIdOrName);
+    if (!isUuid) {
+      const { data: b } = await supabase
+        .from('brands')
+        .select('id')
+        .ilike('name', brandIdOrName.trim())
+        .maybeSingle();
+      if (b?.id) {
+        resolvedBrandId = b.id;
+      } else {
+        return { visit: null, error: `Brand not found: ${brandIdOrName}` };
+      }
     }
-  } catch (e) {}
+
+    const row = {
+      user_id: userId || null,
+      brand_id: resolvedBrandId,
+      duration_seconds: durationSeconds,
+      created_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('store_visits')
+      .insert(row)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[Supabase] recordStoreVisit error:', error.message);
+      return { visit: null, error: error.message };
+    }
+
+    return { visit: data };
+  } catch (e: any) {
+    return { visit: null, error: e.message };
+  }
 }
 
 // ---------------------------------------------------------------------------

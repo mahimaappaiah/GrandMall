@@ -808,8 +808,8 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
         .order('connected_at', { ascending: false }),
       supabase
         .from('store_visits')
-        .select('user_id, visited_at, brands(name)')
-        .order('visited_at', { ascending: false })
+        .select('user_id, created_at, brands(name)')
+        .order('created_at', { ascending: false })
     ]);
 
     const sessions = sessionsRes.data;
@@ -897,8 +897,8 @@ export async function fetchCustomersFromSupabase(): Promise<{ data: ConnectedUse
           .order('created_at', { ascending: false }),
         supabase
           .from('store_visits')
-          .select('user_id, visited_at, brands(name)')
-          .order('visited_at', { ascending: false })
+          .select('user_id, created_at, brands(name)')
+          .order('created_at', { ascending: false })
       ]);
 
       const userVisitsMap = new Map<string, string[]>();
@@ -1006,7 +1006,7 @@ export async function fetchCustomerJourneyFromSupabase(userId?: string): Promise
     let query = supabase
       .from('store_visits')
       .select('*, profiles:user_id(id, full_name, phone, email), brands:brand_id(id, name, category, floor, zone)')
-      .order('visited_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (userId) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);

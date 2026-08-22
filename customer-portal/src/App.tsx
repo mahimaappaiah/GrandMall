@@ -1954,8 +1954,8 @@ export default function App() {
     const brandObj = typeof storeNameOrBrand === 'string' ? brands.find(b => b.name === storeNameOrBrand) : storeNameOrBrand;
     const brandId = brandObj?.id;
 
-    if (customerProfile?.id && brandId) {
-      recordStoreVisitInSupabase(customerProfile.id, brandId);
+    if (brandId || brandName) {
+      recordStoreVisitInSupabase(customerProfile?.id, brandId || brandName);
     }
     
     const phoneToUse = mobileNumber || customerProfile?.phone || localStorage.getItem('axionix_active_guest_phone') || '';
