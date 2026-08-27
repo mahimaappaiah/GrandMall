@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Wifi, ShoppingBag, ArrowLeft, ArrowRight, Check, CreditCard, ChevronRight, Search, MapPin, X, CheckCircle2, ShieldCheck, Phone, User, Mail, Calendar, Clock, Menu, LogOut, Trash2, Plus, Minus, Ticket, Tag, AlertCircle, Bot, Sparkles, QrCode, Award, Key, Printer, Download, FileText, Wallet, PlusCircle, Users, Zap, BellRing, Hourglass, Layers, XCircle } from 'lucide-react';
 import { BrandLogo, BrandBanner } from './BrandLogo';
 import {
@@ -1376,6 +1376,7 @@ const matchCategoryTag = (itemCategory: string, selectedSubTag: string): boolean
 };
 
 export default function App() {
+  const sessionVisitedStores = useRef(new Set<string>());
   const [currentStep, setCurrentStep] = useState<'login' | 'category-hub' | 'accessories' | 'fashion' | 'stores'>('login');
   const [activeVisitorTab, setActiveVisitorTab] = useState<'new' | 'returning'>('new');
 
@@ -2024,8 +2025,6 @@ export default function App() {
         }
       });
   };
-
-  const sessionVisitedStores = useRef(new Set<string>());
 
   const recordUserStoreVisit = (storeNameOrBrand: string | Brand) => {
     if (!storeNameOrBrand) return;
