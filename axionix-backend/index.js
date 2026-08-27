@@ -1940,16 +1940,32 @@ app.get('/api/auth/connected-users', async (req, res) => {
 
     const userMap = new Map();
 
-    function findCustomerKey(id, phone, name) {
-      const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
-      const cleanName = (name || '').trim().toLowerCase();
+    function getCleanPhone(p) {
+      return (p || '').replace(/\D/g, '').slice(-10);
+    }
 
-      if (cleanPhone && cleanPhone.length === 10) {
+    function getCleanName(n) {
+      const s = (n || '').trim().toLowerCase();
+      if (!s || s === 'mall guest' || s === 'valued guest' || s.startsWith('guest ') || s.startsWith('customer')) return '';
+      return s;
+    }
+
+    function resolveKey(phone, name, id) {
+      const p = getCleanPhone(phone);
+      const n = getCleanName(name);
+
+      if (p && p.length === 10) {
         for (const [k, u] of userMap.entries()) {
-          const uPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
-          if (uPhone === cleanPhone) return k;
+          if (getCleanPhone(u.phone) === p) return k;
         }
-        return 'phone:' + cleanPhone;
+        return 'phone:' + p;
+      }
+
+      if (n) {
+        for (const [k, u] of userMap.entries()) {
+          if (getCleanName(u.name) === n) return k;
+        }
+        return 'name:' + n;
       }
 
       if (id && id.length > 10) {
@@ -1957,23 +1973,17 @@ app.get('/api/auth/connected-users', async (req, res) => {
         for (const [k, u] of userMap.entries()) {
           if (u.user_id === id) return k;
         }
+        return 'id:' + id;
       }
 
-      if (cleanName && cleanName !== 'mall guest' && cleanName !== 'valued guest' && !cleanName.startsWith('guest ') && !cleanName.startsWith('customer')) {
-        for (const [k, u] of userMap.entries()) {
-          if (u.name && u.name.trim().toLowerCase() === cleanName) return k;
-        }
-        return 'name:' + cleanName;
-      }
-
-      return id ? 'id:' + id : null;
+      return null;
     }
 
     // 1. Ingest profiles
     dbProfiles.forEach((p, idx) => {
-      const cleanPhone = (p.phone || '').replace(/\D/g, '').slice(-10);
+      const cleanPhone = getCleanPhone(p.phone);
       const hasName = Boolean(p.full_name && p.full_name.trim());
-      const key = findCustomerKey(p.id, p.phone, p.full_name) || ('prof-' + (p.id || idx));
+      const key = resolveKey(p.phone, p.full_name, p.id) || ('prof-' + (p.id || idx));
       const custName = hasName ? p.full_name.trim() : (cleanPhone ? `Guest ${cleanPhone.slice(-4)}` : (p.email ? p.email.split('@')[0] : `Customer #${idx + 1}`));
 
       userMap.set(key, {
@@ -1990,11 +2000,11 @@ app.get('/api/auth/connected-users', async (req, res) => {
       });
     });
 
-    // 2. Ingest orders
+    // 2. Ingest orders (attributing ordered stores only to that specific buyer)
     dbOrders.forEach((o, idx) => {
       const rawName = (o.customer_name || '').trim();
-      const cleanPhone = (o.customer_phone || '').replace(/\D/g, '').slice(-10);
-      const key = findCustomerKey(o.user_id, o.customer_phone, o.customer_name) || ('ord-' + (o.user_id || o.id || idx));
+      const cleanPhone = getCleanPhone(o.customer_phone);
+      const key = resolveKey(o.customer_phone, o.customer_name, o.user_id) || ('ord-' + (o.user_id || o.id || idx));
       const existing = userMap.get(key);
 
       const stores = existing?.visitedStores || new Set();
@@ -2033,27 +2043,25 @@ app.get('/api/auth/connected-users', async (req, res) => {
       }
     });
 
-    // 3. Ingest store visits
+    // 3. Ingest store visits (strictly attributed to the customer who visited)
     allVisits.forEach((v, idx) => {
       const rawName = (v.customer_name || '').trim();
-      const key = findCustomerKey(v.user_id, null, rawName) || ('vis-' + (v.user_id || v.id || idx));
-      const existing = userMap.get(key);
+      const cleanName = getCleanName(rawName);
       const storeName = v.brands?.name;
-      const stores = existing?.visitedStores || new Set();
-      if (storeName && storeName !== 'Wi-Fi Captive Portal') stores.add(storeName);
+      if (!storeName || storeName === 'Wi-Fi Captive Portal') return;
 
+      const key = cleanName ? resolveKey(null, rawName, null) : resolveKey(null, null, v.user_id);
+      const existing = key ? userMap.get(key) : null;
       const time = v.created_at;
-      const latestTime = existing?._rawTimestamp && new Date(existing._rawTimestamp) > new Date(time) ? existing._rawTimestamp : time;
 
       if (existing) {
-        if (rawName && (!existing._isNamed || existing.name.startsWith('Customer #') || existing.name.startsWith('Guest '))) {
-          existing.name = rawName;
-          existing._isNamed = true;
+        existing.visitedStores.add(storeName);
+        if (time && (!existing._rawTimestamp || new Date(time) > new Date(existing._rawTimestamp))) {
+          existing._rawTimestamp = time;
         }
-        existing._rawTimestamp = latestTime;
-        existing.visitedStores = stores;
-      } else if (rawName && rawName !== 'Mall Guest' && rawName !== 'Valued Guest') {
-        userMap.set(key, {
+      } else if (cleanName) {
+        const newKey = 'name:' + cleanName;
+        userMap.set(newKey, {
           id: v.user_id || 'vis-usr-' + (idx + 1),
           user_id: v.user_id,
           name: rawName,
@@ -2062,7 +2070,7 @@ app.get('/api/auth/connected-users', async (req, res) => {
           loyaltyTier: 'Bronze',
           is_active: false,
           _rawTimestamp: time,
-          visitedStores: stores,
+          visitedStores: new Set([storeName]),
           _isNamed: true
         });
       }
@@ -2070,8 +2078,8 @@ app.get('/api/auth/connected-users', async (req, res) => {
 
     // 4. Overlay in-memory live active connections
     connectedUsers.forEach((u) => {
-      const cleanPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
-      const key = findCustomerKey(u.user_id || u.id, u.phone, u.name) || (cleanPhone ? 'phone:' + cleanPhone : (u.id || u.name));
+      const cleanPhone = getCleanPhone(u.phone);
+      const key = resolveKey(u.phone, u.name, u.user_id || u.id) || (cleanPhone ? 'phone:' + cleanPhone : (u.id || u.name));
       const existing = userMap.get(key);
       const existingStores = existing?.visitedStores ? Array.from(existing.visitedStores) : [];
       const newStores = Array.isArray(u.visitedStores) ? u.visitedStores : [];

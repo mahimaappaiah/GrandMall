@@ -1044,16 +1044,32 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
 
     const userMap = new Map<string, any>();
 
-    function findCustomerKey(id?: string, phone?: string, name?: string): string | null {
-      const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
-      const cleanName = (name || '').trim().toLowerCase();
+    function getCleanPhone(p?: string): string {
+      return (p || '').replace(/\D/g, '').slice(-10);
+    }
 
-      if (cleanPhone && cleanPhone.length === 10) {
+    function getCleanName(n?: string): string {
+      const s = (n || '').trim().toLowerCase();
+      if (!s || s === 'mall guest' || s === 'valued guest' || s.startsWith('guest ') || s.startsWith('customer')) return '';
+      return s;
+    }
+
+    function resolveKey(phone?: string, name?: string, id?: string): string | null {
+      const p = getCleanPhone(phone);
+      const n = getCleanName(name);
+
+      if (p && p.length === 10) {
         for (const [k, u] of userMap.entries()) {
-          const uPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
-          if (uPhone === cleanPhone) return k;
+          if (getCleanPhone(u.phone) === p) return k;
         }
-        return 'phone:' + cleanPhone;
+        return 'phone:' + p;
+      }
+
+      if (n) {
+        for (const [k, u] of userMap.entries()) {
+          if (getCleanName(u.name) === n) return k;
+        }
+        return 'name:' + n;
       }
 
       if (id && id.length > 10) {
@@ -1061,23 +1077,17 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
         for (const [k, u] of userMap.entries()) {
           if (u.user_id === id) return k;
         }
+        return 'id:' + id;
       }
 
-      if (cleanName && cleanName !== 'mall guest' && cleanName !== 'valued guest' && !cleanName.startsWith('guest ') && !cleanName.startsWith('customer')) {
-        for (const [k, u] of userMap.entries()) {
-          if (u.name && u.name.trim().toLowerCase() === cleanName) return k;
-        }
-        return 'name:' + cleanName;
-      }
-
-      return id ? 'id:' + id : null;
+      return null;
     }
 
     // 1. Ingest all registered / anonymous profiles
     dbProfiles.forEach((p: any, idx: number) => {
-      const cleanPhone = (p.phone || '').replace(/\D/g, '').slice(-10);
+      const cleanPhone = getCleanPhone(p.phone);
       const hasName = Boolean(p.full_name && p.full_name.trim());
-      const key = findCustomerKey(p.id, p.phone, p.full_name) || ('prof-' + (p.id || idx));
+      const key = resolveKey(p.phone, p.full_name, p.id) || ('prof-' + (p.id || idx));
       const custName = hasName 
         ? p.full_name.trim() 
         : (cleanPhone ? `Guest ${cleanPhone.slice(-4)}` : (p.email ? p.email.split('@')[0] : `Customer #${idx + 1}`));
@@ -1096,11 +1106,11 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
       });
     });
 
-    // 2. Ingest all orders (guarantees historical customers with orders are retained)
+    // 2. Ingest all orders (attributing ordered stores only to that specific buyer)
     dbOrders.forEach((o: any, idx: number) => {
       const rawName = (o.customer_name || '').trim();
-      const cleanPhone = (o.customer_phone || '').replace(/\D/g, '').slice(-10);
-      const key = findCustomerKey(o.user_id, o.customer_phone, o.customer_name) || ('ord-' + (o.user_id || o.id || idx));
+      const cleanPhone = getCleanPhone(o.customer_phone);
+      const key = resolveKey(o.customer_phone, o.customer_name, o.user_id) || ('ord-' + (o.user_id || o.id || idx));
       const existing = userMap.get(key);
 
       const stores = existing?.visitedStores || new Set<string>();
@@ -1139,27 +1149,25 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
       }
     });
 
-    // 3. Ingest store visits
+    // 3. Ingest store visits (strictly attributed to the customer who visited)
     allVisits.forEach((v: any, idx: number) => {
       const rawName = (v.customer_name || '').trim();
-      const key = findCustomerKey(v.user_id, null, rawName) || ('vis-' + (v.user_id || v.id || idx));
-      const existing = userMap.get(key);
+      const cleanName = getCleanName(rawName);
       const storeName = v.brands?.name;
-      const stores = existing?.visitedStores || new Set<string>();
-      if (storeName && storeName !== 'Wi-Fi Captive Portal') stores.add(storeName);
+      if (!storeName || storeName === 'Wi-Fi Captive Portal') return;
 
+      const key = cleanName ? resolveKey(null, rawName, null) : resolveKey(null, null, v.user_id);
+      const existing = key ? userMap.get(key) : null;
       const time = v.created_at;
-      const latestTime = existing?._rawTimestamp && new Date(existing._rawTimestamp) > new Date(time) ? existing._rawTimestamp : time;
 
       if (existing) {
-        if (rawName && (!existing._isNamed || existing.name.startsWith('Customer #') || existing.name.startsWith('Guest '))) {
-          existing.name = rawName;
-          existing._isNamed = true;
+        existing.visitedStores.add(storeName);
+        if (time && (!existing._rawTimestamp || new Date(time) > new Date(existing._rawTimestamp))) {
+          existing._rawTimestamp = time;
         }
-        existing._rawTimestamp = latestTime;
-        existing.visitedStores = stores;
-      } else if (rawName && rawName !== 'Mall Guest' && rawName !== 'Valued Guest') {
-        userMap.set(key, {
+      } else if (cleanName) {
+        const newKey = 'name:' + cleanName;
+        userMap.set(newKey, {
           id: v.user_id || 'vis-usr-' + (idx + 1),
           user_id: v.user_id,
           name: rawName,
@@ -1168,24 +1176,25 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
           loyaltyTier: 'Bronze',
           is_active: false,
           _rawTimestamp: time,
-          visitedStores: stores,
+          visitedStores: new Set<string>([storeName]),
           _isNamed: true
         });
       }
     });
 
-    // 4. Ingest customer journeys
+    // 4. Ingest customer journeys (strictly attributed to the customer who journeyed)
     allJourneys.forEach((j: any) => {
       const rawName = (j.customer_name || '').trim();
-      const key = findCustomerKey(j.user_id, null, rawName);
-      if (key) {
-        const existing = userMap.get(key);
-        const storeName = j.brands?.name;
-        if (existing && storeName && storeName !== 'Wi-Fi Captive Portal') {
-          existing.visitedStores.add(storeName);
-          if (j.created_at && (!existing._rawTimestamp || new Date(j.created_at) > new Date(existing._rawTimestamp))) {
-            existing._rawTimestamp = j.created_at;
-          }
+      const cleanName = getCleanName(rawName);
+      const storeName = j.brands?.name;
+      if (!storeName || storeName === 'Wi-Fi Captive Portal') return;
+
+      const key = cleanName ? resolveKey(null, rawName, null) : resolveKey(null, null, j.user_id);
+      const existing = key ? userMap.get(key) : null;
+      if (existing) {
+        existing.visitedStores.add(storeName);
+        if (j.created_at && (!existing._rawTimestamp || new Date(j.created_at) > new Date(existing._rawTimestamp))) {
+          existing._rawTimestamp = j.created_at;
         }
       }
     });
@@ -1208,16 +1217,6 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
           const diffMins = Math.max(1, Math.round(diffMs / (1000 * 60)));
           calculatedDuration = diffMins > 60 ? `${Math.floor(diffMins / 60)}h ${diffMins % 60}m` : `${diffMins} min${diffMins > 1 ? 's' : ''}`;
         }
-      } else if (u._rawTimestamp) {
-        const diffMs = Math.max(0, Date.now() - new Date(u._rawTimestamp).getTime());
-        const diffMins = Math.max(1, Math.round(diffMs / (1000 * 60)));
-        if (diffMins <= 10) {
-          calculatedDuration = `${diffMins} min${diffMins > 1 ? 's' : ''}`;
-        } else if (diffMins < 60) {
-          calculatedDuration = `${Math.min(25, diffMins)} mins`;
-        } else {
-          calculatedDuration = `${Math.min(45, Math.max(2, diffMins % 60))} mins`;
-        }
       }
 
       return {
@@ -1228,21 +1227,18 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
         email: u.email,
         macAddress: session?.mac_address || 'FE:88:99:A1:B2:C3',
         ipAddress: session?.ip_address || '192.168.10.142',
-        connectionTime: formatConnectTimeIST(u._rawTimestamp),
+        connectionTime: u._rawTimestamp ? new Date(u._rawTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today',
         sessionDuration: calculatedDuration,
         visitedStores: visited,
         dataUsed: visited.length > 0 ? `${visited.length * 45} MB` : '15 MB',
         status: isCurrentlyActive ? 'Active' : 'Disconnected',
         vipStatus: true,
         loyaltyTier: u.loyaltyTier || 'Bronze',
-        zone: session?.ap_location || 'Ground Floor Atrium',
+        zone: session?.ap_location || (visited.length > 0 ? `${visited[0]} Wing` : 'Ground Floor Atrium'),
         deviceType: session?.device_type || 'iOS',
         _rawTimestamp: u._rawTimestamp
       };
-    });
-
-    // 6. Sort Newest First (Descending by latest activity / creation timestamp)
-    mappedUsers.sort((a, b) => {
+    }).sort((a, b) => {
       const tA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : 0;
       const tB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : 0;
       return tB - tA;
@@ -1250,7 +1246,7 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
 
     return { data: mappedUsers, isLive: true };
   } catch (err: any) {
-    console.error('[Supabase] Exception in fetchConnectedUsers:', err);
+    console.error('[Supabase] Exception in fetchConnectedUsersFromSupabase:', err);
     return { data: [], isLive: false, error: err.message };
   }
 }
@@ -1275,43 +1271,26 @@ export async function fetchCustomerJourneyFromSupabase(
   }
 
   try {
-    let matchedUserId = userId;
     const cleanPhone = (customerPhone || '').replace(/\D/g, '').slice(-10);
     const cleanName = (customerName || '').trim().toLowerCase();
 
-    // If userId is not a UUID, attempt to resolve from profiles
-    if (!matchedUserId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matchedUserId)) {
-      if (cleanPhone || cleanName) {
-        let profQuery = supabase.from('profiles').select('id, full_name, phone');
-        if (cleanPhone) {
-          profQuery = profQuery.ilike('phone', `%${cleanPhone}%`);
-        } else if (cleanName) {
-          profQuery = profQuery.ilike('full_name', cleanName);
-        }
-        const profRes = await profQuery.limit(1);
-        if (profRes.data && profRes.data.length > 0) {
-          matchedUserId = profRes.data[0].id;
-        }
-      }
-    }
-
-    // Query customer_journey or store_visits strictly for this matched user
-    if (matchedUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matchedUserId)) {
+    // 1. Query customer_journey strictly by customer name if present
+    if (cleanName && cleanName !== 'mall guest' && cleanName !== 'valued guest' && !cleanName.startsWith('guest ') && !cleanName.startsWith('customer')) {
       const { data, error } = await supabase
         .from('customer_journey')
         .select('*, profiles:user_id(id, full_name, phone, email), brands:brand_id(id, name, category, floor, zone)')
-        .eq('user_id', matchedUserId)
+        .ilike('customer_name', cleanName)
         .order('created_at', { ascending: false });
 
       if (data && data.length > 0) {
         return { data: data as CustomerJourney[], isLive: true };
       }
 
-      // Fallback to store_visits for this matched user
+      // Fallback to store_visits for this customer name
       const svRes = await supabase
         .from('store_visits')
         .select('*, profiles:user_id(id, full_name, phone, email), brands:brand_id(id, name, category, floor, zone)')
-        .eq('user_id', matchedUserId)
+        .ilike('customer_name', cleanName)
         .order('created_at', { ascending: false });
 
       if (svRes.data && svRes.data.length > 0) {
@@ -1319,7 +1298,34 @@ export async function fetchCustomerJourneyFromSupabase(
       }
     }
 
-    // If no specific records matched this user, return empty array so we don't leak other users' store visits
+    // 2. Query by phone if available
+    if (cleanPhone && cleanPhone.length === 10) {
+      const { data: profs } = await supabase.from('profiles').select('id, full_name, phone').ilike('phone', `%${cleanPhone}%`).limit(1);
+      if (profs && profs.length > 0 && profs[0].id) {
+        const profId = profs[0].id;
+        const { data } = await supabase
+          .from('customer_journey')
+          .select('*, profiles:user_id(id, full_name, phone, email), brands:brand_id(id, name, category, floor, zone)')
+          .eq('user_id', profId)
+          .order('created_at', { ascending: false });
+
+        if (data && data.length > 0) return { data: data as CustomerJourney[], isLive: true };
+      }
+    }
+
+    // 3. Query by unique UUID user_id
+    if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      const { data } = await supabase
+        .from('customer_journey')
+        .select('*, profiles:user_id(id, full_name, phone, email), brands:brand_id(id, name, category, floor, zone)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (data && data.length > 0) {
+        return { data: data as CustomerJourney[], isLive: true };
+      }
+    }
+
     return { data: [], isLive: true };
   } catch (err: any) {
     console.error('[Supabase] Exception in fetchCustomerJourney:', err);
@@ -1329,7 +1335,6 @@ export async function fetchCustomerJourneyFromSupabase(
 
 // ---------------------------------------------------------------------------
 // COUPONS & REDEMPTIONS SERVICE
-// ---------------------------------------------------------------------------
 export async function fetchCouponsFromSupabase(): Promise<{ data: Coupon[]; isLive: boolean; error?: string }> {
   if (!isSupabaseConfigured) {
     return { data: MOCK_COUPONS, isLive: false };

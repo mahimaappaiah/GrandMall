@@ -88,13 +88,7 @@ export default function App() {
   const [storesList, setStoresList] = useState<Store[]>(MOCK_STORES);
 
   // Real-time Lists State (Preserved and Persistent across browser refreshes)
-  const [usersList, setUsersList] = useState<ConnectedUser[]>(() => {
-    try {
-      const saved = localStorage.getItem('axionix_users_list');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [];
-  });
+  const [usersList, setUsersList] = useState<ConnectedUser[]>([]);
 
   const [ordersList, setOrdersList] = useState<Order[]>(() => {
     try {

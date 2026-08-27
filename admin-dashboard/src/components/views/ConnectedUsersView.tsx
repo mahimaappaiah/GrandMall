@@ -240,7 +240,16 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredUsers.length === 0 ? (
+              {isRefreshing && liveUsersList.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-5 py-12 text-center text-slate-400 font-medium">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+                      <span className="text-xs">Loading live connected users from Supabase...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-5 py-8 text-center text-slate-400 font-medium">
                     No matching connected users found. New customer Wi-Fi logins appear here live.
