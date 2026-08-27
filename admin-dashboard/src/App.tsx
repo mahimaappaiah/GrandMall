@@ -365,16 +365,32 @@ export default function App() {
 
       setUsersList(prev => {
         const cleanP = (guestPhone || '').replace(/\D/g, '').slice(-10);
-        const filtered = prev.filter(u => {
+        const cleanN = (guestName || '').trim().toLowerCase();
+        const isDistinctName = cleanN && cleanN !== 'valued guest' && cleanN !== 'mall guest' && !cleanN.startsWith('guest ');
+
+        const matchPredicate = (u: ConnectedUser) => {
           const uP = (u.phone || '').replace(/\D/g, '').slice(-10);
-          return !(cleanP && uP === cleanP) && !(guestId && (u.id === guestId || (u as any).user_id === guestId));
-        });
-        const existing = prev.find(u => {
-          const uP = (u.phone || '').replace(/\D/g, '').slice(-10);
-          return (cleanP && uP === cleanP) || (guestId && (u.id === guestId || (u as any).user_id === guestId));
-        });
+          if (cleanP && cleanP.length === 10 && uP === cleanP) return true;
+          if (isDistinctName && u.name && u.name.trim().toLowerCase() === cleanN) return true;
+          return false;
+        };
+
+        const existing = prev.find(matchPredicate);
+        const filtered = prev.filter(u => !matchPredicate(u));
         const visitedStores = existing?.visitedStores || [];
-        return [{ ...newUser, ...existing, visitedStores, status: 'Active', connectionTime: 'Just now' }, ...filtered];
+
+        return [{
+          ...newUser,
+          ...existing,
+          id: existing?.id || newUser.id,
+          user_id: existing?.user_id || newUser.user_id,
+          name: guestName || existing?.name,
+          phone: guestPhone || existing?.phone,
+          visitedStores,
+          status: 'Active',
+          connectionTime: 'Just now',
+          _rawTimestamp: new Date().toISOString()
+        }, ...filtered];
       });
 
       setLiveToast({
@@ -781,6 +797,12 @@ export default function App() {
               selectedMall={selectedMall}
               onSelectView={setCurrentView}
               onOpenReportModal={(type) => setReportModalType(type)}
+              stores={storesList}
+              users={usersList}
+              orders={ordersList}
+              reservations={reservationsList}
+              coupons={couponsList}
+              campaigns={campaignsList}
             />
           )}
 

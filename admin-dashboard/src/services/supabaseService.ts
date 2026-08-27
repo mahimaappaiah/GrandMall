@@ -1000,18 +1000,22 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
   try {
     await ensureAdminSession();
 
-    const [profilesRes, visitsRes, journeyRes, sessionsRes] = await Promise.all([
+    const [profilesRes, ordersRes, visitsRes, journeyRes, sessionsRes] = await Promise.all([
       supabase
         .from('profiles')
         .select('id, full_name, email, phone, role, avatar_url, loyalty_tier, is_active, created_at, updated_at')
         .order('created_at', { ascending: false }),
       supabase
+        .from('orders')
+        .select('id, order_number, user_id, customer_name, customer_phone, customer_email, created_at, order_items(products(brands(name)))')
+        .order('created_at', { ascending: false }),
+      supabase
         .from('store_visits')
-        .select('user_id, customer_name, created_at, brands(name)')
+        .select('id, user_id, customer_name, created_at, brands(name)')
         .order('created_at', { ascending: false }),
       supabase
         .from('customer_journey')
-        .select('user_id, customer_name, created_at, action_type, brand_id, details')
+        .select('id, user_id, customer_name, brand_id, created_at, duration_seconds, brands(name)')
         .order('created_at', { ascending: false }),
       supabase
         .from('wifi_sessions')
@@ -1025,81 +1029,175 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
     }
 
     const dbProfiles = profilesRes.data || [];
+    const dbOrders = ordersRes.data || [];
     const allVisits = visitsRes.data || [];
     const allJourneys = journeyRes.data || [];
     const allSessions = sessionsRes.data || [];
 
-    // Map active sessions by user_id and phone
+    // Map active Wi-Fi sessions by user_id
     const activeSessionsMap = new Map<string, any>();
     allSessions.forEach((s: any) => {
-      if (s.user_id && !s.disconnected_at) {
+      if (s.user_id && !s.disconnected_at && s.is_active !== false) {
         activeSessionsMap.set(s.user_id, s);
       }
     });
 
-    const mappedUsers: (ConnectedUser & { _rawTimestamp?: string })[] = dbProfiles.map((p: any, idx: number) => {
-      const pName = (p.full_name || '').trim().toLowerCase();
-      const pId = p.id;
-      const pPhone = (p.phone || '').replace(/\D/g, '').slice(-10);
+    const userMap = new Map<string, any>();
 
-      // Match store visits strictly for THIS specific customer
-      const matchingVisits = allVisits.filter((v: any) => {
-        const vName = (v.customer_name || '').trim().toLowerCase();
-        if (vName && pName) {
-          return vName === pName;
-        }
-        return v.user_id === pId;
-      });
+    function findCustomerKey(id?: string, phone?: string, name?: string): string | null {
+      const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+      const cleanName = (name || '').trim().toLowerCase();
 
-      // Match customer journeys strictly for THIS specific customer
-      const matchingJourneys = allJourneys.filter((j: any) => {
-        const jName = (j.customer_name || '').trim().toLowerCase();
-        if (jName && pName) {
-          return jName === pName;
+      if (cleanPhone && cleanPhone.length === 10) {
+        for (const [k, u] of userMap.entries()) {
+          const uPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
+          if (uPhone === cleanPhone) return k;
         }
-        return j.user_id === pId;
-      });
+        return 'phone:' + cleanPhone;
+      }
 
-      // Collect ONLY the distinct stores actually visited by this customer
-      const storeNames = new Set<string>();
-      matchingVisits.forEach((v: any) => {
-        const name = v.brands?.name;
-        if (name && name !== 'Wi-Fi Captive Portal') {
-          storeNames.add(name);
+      if (id && id.length > 10) {
+        if (userMap.has('id:' + id)) return 'id:' + id;
+        for (const [k, u] of userMap.entries()) {
+          if (u.user_id === id) return k;
         }
-      });
-      matchingJourneys.forEach((j: any) => {
-        const detailStore = j.details?.store_name || j.details?.brand_name || j.details?.store;
-        if (detailStore && detailStore !== 'Wi-Fi Captive Portal') {
-          storeNames.add(detailStore);
-        }
-      });
+      }
 
-      const visited = Array.from(storeNames);
-
-      // Determine latest activity timestamp for IST formatting and sorting
-      let latestTimestamp = p.created_at;
-      matchingVisits.forEach((v: any) => {
-        if (v.created_at && (!latestTimestamp || new Date(v.created_at) > new Date(latestTimestamp))) {
-          latestTimestamp = v.created_at;
+      if (cleanName && cleanName !== 'mall guest' && cleanName !== 'valued guest' && !cleanName.startsWith('guest ') && !cleanName.startsWith('customer')) {
+        for (const [k, u] of userMap.entries()) {
+          if (u.name && u.name.trim().toLowerCase() === cleanName) return k;
         }
-      });
-      matchingJourneys.forEach((j: any) => {
-        if (j.created_at && (!latestTimestamp || new Date(j.created_at) > new Date(latestTimestamp))) {
-          latestTimestamp = j.created_at;
-        }
-      });
+        return 'name:' + cleanName;
+      }
 
+      return id ? 'id:' + id : null;
+    }
+
+    // 1. Ingest all registered / anonymous profiles
+    dbProfiles.forEach((p: any, idx: number) => {
+      const cleanPhone = (p.phone || '').replace(/\D/g, '').slice(-10);
       const hasName = Boolean(p.full_name && p.full_name.trim());
+      const key = findCustomerKey(p.id, p.phone, p.full_name) || ('prof-' + (p.id || idx));
       const custName = hasName 
         ? p.full_name.trim() 
-        : (p.phone ? `Guest ${p.phone.slice(-4)}` : (p.email ? p.email.split('@')[0] : `Customer #${idx + 1}`));
+        : (cleanPhone ? `Guest ${cleanPhone.slice(-4)}` : (p.email ? p.email.split('@')[0] : `Customer #${idx + 1}`));
 
-      const session = activeSessionsMap.get(p.id);
-      const isCurrentlyActive = session ? true : (p.is_active !== false);
+      userMap.set(key, {
+        id: p.id || `usr-${idx + 1}`,
+        user_id: p.id,
+        name: custName,
+        phone: p.phone || (cleanPhone ? `+91 ${cleanPhone}` : '+91 98000 00000'),
+        email: p.email,
+        loyaltyTier: p.loyalty_tier || 'Bronze',
+        is_active: p.is_active !== false,
+        _rawTimestamp: p.created_at,
+        visitedStores: new Set<string>(),
+        _isNamed: hasName
+      });
+    });
 
-      // Calculate accurate session duration from timestamps (e.g. 2 mins, 5 mins)
-      let calculatedDuration = '2 mins';
+    // 2. Ingest all orders (guarantees historical customers with orders are retained)
+    dbOrders.forEach((o: any, idx: number) => {
+      const rawName = (o.customer_name || '').trim();
+      const cleanPhone = (o.customer_phone || '').replace(/\D/g, '').slice(-10);
+      const key = findCustomerKey(o.user_id, o.customer_phone, o.customer_name) || ('ord-' + (o.user_id || o.id || idx));
+      const existing = userMap.get(key);
+
+      const stores = existing?.visitedStores || new Set<string>();
+      (o.order_items || []).forEach((oi: any) => {
+        const bName = oi.products?.brands?.name;
+        if (bName && bName !== 'Wi-Fi Captive Portal') stores.add(bName);
+      });
+
+      const time = o.created_at;
+      const latestTime = existing?._rawTimestamp && new Date(existing._rawTimestamp) > new Date(time) ? existing._rawTimestamp : time;
+
+      if (existing) {
+        if (rawName && (!existing._isNamed || existing.name.startsWith('Customer #') || existing.name.startsWith('Guest '))) {
+          existing.name = rawName;
+          existing._isNamed = true;
+        }
+        if (o.customer_phone && (!existing.phone || existing.phone === '+91 98000 00000')) {
+          existing.phone = o.customer_phone;
+        }
+        if (o.customer_email && !existing.email) existing.email = o.customer_email;
+        existing._rawTimestamp = latestTime;
+        existing.visitedStores = stores;
+      } else if (rawName || cleanPhone) {
+        userMap.set(key, {
+          id: o.user_id || 'ord-usr-' + (idx + 1),
+          user_id: o.user_id,
+          name: rawName || (cleanPhone ? `Guest ${cleanPhone.slice(-4)}` : 'Customer'),
+          phone: o.customer_phone || (cleanPhone ? `+91 ${cleanPhone}` : '+91 98000 00000'),
+          email: o.customer_email,
+          loyaltyTier: 'Silver',
+          is_active: false,
+          _rawTimestamp: time,
+          visitedStores: stores,
+          _isNamed: Boolean(rawName)
+        });
+      }
+    });
+
+    // 3. Ingest store visits
+    allVisits.forEach((v: any, idx: number) => {
+      const rawName = (v.customer_name || '').trim();
+      const key = findCustomerKey(v.user_id, null, rawName) || ('vis-' + (v.user_id || v.id || idx));
+      const existing = userMap.get(key);
+      const storeName = v.brands?.name;
+      const stores = existing?.visitedStores || new Set<string>();
+      if (storeName && storeName !== 'Wi-Fi Captive Portal') stores.add(storeName);
+
+      const time = v.created_at;
+      const latestTime = existing?._rawTimestamp && new Date(existing._rawTimestamp) > new Date(time) ? existing._rawTimestamp : time;
+
+      if (existing) {
+        if (rawName && (!existing._isNamed || existing.name.startsWith('Customer #') || existing.name.startsWith('Guest '))) {
+          existing.name = rawName;
+          existing._isNamed = true;
+        }
+        existing._rawTimestamp = latestTime;
+        existing.visitedStores = stores;
+      } else if (rawName && rawName !== 'Mall Guest' && rawName !== 'Valued Guest') {
+        userMap.set(key, {
+          id: v.user_id || 'vis-usr-' + (idx + 1),
+          user_id: v.user_id,
+          name: rawName,
+          phone: '+91 98000 00000',
+          email: undefined,
+          loyaltyTier: 'Bronze',
+          is_active: false,
+          _rawTimestamp: time,
+          visitedStores: stores,
+          _isNamed: true
+        });
+      }
+    });
+
+    // 4. Ingest customer journeys
+    allJourneys.forEach((j: any) => {
+      const rawName = (j.customer_name || '').trim();
+      const key = findCustomerKey(j.user_id, null, rawName);
+      if (key) {
+        const existing = userMap.get(key);
+        const storeName = j.brands?.name;
+        if (existing && storeName && storeName !== 'Wi-Fi Captive Portal') {
+          existing.visitedStores.add(storeName);
+          if (j.created_at && (!existing._rawTimestamp || new Date(j.created_at) > new Date(existing._rawTimestamp))) {
+            existing._rawTimestamp = j.created_at;
+          }
+        }
+      }
+    });
+
+    // 5. Map into ConnectedUser array
+    const mappedUsers: (ConnectedUser & { _rawTimestamp?: string })[] = Array.from(userMap.values()).map((u: any, idx: number) => {
+      const session = u.user_id ? activeSessionsMap.get(u.user_id) : null;
+      const isCurrentlyActive = session ? true : (u.is_active === true && u._rawTimestamp && (Date.now() - new Date(u._rawTimestamp).getTime() < 3600000));
+      const visited = Array.from(u.visitedStores) as string[];
+
+      // Calculate accurate session duration from timestamps
+      let calculatedDuration = '15 mins';
       if (session?.connected_at) {
         if (session.disconnected_at) {
           const diffMs = Math.max(0, new Date(session.disconnected_at).getTime() - new Date(session.connected_at).getTime());
@@ -1110,8 +1208,8 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
           const diffMins = Math.max(1, Math.round(diffMs / (1000 * 60)));
           calculatedDuration = diffMins > 60 ? `${Math.floor(diffMins / 60)}h ${diffMins % 60}m` : `${diffMins} min${diffMins > 1 ? 's' : ''}`;
         }
-      } else if (p.created_at) {
-        const diffMs = Math.max(0, Date.now() - new Date(p.created_at).getTime());
+      } else if (u._rawTimestamp) {
+        const diffMs = Math.max(0, Date.now() - new Date(u._rawTimestamp).getTime());
         const diffMins = Math.max(1, Math.round(diffMs / (1000 * 60)));
         if (diffMins <= 10) {
           calculatedDuration = `${diffMins} min${diffMins > 1 ? 's' : ''}`;
@@ -1123,27 +1221,27 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
       }
 
       return {
-        id: p.id || `usr-${idx + 1}`,
-        user_id: p.id,
-        name: custName,
-        phone: p.phone || '+91 98000 00000',
-        email: p.email,
+        id: u.id || `usr-${idx + 1}`,
+        user_id: u.user_id,
+        name: u.name,
+        phone: u.phone || '+91 98000 00000',
+        email: u.email,
         macAddress: session?.mac_address || 'FE:88:99:A1:B2:C3',
         ipAddress: session?.ip_address || '192.168.10.142',
-        connectionTime: formatConnectTimeIST(latestTimestamp),
+        connectionTime: formatConnectTimeIST(u._rawTimestamp),
         sessionDuration: calculatedDuration,
         visitedStores: visited,
         dataUsed: visited.length > 0 ? `${visited.length * 45} MB` : '15 MB',
         status: isCurrentlyActive ? 'Active' : 'Disconnected',
         vipStatus: true,
-        loyaltyTier: p.loyalty_tier || 'Bronze',
+        loyaltyTier: u.loyaltyTier || 'Bronze',
         zone: session?.ap_location || 'Ground Floor Atrium',
         deviceType: session?.device_type || 'iOS',
-        _rawTimestamp: latestTimestamp
+        _rawTimestamp: u._rawTimestamp
       };
     });
 
-    // 4. Sort Newest First (Descending by latest activity / creation timestamp)
+    // 6. Sort Newest First (Descending by latest activity / creation timestamp)
     mappedUsers.sort((a, b) => {
       const tA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : 0;
       const tB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : 0;

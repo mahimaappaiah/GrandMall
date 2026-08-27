@@ -1919,78 +1919,203 @@ app.get('/api/admin/metrics', async (req, res) => {
 
 app.get('/api/auth/connected-users', async (req, res) => {
   try {
-    const [profilesRes, visitsRes] = await Promise.all([
+    const [profilesRes, ordersRes, visitsRes, sessionsRes] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('store_visits').select('user_id, created_at, brands(name)').order('created_at', { ascending: false })
+      supabase.from('orders').select('id, user_id, customer_name, customer_phone, customer_email, created_at, order_items(products(brands(name)))').order('created_at', { ascending: false }),
+      supabase.from('store_visits').select('id, user_id, customer_name, created_at, brands(name)').order('created_at', { ascending: false }),
+      supabase.from('wifi_sessions').select('*').order('connected_at', { ascending: false })
     ]);
 
-    const userVisitsMap = new Map();
-    const userLatestTimeMap = new Map();
-    if (visitsRes.data) {
-      visitsRes.data.forEach(v => {
-        if (v.user_id && v.brands?.name) {
-          const arr = userVisitsMap.get(v.user_id) || [];
-          if (!arr.includes(v.brands.name)) arr.push(v.brands.name);
-          userVisitsMap.set(v.user_id, arr);
+    const dbProfiles = profilesRes.data || [];
+    const dbOrders = ordersRes.data || [];
+    const allVisits = visitsRes.data || [];
+    const allSessions = sessionsRes.data || [];
 
-          if (v.created_at) {
-            const curTime = userLatestTimeMap.get(v.user_id);
-            if (!curTime || new Date(v.created_at) > new Date(curTime)) {
-              userLatestTimeMap.set(v.user_id, v.created_at);
-            }
-          }
-        }
-      });
-    }
+    const activeSessionsMap = new Map();
+    allSessions.forEach((s) => {
+      if (s.user_id && !s.disconnected_at && s.is_active !== false) {
+        activeSessionsMap.set(s.user_id, s);
+      }
+    });
 
     const userMap = new Map();
 
-    if (profilesRes.data && Array.isArray(profilesRes.data)) {
-      profilesRes.data.forEach((p, idx) => {
-        const cleanP = (p.phone || '').replace(/\D/g, '').slice(-10);
-        const key = cleanP || (p.full_name || '').toLowerCase() || p.id;
-        const latestTime = userLatestTimeMap.get(p.id) || p.created_at;
+    function findCustomerKey(id, phone, name) {
+      const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+      const cleanName = (name || '').trim().toLowerCase();
 
-        userMap.set(key, {
-          id: p.id || `usr-${idx + 1}`,
-          user_id: p.id,
-          name: p.full_name || (cleanP ? `Guest ${cleanP.slice(-4)}` : 'Valued Guest'),
-          phone: p.phone || '+91 98000 00000',
-          email: p.email,
-          macAddress: 'FE:88:99:A1:B2:C3',
-          ipAddress: '192.168.10.142',
-          connectionTime: latestTime ? new Date(latestTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today',
-          sessionDuration: '15m',
-          visitedStores: userVisitsMap.get(p.id) || [],
-          dataUsed: '180 MB',
-          status: p.is_active !== false ? 'Active' : 'Disconnected',
-          vipStatus: true,
-          loyaltyTier: p.loyalty_tier || 'Bronze',
-          zone: 'Ground Floor Atrium',
-          deviceType: 'iOS',
-          _rawTimestamp: latestTime
-        });
-      });
+      if (cleanPhone && cleanPhone.length === 10) {
+        for (const [k, u] of userMap.entries()) {
+          const uPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
+          if (uPhone === cleanPhone) return k;
+        }
+        return 'phone:' + cleanPhone;
+      }
+
+      if (id && id.length > 10) {
+        if (userMap.has('id:' + id)) return 'id:' + id;
+        for (const [k, u] of userMap.entries()) {
+          if (u.user_id === id) return k;
+        }
+      }
+
+      if (cleanName && cleanName !== 'mall guest' && cleanName !== 'valued guest' && !cleanName.startsWith('guest ') && !cleanName.startsWith('customer')) {
+        for (const [k, u] of userMap.entries()) {
+          if (u.name && u.name.trim().toLowerCase() === cleanName) return k;
+        }
+        return 'name:' + cleanName;
+      }
+
+      return id ? 'id:' + id : null;
     }
 
-    connectedUsers.forEach(u => {
-      const cleanP = (u.phone || '').replace(/\D/g, '').slice(-10);
-      const key = cleanP || (u.name || '').toLowerCase() || u.id;
+    // 1. Ingest profiles
+    dbProfiles.forEach((p, idx) => {
+      const cleanPhone = (p.phone || '').replace(/\D/g, '').slice(-10);
+      const hasName = Boolean(p.full_name && p.full_name.trim());
+      const key = findCustomerKey(p.id, p.phone, p.full_name) || ('prof-' + (p.id || idx));
+      const custName = hasName ? p.full_name.trim() : (cleanPhone ? `Guest ${cleanPhone.slice(-4)}` : (p.email ? p.email.split('@')[0] : `Customer #${idx + 1}`));
+
+      userMap.set(key, {
+        id: p.id || `usr-${idx + 1}`,
+        user_id: p.id,
+        name: custName,
+        phone: p.phone || (cleanPhone ? `+91 ${cleanPhone}` : '+91 98000 00000'),
+        email: p.email,
+        loyaltyTier: p.loyalty_tier || 'Bronze',
+        is_active: p.is_active !== false,
+        _rawTimestamp: p.created_at,
+        visitedStores: new Set(),
+        _isNamed: hasName
+      });
+    });
+
+    // 2. Ingest orders
+    dbOrders.forEach((o, idx) => {
+      const rawName = (o.customer_name || '').trim();
+      const cleanPhone = (o.customer_phone || '').replace(/\D/g, '').slice(-10);
+      const key = findCustomerKey(o.user_id, o.customer_phone, o.customer_name) || ('ord-' + (o.user_id || o.id || idx));
       const existing = userMap.get(key);
-      const existingStores = existing?.visitedStores || [];
+
+      const stores = existing?.visitedStores || new Set();
+      (o.order_items || []).forEach((oi) => {
+        const bName = oi.products?.brands?.name;
+        if (bName && bName !== 'Wi-Fi Captive Portal') stores.add(bName);
+      });
+
+      const time = o.created_at;
+      const latestTime = existing?._rawTimestamp && new Date(existing._rawTimestamp) > new Date(time) ? existing._rawTimestamp : time;
+
+      if (existing) {
+        if (rawName && (!existing._isNamed || existing.name.startsWith('Customer #') || existing.name.startsWith('Guest '))) {
+          existing.name = rawName;
+          existing._isNamed = true;
+        }
+        if (o.customer_phone && (!existing.phone || existing.phone === '+91 98000 00000')) {
+          existing.phone = o.customer_phone;
+        }
+        if (o.customer_email && !existing.email) existing.email = o.customer_email;
+        existing._rawTimestamp = latestTime;
+        existing.visitedStores = stores;
+      } else if (rawName || cleanPhone) {
+        userMap.set(key, {
+          id: o.user_id || 'ord-usr-' + (idx + 1),
+          user_id: o.user_id,
+          name: rawName || (cleanPhone ? `Guest ${cleanPhone.slice(-4)}` : 'Customer'),
+          phone: o.customer_phone || (cleanPhone ? `+91 ${cleanPhone}` : '+91 98000 00000'),
+          email: o.customer_email,
+          loyaltyTier: 'Silver',
+          is_active: false,
+          _rawTimestamp: time,
+          visitedStores: stores,
+          _isNamed: Boolean(rawName)
+        });
+      }
+    });
+
+    // 3. Ingest store visits
+    allVisits.forEach((v, idx) => {
+      const rawName = (v.customer_name || '').trim();
+      const key = findCustomerKey(v.user_id, null, rawName) || ('vis-' + (v.user_id || v.id || idx));
+      const existing = userMap.get(key);
+      const storeName = v.brands?.name;
+      const stores = existing?.visitedStores || new Set();
+      if (storeName && storeName !== 'Wi-Fi Captive Portal') stores.add(storeName);
+
+      const time = v.created_at;
+      const latestTime = existing?._rawTimestamp && new Date(existing._rawTimestamp) > new Date(time) ? existing._rawTimestamp : time;
+
+      if (existing) {
+        if (rawName && (!existing._isNamed || existing.name.startsWith('Customer #') || existing.name.startsWith('Guest '))) {
+          existing.name = rawName;
+          existing._isNamed = true;
+        }
+        existing._rawTimestamp = latestTime;
+        existing.visitedStores = stores;
+      } else if (rawName && rawName !== 'Mall Guest' && rawName !== 'Valued Guest') {
+        userMap.set(key, {
+          id: v.user_id || 'vis-usr-' + (idx + 1),
+          user_id: v.user_id,
+          name: rawName,
+          phone: '+91 98000 00000',
+          email: undefined,
+          loyaltyTier: 'Bronze',
+          is_active: false,
+          _rawTimestamp: time,
+          visitedStores: stores,
+          _isNamed: true
+        });
+      }
+    });
+
+    // 4. Overlay in-memory live active connections
+    connectedUsers.forEach((u) => {
+      const cleanPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
+      const key = findCustomerKey(u.user_id || u.id, u.phone, u.name) || (cleanPhone ? 'phone:' + cleanPhone : (u.id || u.name));
+      const existing = userMap.get(key);
+      const existingStores = existing?.visitedStores ? Array.from(existing.visitedStores) : [];
       const newStores = Array.isArray(u.visitedStores) ? u.visitedStores : [];
-      const mergedStores = Array.from(new Set([...existingStores, ...newStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+      const mergedStores = new Set([...existingStores, ...newStores].filter(s => s && s !== 'Wi-Fi Captive Portal'));
 
       userMap.set(key, {
         ...existing,
         ...u,
+        id: existing?.id || u.id,
+        user_id: existing?.user_id || u.user_id,
+        name: (existing?.name && existing._isNamed) ? existing.name : (u.name || existing?.name || 'Valued Guest'),
+        phone: existing?.phone || u.phone || '+91 98000 00000',
+        email: existing?.email || u.email,
         visitedStores: mergedStores,
         status: u.status || existing?.status || 'Active',
         _rawTimestamp: u._rawTimestamp || u.connectionTime || existing?._rawTimestamp
       });
     });
 
-    const sortedUsers = Array.from(userMap.values()).sort((a, b) => {
+    const sortedUsers = Array.from(userMap.values()).map((u, idx) => {
+      const session = u.user_id ? activeSessionsMap.get(u.user_id) : null;
+      const isCurrentlyActive = u.status === 'Active' || session ? true : (u.is_active === true && u._rawTimestamp && (Date.now() - new Date(u._rawTimestamp).getTime() < 3600000));
+      const storesArr = u.visitedStores instanceof Set ? Array.from(u.visitedStores) : (Array.isArray(u.visitedStores) ? u.visitedStores : []);
+
+      return {
+        id: u.id || `usr-${idx + 1}`,
+        user_id: u.user_id,
+        name: u.name,
+        phone: u.phone || '+91 98000 00000',
+        email: u.email,
+        macAddress: u.macAddress || session?.mac_address || 'FE:88:99:A1:B2:C3',
+        ipAddress: u.ipAddress || session?.ip_address || '192.168.10.142',
+        connectionTime: u.connectionTime || (u._rawTimestamp ? new Date(u._rawTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'),
+        sessionDuration: u.sessionDuration || '15m',
+        visitedStores: storesArr,
+        dataUsed: u.dataUsed || (storesArr.length > 0 ? `${storesArr.length * 45} MB` : '15 MB'),
+        status: isCurrentlyActive ? 'Active' : 'Disconnected',
+        vipStatus: true,
+        loyaltyTier: u.loyaltyTier || 'Bronze',
+        zone: u.zone || session?.ap_location || 'Ground Floor Atrium',
+        deviceType: u.deviceType || session?.device_type || 'iOS',
+        _rawTimestamp: u._rawTimestamp
+      };
+    }).sort((a, b) => {
       const tA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : 0;
       const tB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : 0;
       return tB - tA;

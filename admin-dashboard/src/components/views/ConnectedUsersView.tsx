@@ -10,19 +10,26 @@ interface ConnectedUsersViewProps {
   users?: ConnectedUser[];
 }
 
-export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelectUserJourney }) => {
+export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelectUserJourney, users: propUsers }) => {
   const [search, setSearch] = useState('');
   const [deviceFilter, setDeviceFilter] = useState('All');
   const [vipOnly, setVipOnly] = useState(false);
-  const [liveUsersList, setLiveUsersList] = useState<ConnectedUser[]>([]);
+  const [liveUsersList, setLiveUsersList] = useState<ConnectedUser[]>(propUsers && propUsers.length > 0 ? propUsers : []);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Synchronize state when parent passes updated live users
+  useEffect(() => {
+    if (propUsers && propUsers.length > 0) {
+      setLiveUsersList(propUsers);
+    }
+  }, [propUsers]);
 
   const fetchLiveConnectedUsers = useCallback(async () => {
     setIsRefreshing(true);
     try {
       // 1. Fetch live profiles & Wi-Fi sessions from Supabase
       const supaRes = await fetchConnectedUsersFromSupabase();
-      let users = Array.isArray(supaRes.data) ? supaRes.data : [];
+      let users = Array.isArray(supaRes.data) && supaRes.data.length > 0 ? supaRes.data : [];
 
       // 2. Query backend live captive session list as additional real-time source
       try {
@@ -31,21 +38,35 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
         if (bData && bData.success && Array.isArray(bData.users) && bData.users.length > 0) {
           const userMap = new Map<string, ConnectedUser>();
           
+          function findKey(u: any): string {
+            const cleanPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
+            if (cleanPhone && cleanPhone.length === 10) return 'phone:' + cleanPhone;
+            if (u.id && u.id.length > 10) return 'id:' + u.id;
+            if (u.user_id && u.user_id.length > 10) return 'id:' + u.user_id;
+            const cleanName = (u.name || '').trim().toLowerCase();
+            if (cleanName && cleanName !== 'valued guest' && cleanName !== 'mall guest' && !cleanName.startsWith('guest ') && !cleanName.startsWith('customer')) {
+              return 'name:' + cleanName;
+            }
+            return u.id || `rec-${Math.random().toString(36).slice(2, 9)}`;
+          }
+
           // Seed with Supabase users
           users.forEach(u => {
-            const phoneKey = (u.phone || '').replace(/\D/g, '').slice(-10);
-            const key = phoneKey || (u.id || '').toLowerCase() || (u.name || '').toLowerCase();
-            userMap.set(key, u);
+            userMap.set(findKey(u), u);
           });
 
           // Overlay real-time active statuses from backend gateway
           bData.users.forEach((bu: any) => {
-            const phoneKey = (bu.phone || '').replace(/\D/g, '').slice(-10);
-            const key = phoneKey || (bu.id || '').toLowerCase() || (bu.name || '').toLowerCase();
+            const key = findKey(bu);
             const existing = userMap.get(key);
             if (existing) {
+              const existingStores = existing.visitedStores || [];
+              const newStores = bu.visitedStores || [];
+              const mergedStores = Array.from(new Set([...existingStores, ...newStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
               userMap.set(key, {
                 ...existing,
+                visitedStores: mergedStores,
                 status: bu.status || existing.status || 'Active',
                 zone: bu.zone || existing.zone || 'Ground Floor Atrium',
                 dataUsed: bu.dataUsed || existing.dataUsed || '45 MB'
@@ -66,7 +87,9 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
         return new Date(timeB).getTime() - new Date(timeA).getTime();
       });
 
-      setLiveUsersList(users);
+      if (users.length > 0) {
+        setLiveUsersList(users);
+      }
     } catch (e) {
       console.warn('[ConnectedUsersView] Error fetching live users:', e);
     } finally {

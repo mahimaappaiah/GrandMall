@@ -80,26 +80,57 @@ interface DashboardViewProps {
   selectedMall: string;
   onSelectView: (view: ViewType) => void;
   onOpenReportModal: (type: string) => void;
+  stores?: Store[];
+  users?: ConnectedUser[];
+  orders?: Order[];
+  reservations?: Reservation[];
+  coupons?: Coupon[];
+  campaigns?: Campaign[];
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   selectedMall,
   onSelectView,
-  onOpenReportModal
+  onOpenReportModal,
+  stores: propStores,
+  users: propUsers,
+  orders: propOrders,
+  reservations: propReservations,
+  coupons: propCoupons,
+  campaigns: propCampaigns
 }) => {
   const [activityFeed, setActivityFeed] = useState<ActivityLog[]>(MOCK_ACTIVITY_FEED);
-  const [campaignsList, setCampaignsList] = useState<Campaign[]>(MOCK_CAMPAIGNS);
-  const [couponsList, setCouponsList] = useState<Coupon[]>([]);
-  const [ordersList, setOrdersList] = useState<Order[]>([]);
-  const [usersList, setUsersList] = useState<ConnectedUser[]>([]);
-  const [reservationsList, setReservationsList] = useState<Reservation[]>([]);
-  const [storesList, setStoresList] = useState<Store[]>([]);
+  const [campaignsList, setCampaignsList] = useState<Campaign[]>(propCampaigns || MOCK_CAMPAIGNS);
+  const [couponsList, setCouponsList] = useState<Coupon[]>(propCoupons || []);
+  const [ordersList, setOrdersList] = useState<Order[]>(propOrders || []);
+  const [usersList, setUsersList] = useState<ConnectedUser[]>(propUsers || []);
+  const [reservationsList, setReservationsList] = useState<Reservation[]>(propReservations || []);
+  const [storesList, setStoresList] = useState<Store[]>(propStores || []);
   
   const [topStoresChart, setTopStoresChart] = useState<TopStoresChartData>(TOP_PERFORMING_STORES_CHART);
   const [categoryDistributionChart, setCategoryDistributionChart] = useState<CategoryDistributionChartData>(CATEGORY_DISTRIBUTION);
   const [highestDwellZone, setHighestDwellZone] = useState<string>('Food Court (32%)');
   const [isLivePaused, setIsLivePaused] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+
+  // Sync state when props update
+  useEffect(() => {
+    if (propStores && propStores.length > 0) setStoresList(propStores);
+  }, [propStores]);
+  useEffect(() => {
+    if (propUsers && propUsers.length > 0) setUsersList(propUsers);
+  }, [propUsers]);
+  useEffect(() => {
+    if (propOrders && propOrders.length > 0) setOrdersList(propOrders);
+  }, [propOrders]);
+  useEffect(() => {
+    if (propReservations && propReservations.length > 0) setReservationsList(propReservations);
+  }, [propReservations]);
+  useEffect(() => {
+    if (propCoupons && propCoupons.length > 0) setCouponsList(propCoupons);
+  }, [propCoupons]);
+  useEffect(() => {
+    if (propCampaigns && propCampaigns.length > 0) setCampaignsList(propCampaigns);
+  }, [propCampaigns]);
 
   // Unified Live Supabase Data Fetcher
   const loadAllLiveDashboardData = async () => {
@@ -159,13 +190,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [selectedMall, isLivePaused]);
 
-  // Calculate Real Dynamic Live Metrics matching AXIONIX Mall Twin & Supabase
-  const liveUsersCount = usersList.length > 0 ? usersList.length : 93;
+  // Calculate Real Dynamic Live Metrics strictly from live authoritative data
+  const liveUsersCount = usersList.length;
   
-  const totalStoreFootfall = storesList.reduce((sum, s) => sum + (Number(s.visitorsToday || (s as any).visitors_today) || 0), 0) || 16355;
-  const totalStoreOrders = storesList.reduce((sum, s) => sum + (Number(s.ordersCount || (s as any).orders_count) || 0), 0) || 3759;
-  const totalStoreBookings = storesList.reduce((sum, s) => sum + (Number(s.reservationsCount || (s as any).reservations_count) || 0), 0) || 382;
-  const totalStoreRevenue = storesList.reduce((sum, s) => sum + (Number(s.revenueToday || (s as any).revenue_today) || 0), 0) || 60705000;
+  const totalStoreFootfall = storesList.reduce((sum, s) => sum + (Number(s.visitorsToday || (s as any).visitors_today) || 0), 0);
+  const totalStoreOrders = storesList.reduce((sum, s) => sum + (Number(s.ordersCount || (s as any).orders_count) || 0), 0);
+  const totalStoreBookings = storesList.reduce((sum, s) => sum + (Number(s.reservationsCount || (s as any).reservations_count) || 0), 0);
+  const totalStoreRevenue = storesList.reduce((sum, s) => sum + (Number(s.revenueToday || (s as any).revenue_today) || 0), 0);
 
   const liveOrdersRev = ordersList.reduce((sum, o) => sum + (Number(o.totalAmount || (o as any).total_amount) || 0), 0);
   const totalGrossRevenue = totalStoreRevenue + liveOrdersRev;
@@ -175,10 +206,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const liveRevenueStr = totalGrossRevenue >= 10000000 
     ? `₹${(totalGrossRevenue / 10000000).toFixed(2)} Cr`
-    : `₹${(totalGrossRevenue / 100000).toFixed(2)} L`;
+    : (totalGrossRevenue >= 100000 ? `₹${(totalGrossRevenue / 100000).toFixed(2)} L` : `₹${totalGrossRevenue.toLocaleString()}`);
 
   const totalCouponsRedeemed = couponsList.reduce((sum, c) => sum + (Number(c.redeemedCount) || 0), 0) ||
-    campaignsList.reduce((sum, c) => sum + (Number(c.couponsRedeemed) || 0), 0) || 2111;
+    campaignsList.reduce((sum, c) => sum + (Number(c.couponsRedeemed) || 0), 0);
 
   // 8 Dynamic KPI Cards matching real live database state
   const dynamicKpiData: KpiItem[] = useMemo(() => [
