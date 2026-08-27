@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, ShoppingBag, ArrowLeft, ArrowRight, Check, CreditCard, ChevronRight, Search, MapPin, X, CheckCircle2, ShieldCheck, Phone, User, Mail, Calendar, Clock, Menu, LogOut, Trash2, Plus, Minus, Ticket, Tag, AlertCircle, Bot, Sparkles, QrCode, Award, Key, Printer, Download, FileText, Wallet, PlusCircle, Users, Zap, BellRing, Hourglass, Layers } from 'lucide-react';
+import { Wifi, ShoppingBag, ArrowLeft, ArrowRight, Check, CreditCard, ChevronRight, Search, MapPin, X, CheckCircle2, ShieldCheck, Phone, User, Mail, Calendar, Clock, Menu, LogOut, Trash2, Plus, Minus, Ticket, Tag, AlertCircle, Bot, Sparkles, QrCode, Award, Key, Printer, Download, FileText, Wallet, PlusCircle, Users, Zap, BellRing, Hourglass, Layers, XCircle } from 'lucide-react';
 import { BrandLogo, BrandBanner } from './BrandLogo';
 import {
   authenticateOrGetCustomerProfile,
@@ -14,6 +14,7 @@ import {
   joinReservationWaitlist,
   redeemCouponInSupabase,
   recordWifiSessionInSupabase,
+  disconnectWifiSessionInSupabase,
   recordStoreVisitInSupabase,
   fetchLoyaltyAccount,
   earnLoyaltyPoints,
@@ -76,46 +77,45 @@ interface Coupon {
   storeName: string;
   discountType: 'percentage' | 'flat';
   discountValue: number;
-  maxDiscount?: number;
   minCartTotal?: number;
 }
 
 const PRELOADED_COUPONS: Coupon[] = [
-  { id: 'cpn-1', code: 'NIKEVIP15', title: '15% Off Nike Apparel & Shoes', discount: '15% OFF', storeName: 'Nike Flagship', discountType: 'percentage', discountValue: 15, maxDiscount: 3000, minCartTotal: 0 },
-  { id: 'cpn-2', code: 'ZARASUMMER10', title: '10% Off Zara Summer Collection', discount: '10% OFF', storeName: 'Zara Flagship', discountType: 'percentage', discountValue: 10, maxDiscount: 2000, minCartTotal: 0 },
+  { id: 'cpn-1', code: 'NIKEVIP15', title: '15% Off Nike Apparel & Shoes', discount: '15% OFF', storeName: 'Nike Flagship', discountType: 'percentage', discountValue: 15, minCartTotal: 0 },
+  { id: 'cpn-2', code: 'ZARASUMMER10', title: '10% Off Zara Summer Collection', discount: '10% OFF', storeName: 'Zara Flagship', discountType: 'percentage', discountValue: 10, minCartTotal: 0 },
   { id: 'cpn-3', code: 'GUCCIEXCLUSIVE', title: 'Flat ₹10,000 Off Luxury Orders', discount: '₹10,000 OFF', storeName: 'Gucci Boutique', discountType: 'flat', discountValue: 10000, minCartTotal: 0 },
-  { id: 'cpn-4', code: 'PRADAVIP15', title: '15% Off Prada Haute Couture', discount: '15% OFF', storeName: 'Prada Atelier', discountType: 'percentage', discountValue: 15, maxDiscount: 15000, minCartTotal: 0 },
-  { id: 'cpn-5', code: 'USPOLOVIP20', title: '20% Off U.S. Polo Heritage Collection', discount: '20% OFF', storeName: 'U.S. Polo Assn.', discountType: 'percentage', discountValue: 20, maxDiscount: 2500, minCartTotal: 0 },
-  { id: 'cpn-6', code: 'HMESSENTIALS20', title: '20% Off H&M Modern Apparel', discount: '20% OFF', storeName: 'H&M Everyday Fashion', discountType: 'percentage', discountValue: 20, maxDiscount: 2000, minCartTotal: 0 },
+  { id: 'cpn-4', code: 'PRADAVIP15', title: '15% Off Prada Haute Couture', discount: '15% OFF', storeName: 'Prada Atelier', discountType: 'percentage', discountValue: 15, minCartTotal: 0 },
+  { id: 'cpn-5', code: 'USPOLOVIP20', title: '20% Off U.S. Polo Heritage Collection', discount: '20% OFF', storeName: 'U.S. Polo Assn.', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
+  { id: 'cpn-6', code: 'HMESSENTIALS20', title: '20% Off H&M Modern Apparel', discount: '20% OFF', storeName: 'H&M Everyday Fashion', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
   { id: 'cpn-7', code: 'STARBUCKSFREE', title: 'Flat ₹300 Off Starbucks Brunch', discount: '₹300 OFF', storeName: 'Starbucks Reserve', discountType: 'flat', discountValue: 300, minCartTotal: 0 },
-  { id: 'cpn-8', code: 'DINTAIFUNG20', title: '20% Off Asian Fine Dining', discount: '20% OFF', storeName: 'Din Tai Fung', discountType: 'percentage', discountValue: 20, maxDiscount: 2000, minCartTotal: 0 },
-  { id: 'cpn-9', code: 'PIZZAEXPRESS15', title: '15% Off PizzaExpress Gourmet Dining', discount: '15% OFF', storeName: 'PizzaExpress Gourmet', discountType: 'percentage', discountValue: 15, maxDiscount: 1500, minCartTotal: 0 },
+  { id: 'cpn-8', code: 'DINTAIFUNG20', title: '20% Off Asian Fine Dining', discount: '20% OFF', storeName: 'Din Tai Fung', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
+  { id: 'cpn-9', code: 'PIZZAEXPRESS15', title: '15% Off PizzaExpress Gourmet Dining', discount: '15% OFF', storeName: 'PizzaExpress Gourmet', discountType: 'percentage', discountValue: 15, minCartTotal: 0 },
   { id: 'cpn-10', code: 'COFFEEDAY100', title: 'Flat ₹100 Off Artisanal Coffee & Bakery', discount: '₹100 OFF', storeName: 'Coffee Day', discountType: 'flat', discountValue: 100, minCartTotal: 0 },
-  { id: 'cpn-11', code: 'SUBWAYFRESH15', title: '15% Off Subway Fresh Subs & Combos', discount: '15% OFF', storeName: 'Subway Fresh Gourmet', discountType: 'percentage', discountValue: 15, maxDiscount: 500, minCartTotal: 0 },
-  { id: 'cpn-12', code: 'HAAGEN20', title: '20% Off Gourmet Ice Cream & Waffles', discount: '20% OFF', storeName: 'Häagen-Dazs', discountType: 'percentage', discountValue: 20, maxDiscount: 1000, minCartTotal: 0 },
-  { id: 'cpn-13', code: 'LVMAISON10', title: '10% Off LV Monogram Leather & Bags', discount: '10% OFF', storeName: 'Louis Vuitton Maison', discountType: 'percentage', discountValue: 10, maxDiscount: 20000, minCartTotal: 0 },
-  { id: 'cpn-14', code: 'HERMESLUX10', title: '10% Off Hermès Leather & Birkin', discount: '10% OFF', storeName: 'Hermès Leather Lounge', discountType: 'percentage', discountValue: 10, maxDiscount: 50000, minCartTotal: 0 },
-  { id: 'cpn-15', code: 'COACHNEWYORK20', title: '20% Off Coach Leather Bags & Totes', discount: '20% OFF', storeName: 'Coach New York', discountType: 'percentage', discountValue: 20, maxDiscount: 10000, minCartTotal: 0 },
-  { id: 'cpn-16', code: 'BOTTEGAVIP15', title: '15% Off Intrecciato Woven Leather', discount: '15% OFF', storeName: 'Bottega Veneta', discountType: 'percentage', discountValue: 15, maxDiscount: 30000, minCartTotal: 0 },
+  { id: 'cpn-11', code: 'SUBWAYFRESH15', title: '15% Off Subway Fresh Subs & Combos', discount: '15% OFF', storeName: 'Subway Fresh Gourmet', discountType: 'percentage', discountValue: 15, minCartTotal: 0 },
+  { id: 'cpn-12', code: 'HAAGEN20', title: '20% Off Gourmet Ice Cream & Waffles', discount: '20% OFF', storeName: 'Häagen-Dazs', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
+  { id: 'cpn-13', code: 'LVMAISON10', title: '10% Off LV Monogram Leather & Bags', discount: '10% OFF', storeName: 'Louis Vuitton Maison', discountType: 'percentage', discountValue: 10, minCartTotal: 0 },
+  { id: 'cpn-14', code: 'HERMESLUX10', title: '10% Off Hermès Leather & Birkin', discount: '10% OFF', storeName: 'Hermès Leather Lounge', discountType: 'percentage', discountValue: 10, minCartTotal: 0 },
+  { id: 'cpn-15', code: 'COACHNEWYORK20', title: '20% Off Coach Leather Bags & Totes', discount: '20% OFF', storeName: 'Coach New York', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
+  { id: 'cpn-16', code: 'BOTTEGAVIP15', title: '15% Off Intrecciato Woven Leather', discount: '15% OFF', storeName: 'Bottega Veneta', discountType: 'percentage', discountValue: 15, minCartTotal: 0 },
   { id: 'cpn-17', code: 'TIFFANYDIAMOND', title: 'Flat ₹15,000 Off Fine Jewelry', discount: '₹15,000 OFF', storeName: 'Tiffany & Co.', discountType: 'flat', discountValue: 15000, minCartTotal: 0 },
   { id: 'cpn-18', code: 'CARTIERLUX20', title: 'Flat ₹20,000 Off Diamond Jewelry', discount: '₹20,000 OFF', storeName: 'Cartier High Jewelry', discountType: 'flat', discountValue: 20000, minCartTotal: 0 },
   { id: 'cpn-19', code: 'BVLGARI25', title: 'Flat ₹25,000 Off Serpenti & B.zero1', discount: '₹25,000 OFF', storeName: 'Bvlgari Haute Joaillerie', discountType: 'flat', discountValue: 25000, minCartTotal: 0 },
-  { id: 'cpn-20', code: 'SWAROVSKI20', title: '20% Off Crystal Jewelry & Sets', discount: '20% OFF', storeName: 'Swarovski Crystal Pavilion', discountType: 'percentage', discountValue: 20, maxDiscount: 5000, minCartTotal: 0 },
+  { id: 'cpn-20', code: 'SWAROVSKI20', title: '20% Off Crystal Jewelry & Sets', discount: '20% OFF', storeName: 'Swarovski Crystal Pavilion', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
   { id: 'cpn-21', code: 'TANISHQGOLD', title: 'Flat ₹10,000 Off Kundan & 22k Gold', discount: '₹10,000 OFF', storeName: 'Tanishq Royal Heritage', discountType: 'flat', discountValue: 10000, minCartTotal: 0 },
   { id: 'cpn-22', code: 'MALABARVIP', title: 'Flat ₹12,000 Off Solitaire Diamonds', discount: '₹12,000 OFF', storeName: 'Malabar Gold & Diamonds', discountType: 'flat', discountValue: 12000, minCartTotal: 0 },
-  { id: 'cpn-23', code: 'RAYBAN20', title: '20% Off Designer Eyewear', discount: '20% OFF', storeName: 'Ray-Ban Sunglass Hut', discountType: 'percentage', discountValue: 20, maxDiscount: 3000, minCartTotal: 0 },
-  { id: 'cpn-24', code: 'SUNGLASSHUT15', title: '15% Off Versace & Designer Shades', discount: '15% OFF', storeName: 'Sunglass Hut Premier', discountType: 'percentage', discountValue: 15, maxDiscount: 6000, minCartTotal: 0 },
-  { id: 'cpn-25', code: 'OAKLEYSPORT20', title: '20% Off Polarized & Prizm Vision', discount: '20% OFF', storeName: 'Oakley Performance Vision', discountType: 'percentage', discountValue: 20, maxDiscount: 4000, minCartTotal: 0 },
+  { id: 'cpn-23', code: 'RAYBAN20', title: '20% Off Designer Eyewear', discount: '20% OFF', storeName: 'Ray-Ban Sunglass Hut', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
+  { id: 'cpn-24', code: 'SUNGLASSHUT15', title: '15% Off Versace & Designer Shades', discount: '15% OFF', storeName: 'Sunglass Hut Premier', discountType: 'percentage', discountValue: 15, minCartTotal: 0 },
+  { id: 'cpn-25', code: 'OAKLEYSPORT20', title: '20% Off Polarized & Prizm Vision', discount: '20% OFF', storeName: 'Oakley Performance Vision', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
   { id: 'cpn-26', code: 'TOMFORDVIP', title: 'Flat ₹5,000 Off Luxury Eyewear', discount: '₹5,000 OFF', storeName: 'Tom Ford Eyewear', discountType: 'flat', discountValue: 5000, minCartTotal: 0 },
   { id: 'cpn-27', code: 'LENSKART500', title: 'Flat ₹500 Off John Jacobs Titanium', discount: '₹500 OFF', storeName: 'Lenskart Gold Lounge', discountType: 'flat', discountValue: 500, minCartTotal: 0 },
   { id: 'cpn-28', code: 'ROLEX5000', title: 'Flat ₹5,000 Off Luxury Timepieces', discount: '₹5,000 OFF', storeName: 'Rolex Boutique', discountType: 'flat', discountValue: 5000, minCartTotal: 0 },
   { id: 'cpn-29', code: 'OMEGACHRONO', title: 'Flat ₹15,000 Off Speedmaster & Seamaster', discount: '₹15,000 OFF', storeName: 'Omega Watch Atelier', discountType: 'flat', discountValue: 15000, minCartTotal: 0 },
   { id: 'cpn-30', code: 'TAGHEUERVIP', title: 'Flat ₹10,000 Off Carrera Chronographs', discount: '₹10,000 OFF', storeName: 'TAG Heuer Flagship', discountType: 'flat', discountValue: 10000, minCartTotal: 0 },
   { id: 'cpn-31', code: 'APPLEVIP5', title: 'Flat ₹5,000 Off Apple Watch & Vision', discount: '₹5,000 OFF', storeName: 'Apple Experience Store', discountType: 'flat', discountValue: 5000, minCartTotal: 0 },
-  { id: 'cpn-32', code: 'TISSOTSWISS', title: '15% Off Tissot PRX Powermatic 80', discount: '15% OFF', storeName: 'Tissot Swiss Watches', discountType: 'percentage', discountValue: 15, maxDiscount: 15000, minCartTotal: 0 },
+  { id: 'cpn-32', code: 'TISSOTSWISS', title: '15% Off Tissot PRX Powermatic 80', discount: '15% OFF', storeName: 'Tissot Swiss Watches', discountType: 'percentage', discountValue: 15, minCartTotal: 0 },
   { id: 'cpn-33', code: 'NEBULA18K', title: 'Flat ₹20,000 Off 18k Solid Gold Watches', discount: '₹20,000 OFF', storeName: 'Titan Nebula Gold Watches', discountType: 'flat', discountValue: 20000, minCartTotal: 0 },
-  { id: 'cpn-34', code: 'GRANDMALL20', title: '20% Off Concierge First Order', discount: '20% OFF', storeName: 'The Grand Mall', discountType: 'percentage', discountValue: 20, maxDiscount: 5000, minCartTotal: 0 },
-  { id: 'cpn-35', code: 'MALLVIP25', title: 'Flat 25% Off VIP Mall Shopping', discount: '25% OFF', storeName: 'The Grand Mall', discountType: 'percentage', discountValue: 25, maxDiscount: 5000, minCartTotal: 0 }
+  { id: 'cpn-34', code: 'GRANDMALL20', title: '20% Off Concierge First Order', discount: '20% OFF', storeName: 'The Grand Mall', discountType: 'percentage', discountValue: 20, minCartTotal: 0 },
+  { id: 'cpn-35', code: 'MALLVIP25', title: 'Flat 25% Off VIP Mall Shopping', discount: '25% OFF', storeName: 'The Grand Mall', discountType: 'percentage', discountValue: 25, minCartTotal: 0 }
 ];
 
 const MASTER_BRANDS: Brand[] = [
@@ -1833,7 +1833,7 @@ export default function App() {
                   price: Number(p.price) || 1990,
                   category: p.category || mb.category || 'General',
                   image: p.image_url || undefined,
-                  sizes: ['S', 'M', 'L', 'XL']
+                  sizes: mb.category === 'Fashion' ? ['S', 'M', 'L', 'XL'] : undefined
                 }))
               : (mb.items || []);
 
@@ -1908,10 +1908,14 @@ export default function App() {
     setVerifyMethod(method);
     if (!validateLoginForm()) return;
 
+    // Instantly generate and set the new 4-digit OTP so the user sees the new OTP immediately with 0 delay
+    const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    setGeneratedOtpCode(newOtp);
+
     fetch(`${API_BASE}/api/auth/send-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: mobileNumber, method })
+      body: JSON.stringify({ phone: mobileNumber, method, otp: newOtp })
     })
       .then(res => res.json())
       .then(data => {
@@ -1945,7 +1949,7 @@ export default function App() {
     const supaAuthRes = await authenticateOrGetCustomerProfile(fullName, cleanPhone, emailAddress);
     if (supaAuthRes.profile) {
       setCustomerProfile(supaAuthRes.profile);
-      recordWifiSessionInSupabase(supaAuthRes.profile.id, cleanPhone);
+      recordWifiSessionInSupabase(supaAuthRes.profile.id);
     }
 
     fetch(`${API_BASE}/api/auth/verify-otp`, {
@@ -2027,13 +2031,13 @@ export default function App() {
     const brandObj = typeof storeNameOrBrand === 'string' ? brands.find(b => b.name === storeNameOrBrand) : storeNameOrBrand;
     const brandId = brandObj?.id;
 
-    if (brandId || brandName) {
-      recordStoreVisitInSupabase(customerProfile?.id, brandId || brandName);
-    }
-    
     const phoneToUse = mobileNumber || customerProfile?.phone || localStorage.getItem('axionix_active_guest_phone') || '';
     const nameToUse = fullName || customerProfile?.full_name || localStorage.getItem('axionix_active_guest_name') || 'Valued Guest';
 
+    if (brandId || brandName) {
+      recordStoreVisitInSupabase(customerProfile?.id, brandId || brandName, 1800, nameToUse);
+    }
+    
     if (phoneToUse || nameToUse) {
       fetch(`${API_BASE}/api/auth/visit-store`, {
         method: 'POST',
@@ -2093,6 +2097,9 @@ export default function App() {
   };
 
   const handleSignOut = () => {
+    if (customerProfile?.id) {
+      disconnectWifiSessionInSupabase(customerProfile.id).catch(() => {});
+    }
     if (mobileNumber) {
       fetch(`${API_BASE}/api/auth/disconnect`, {
         method: 'POST',
@@ -2105,6 +2112,7 @@ export default function App() {
     setCustomerProfile(null);
     setCurrentStep('login');
     setOtpSent(false);
+    setGeneratedOtpCode('');
     setFullName('');
     setMobileNumber('');
     setOtpCode('');
@@ -2443,11 +2451,8 @@ export default function App() {
   if (appliedCoupon && rawCartTotal >= (appliedCoupon.minCartTotal || 0)) {
     if (appliedCoupon.discountType === 'percentage') {
       discountAmount = Math.round((rawCartTotal * appliedCoupon.discountValue) / 100);
-      if (appliedCoupon.maxDiscount && discountAmount > appliedCoupon.maxDiscount) {
-        discountAmount = appliedCoupon.maxDiscount;
-      }
     } else {
-      discountAmount = appliedCoupon.discountValue;
+      discountAmount = Math.min(rawCartTotal, appliedCoupon.discountValue);
     }
   }
 
@@ -2529,8 +2534,8 @@ export default function App() {
       recordUserStoreVisit(coupon.storeName);
     }
 
-    const activeCustName = fullName.trim() || 'Reynold Ricky';
-    const activeCustPhone = mobileNumber.trim() || '+91 98987 65432';
+    const activeCustName = fullName.trim() || localStorage.getItem('axionix_active_guest_name') || 'Valued Guest';
+    const activeCustPhone = mobileNumber.trim() || localStorage.getItem('axionix_active_guest_phone') || '+91 98000 00000';
 
     const redemptionObj = {
       id: `rdm-${Date.now()}`,
@@ -2629,8 +2634,8 @@ export default function App() {
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
 
-    const activeName = fullName.trim() || localStorage.getItem('axionix_active_guest_name') || 'Reynold Ricky';
-    const activePhone = mobileNumber.trim() || '+91 98987 65432';
+    const activeName = fullName.trim() || localStorage.getItem('axionix_active_guest_name') || 'Valued Guest';
+    const activePhone = mobileNumber.trim() || localStorage.getItem('axionix_active_guest_phone') || '+91 98000 00000';
 
     // Check Mall Pay wallet balance if Mall Pay is selected
     if (selectedPaymentOption === 'mallpay') {
@@ -2653,6 +2658,7 @@ export default function App() {
     });
 
     const itemsList = cart.map(c => ({
+      productId: c.item.id,
       name: c.item.name,
       quantity: c.quantity,
       price: c.item.price,
@@ -2884,8 +2890,8 @@ export default function App() {
           id: `rdm-${Date.now()}`,
           couponId: `cpn-${orderObj.appliedCoupon}`,
           couponCode: orderObj.appliedCoupon,
-          customerName: orderObj.customerName || 'Reynold Ricky',
-          customerPhone: orderObj.customerPhone || '+91 98987 65432',
+          customerName: orderObj.customerName || 'Valued Guest',
+          customerPhone: orderObj.customerPhone || '+91 98000 00000',
           redeemedAt: 'Just now',
           storeName: orderObj.storeName || 'The Grand Mall',
           discountApplied: 'Applied at Checkout',
@@ -2928,27 +2934,16 @@ export default function App() {
     }
 
     const currentSlotInfo = availableSlots.find((s: any) => s.timeSlot === resTime);
-    const isSlotFull = currentSlotInfo?.isFull;
+    const isSlotFull = currentSlotInfo?.isFull || (currentSlotInfo && currentSlotInfo.available <= 0);
+    const exceedsCapacity = currentSlotInfo && resPartySize > currentSlotInfo.available;
 
     if (isSlotFull) {
-      // Feature 08 — Join Waitlist Flow
-      setIsJoiningWaitlist(true);
-      const waitlistPayload = {
-        storeName: targetStore,
-        date: resDate,
-        timeSlot: resTime,
-        guestName: fullName || 'Valued Guest',
-        guestPhone: mobileNumber || '+91 84950 93170',
-        partySize: resPartySize,
-        specialNotes: resNotes
-      };
-      const res = await joinReservationWaitlist(waitlistPayload);
-      setIsJoiningWaitlist(false);
-      setWaitlistSuccessInfo({
-        ...waitlistPayload,
-        position: res.position || 1
-      });
-      setToastMessage(`⏳ Added to Waitlist for ${targetStore} at ${resTime}! Position #${res.position || 1}`);
+      setToastMessage(`⛔ This time slot (${resTime}) is FULL for ${targetStore}. Please choose another time.`);
+      return;
+    }
+
+    if (exceedsCapacity) {
+      setToastMessage(`⛔ Slot unavailable: Party size (${resPartySize}) exceeds remaining seats (${currentSlotInfo.available} left for ${targetStore}). Please check another slot or reduce party size.`);
       return;
     }
 
@@ -2995,6 +2990,8 @@ export default function App() {
       guestEmail: emailAddress || undefined,
       partySize: resPartySize,
       timeSlot: resTime,
+      reservationDate: resDate,
+      date: resDate,
       specialNotes: resNotes
     });
 
@@ -4507,8 +4504,8 @@ export default function App() {
                         <h5 className="font-bold text-sm text-slate-900">{item.name}</h5>
                         <p className="text-xs text-slate-500 font-medium mt-0.5">{item.category}</p>
 
-                        {/* SPECIFIC ITEM SIZE CHIPS */}
-                        {item.sizes && item.sizes.length > 0 && (
+                        {/* SPECIFIC ITEM SIZE CHIPS (Fashion apparel only) */}
+                        {activeBrandModal.category === 'Fashion' && item.sizes && item.sizes.length > 0 && (
                           <div className="flex items-center space-x-1.5 mt-1.5 flex-wrap gap-y-1">
                             {item.sizes.map(sz => (
                               <button
@@ -4671,7 +4668,9 @@ export default function App() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {availableSlots.map(slot => {
                       const isSelected = resTime === slot.timeSlot;
-                      const isFull = slot.isFull;
+                      const isFull = slot.isFull || slot.available <= 0;
+                      const exceedsParty = resPartySize > slot.available;
+                      const isUnavailable = isFull || exceedsParty;
 
                       return (
                         <button
@@ -4680,11 +4679,13 @@ export default function App() {
                           onClick={() => setResTime(slot.timeSlot)}
                           className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                             isSelected
-                              ? isFull
+                              ? isUnavailable
                                 ? 'bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-300'
                                 : 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-300'
                               : isFull
                               ? 'bg-rose-50/70 text-rose-900 border-rose-200 hover:border-amber-400'
+                              : exceedsParty
+                              ? 'bg-amber-50/70 text-amber-900 border-amber-200 hover:border-amber-400'
                               : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-blue-400'
                           }`}
                         >
@@ -4696,10 +4697,12 @@ export default function App() {
                                   ? 'bg-white/20 text-white'
                                   : isFull
                                   ? 'bg-rose-200 text-rose-800'
+                                  : exceedsParty
+                                  ? 'bg-amber-200 text-amber-900'
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}
                             >
-                              {isFull ? 'FULL' : `${slot.available} Left`}
+                              {isFull ? 'SLOT FULL' : exceedsParty ? `${slot.available} Left` : `${slot.available} Left`}
                             </span>
                             {slot.waitlistCount > 0 && (
                               <span className={`text-[9px] font-bold ${isSelected ? 'text-amber-100' : 'text-slate-400'}`}>
@@ -4711,6 +4714,29 @@ export default function App() {
                       );
                     })}
                   </div>
+
+                  {/* Slot Full / Party Exceeded Warning */}
+                  {(() => {
+                    const selSlot = availableSlots.find(s => s.timeSlot === resTime);
+                    if (!selSlot) return null;
+                    if (selSlot.isFull || selSlot.available <= 0) {
+                      return (
+                        <div className="p-3 mt-2 bg-rose-50 border border-rose-200 rounded-2xl flex items-center space-x-2 text-rose-800 text-xs font-bold animate-in fade-in">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>⛔ This time slot is FULL ({selSlot.bookedCount}/{selSlot.maxCapacity} booked). Please choose another open time slot.</span>
+                        </div>
+                      );
+                    }
+                    if (resPartySize > selSlot.available) {
+                      return (
+                        <div className="p-3 mt-2 bg-amber-50 border border-amber-200 rounded-2xl flex items-center space-x-2 text-amber-900 text-xs font-bold animate-in fade-in">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>⛔ Slot unavailable for party of {resPartySize} (only {selSlot.available} seats left out of {selSlot.maxCapacity}). Please check another slot or reduce party size.</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 <div>
@@ -4726,25 +4752,32 @@ export default function App() {
                   />
                 </div>
 
-                {/* Dynamic Button: Booking vs Waitlist */}
+                {/* Dynamic Button: Booking vs Slot Full / Exceeded */}
                 {(() => {
                   const selectedSlotObj = availableSlots.find(s => s.timeSlot === resTime);
-                  const isFull = selectedSlotObj?.isFull;
+                  const isFull = !selectedSlotObj || selectedSlotObj.isFull || selectedSlotObj.available <= 0;
+                  const exceedsParty = selectedSlotObj ? resPartySize > selectedSlotObj.available : false;
+                  const isUnavailable = isFull || exceedsParty;
 
                   return (
                     <button
                       type="submit"
-                      disabled={isJoiningWaitlist}
-                      className={`w-full py-4 font-extrabold rounded-2xl text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer active:scale-98 flex items-center justify-center space-x-2 ${
-                        isFull
-                          ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-amber-600/25'
-                          : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-600/25'
+                      disabled={isUnavailable || isJoiningWaitlist}
+                      className={`w-full py-4 font-extrabold rounded-2xl text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center space-x-2 ${
+                        isUnavailable
+                          ? 'bg-rose-100 text-rose-700 border border-rose-300 cursor-not-allowed opacity-90 shadow-none'
+                          : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-600/25 cursor-pointer active:scale-98'
                       }`}
                     >
                       {isFull ? (
                         <>
-                          <Hourglass className="w-4 h-4" />
-                          <span>JOIN WAITLIST (SPOT #{(selectedSlotObj?.waitlistCount || 0) + 1})</span>
+                          <XCircle className="w-4 h-4 text-rose-600" />
+                          <span>SLOT IS FULL — NO BOOKINGS AVAILABLE</span>
+                        </>
+                      ) : exceedsParty ? (
+                        <>
+                          <XCircle className="w-4 h-4 text-rose-600" />
+                          <span>SLOT UNAVAILABLE — CHECK ANOTHER SLOT</span>
                         </>
                       ) : (
                         <>

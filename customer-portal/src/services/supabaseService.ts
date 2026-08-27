@@ -22,9 +22,23 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
 
   try {
     const cleanPhone = phone.replace(/\D/g, '');
-    let userId: string | null = null;
 
-    // 1. Check if a profile with this phone already exists in public.profiles (returning customer)
+    // 1. Ensure we always have an active authenticated Supabase session
+    let { data: sessData } = await supabase.auth.getSession();
+    let currentAuthUser = sessData?.session?.user;
+
+    if (!currentAuthUser) {
+      const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
+      if (anonErr) console.warn('[Supabase Auth] signInAnonymously error:', anonErr.message);
+      currentAuthUser = anonData?.user || undefined;
+    }
+
+    const userId = currentAuthUser?.id;
+    if (!userId) {
+      return { profile: null, error: 'Could not obtain active session' };
+    }
+
+    // 2. Check if a profile with this phone already exists in public.profiles
     let returningProfile: any = null;
     if (cleanPhone) {
       const { data: phoneMatch } = await supabase
@@ -38,127 +52,56 @@ export async function authenticateOrGetCustomerProfile(name: string, phone: stri
       }
     }
 
-    // 2. Check active Supabase Auth session
-    const { data: sessData } = await supabase.auth.getSession();
-    const currentAuthUser = sessData?.session?.user;
-
-    if (currentAuthUser) {
-      if (returningProfile) {
-        // If current session already belongs to this returning customer
-        if (currentAuthUser.id === returningProfile.id) {
-          userId = currentAuthUser.id;
-        } else {
-          // Current session belongs to someone else; sign out and use returning customer ID
-          await supabase.auth.signOut().catch(() => {});
-          userId = returningProfile.id;
-        }
-      } else {
-        // For a new customer: if there is an active session from a previous user, sign out and mint a fresh user
-        const { data: currentSessionProf } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', currentAuthUser.id)
-          .maybeSingle();
-
-        const curPhone = currentSessionProf?.phone ? currentSessionProf.phone.replace(/\D/g, '') : '';
-        const curName = (currentSessionProf?.full_name || '').trim().toLowerCase();
-        const incomingName = (name || '').trim().toLowerCase();
-
-        // If session was previously used by someone else, reset session
-        if (currentSessionProf && (curPhone || curName) && (curPhone !== cleanPhone || curName !== incomingName)) {
-          await supabase.auth.signOut().catch(() => {});
-          const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
-          if (anonErr) console.warn('[Supabase Auth] signInAnonymously error:', anonErr.message);
-          userId = anonData?.user?.id || null;
-        } else {
-          userId = currentAuthUser.id;
-        }
-      }
-    } else {
-      if (returningProfile) {
-        userId = returningProfile.id;
-      } else {
-        // Genuinely new customer with no active session: mint fresh anonymous user
-        const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously();
-        if (anonErr) {
-          console.warn('[Supabase Auth] signInAnonymously:', anonErr.message);
-        }
-        userId = anonData?.user?.id || null;
-      }
+    const profileData: any = {
+      id: userId,
+      full_name: name.trim() || returningProfile?.full_name || 'Mall Guest',
+      phone: cleanPhone || returningProfile?.phone || undefined,
+      role: returningProfile?.role || 'customer',
+      loyalty_tier: returningProfile?.loyalty_tier || 'Bronze',
+      is_active: true
+    };
+    if (email && email.trim()) {
+      profileData.email = email.trim();
+    } else if (returningProfile?.email) {
+      profileData.email = returningProfile.email;
     }
 
-    // 3. Handle Returning Customer: preserve historical record and only enrich non-empty details
-    if (returningProfile) {
-      const updates: any = {};
-      if (name && name.trim() && returningProfile.full_name !== name.trim()) {
-        updates.full_name = name.trim();
-      }
-      if (email && email.trim() && returningProfile.email !== email.trim()) {
-        updates.email = email.trim();
-      }
-      if (Object.keys(updates).length > 0) {
-        await supabase.from('profiles').update(updates).eq('id', returningProfile.id);
-      }
+    const { data: upserted, error: upsertErr } = await supabase
+      .from('profiles')
+      .upsert(profileData, { onConflict: 'id' })
+      .select()
+      .maybeSingle();
 
-      // Log WiFi connection activity
-      logActivityInSupabase({
-        userId: returningProfile.id,
-        action: 'connected',
-        detail: 'Wi-Fi Connected',
-        details: `${name.trim() || returningProfile.full_name || 'Valued Guest'} connected to AXIONIX High-Speed Mall WiFi.`,
-        storeName: 'The Grand Mall'
+    if (upsertErr) {
+      console.warn('[Supabase Profiles] Upsert error:', upsertErr.message);
+    }
+
+    // Log WiFi connection activity for customer
+    logActivityInSupabase({
+      userId,
+      customerName: profileData.full_name,
+      action: 'connected',
+      detail: 'Wi-Fi Connected',
+      details: `${profileData.full_name} connected to AXIONIX High-Speed Mall WiFi.`,
+      storeName: 'The Grand Mall'
+    }).catch(() => {});
+
+    // Notify Axionix Backend Live Telemetry
+    try {
+      fetch(`${BACKEND_URL}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: profileData.phone,
+          name: profileData.full_name,
+          email: profileData.email,
+          otp: '1234',
+          captive: true
+        })
       }).catch(() => {});
+    } catch (e) {}
 
-      return {
-        profile: {
-          id: returningProfile.id,
-          full_name: name.trim() || returningProfile.full_name || 'Mall Guest',
-          email: email?.trim() || returningProfile.email,
-          phone: returningProfile.phone || cleanPhone,
-          role: returningProfile.role || 'customer',
-          loyalty_tier: returningProfile.loyalty_tier || 'Bronze',
-          is_active: returningProfile.is_active !== false
-        }
-      };
-    }
-
-    // 4. Genuinely NEW customer: Populate profile row created by Supabase's user trigger
-    if (userId) {
-      const newProfile: any = {
-        id: userId,
-        full_name: name.trim() || 'Mall Guest',
-        phone: cleanPhone || undefined,
-        role: 'customer',
-        loyalty_tier: 'Bronze',
-        is_active: true
-      };
-      if (email && email.trim()) {
-        newProfile.email = email.trim();
-      }
-
-      const { data: upserted, error: upsertErr } = await supabase
-        .from('profiles')
-        .upsert(newProfile, { onConflict: 'id' })
-        .select()
-        .maybeSingle();
-
-      if (upsertErr) {
-        console.warn('[Supabase Profiles] Upsert error:', upsertErr.message);
-      }
-
-      // Log WiFi connection activity for new customer
-      logActivityInSupabase({
-        userId,
-        action: 'connected',
-        detail: 'Wi-Fi Connected',
-        details: `${name.trim() || 'Valued Guest'} connected to AXIONIX High-Speed Mall WiFi.`,
-        storeName: 'The Grand Mall'
-      }).catch(() => {});
-
-      return { profile: upserted || newProfile };
-    }
-
-    return { profile: null };
+    return { profile: upserted || profileData };
   } catch (err: any) {
     console.error('[Supabase Auth] Exception in authenticateOrGetCustomerProfile:', err);
     return { profile: null, error: err.message };
@@ -209,6 +152,23 @@ export async function fetchProductsFromSupabase(): Promise<{ data: any[]; isLive
 }
 
 // ---------------------------------------------------------------------------
+// HELPER: Resolve Effective User ID matching Supabase Auth session
+// ---------------------------------------------------------------------------
+export async function getEffectiveUserId(providedUserId?: string): Promise<string | null> {
+  try {
+    const { data: sessData } = await supabase.auth.getSession();
+    const currentSessionUserId = sessData?.session?.user?.id;
+    if (currentSessionUserId) {
+      return currentSessionUserId;
+    }
+    const { data: anonData } = await supabase.auth.signInAnonymously();
+    return anonData?.user?.id || providedUserId || null;
+  } catch (e) {
+    return providedUserId || null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // ORDERS & ORDER ITEMS
 // ---------------------------------------------------------------------------
 export async function createOrderInSupabase(orderData: {
@@ -228,24 +188,21 @@ export async function createOrderInSupabase(orderData: {
   if (!isSupabaseConfigured) return { order: null };
 
   try {
-    const { data: sessData } = await supabase.auth.getSession();
-    const activeUserId = orderData.userId || sessData?.session?.user?.id || null;
-
+    const activeUserId = await getEffectiveUserId(orderData.userId);
     const orderNumber = `#AX-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const orderRow: any = {
       order_number: orderNumber,
       user_id: activeUserId,
-      customer_name: orderData.customerName,
-      customer_phone: orderData.customerPhone,
+      customer_name: orderData.customerName || 'Valued Customer',
+      customer_phone: orderData.customerPhone || null,
       customer_email: orderData.customerEmail || null,
-      store_name: orderData.storeName || 'The Grand Mall',
-      subtotal: orderData.rawAmount,
+      subtotal: orderData.rawAmount || orderData.totalAmount || 0,
       tax: 0,
       discount_amount: orderData.discountAmount || 0,
       total_amount: orderData.totalAmount,
       order_type: 'Click & Collect',
-      payment_method: orderData.paymentMethod,
+      payment_method: orderData.paymentMethod || 'UPI / GPay',
       payment_status: 'Paid',
       status: 'Pending'
     };
@@ -263,13 +220,27 @@ export async function createOrderInSupabase(orderData: {
 
     // Insert order_items if order created
     if (createdOrder?.id && orderData.items && orderData.items.length > 0) {
-      const itemRows = orderData.items.map(item => ({
-        order_id: createdOrder.id,
-        product_id: item.productId || null,
-        quantity: item.quantity,
-        unit_price: item.price,
-        subtotal: item.price * item.quantity
-      }));
+      let prodMap = new Map<string, string>();
+      try {
+        const { data: dbProducts } = await supabase.from('products').select('id, name');
+        if (dbProducts) {
+          dbProducts.forEach((p: any) => {
+            if (p.name) prodMap.set(p.name.toLowerCase().trim(), p.id);
+          });
+        }
+      } catch (e) {}
+
+      const itemRows = orderData.items.map(item => {
+        const isProdUuid = item.productId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId);
+        const resolvedProdId = isProdUuid ? item.productId : (item.name ? prodMap.get(item.name.toLowerCase().trim()) || null : null);
+        return {
+          order_id: createdOrder.id,
+          product_id: resolvedProdId,
+          quantity: item.quantity || 1,
+          unit_price: item.price || 0,
+          subtotal: (item.price || 0) * (item.quantity || 1)
+        };
+      });
 
       const { error: itemsErr } = await supabase
         .from('order_items')
@@ -284,9 +255,9 @@ export async function createOrderInSupabase(orderData: {
     if (createdOrder?.id && orderData.appliedCoupon) {
       redeemCouponInSupabase({
         couponCode: orderData.appliedCoupon,
-        userId: activeUserId,
+        userId: activeUserId || undefined,
         orderId: createdOrder.id,
-        brandId: createdOrder.brand_id || undefined,
+        discountApplied: orderData.discountAmount,
         savingsAmount: orderData.discountAmount
       }).catch(err => {
         console.warn('[Supabase] coupon redemption link notice:', err);
@@ -303,6 +274,27 @@ export async function createOrderInSupabase(orderData: {
         storeName: orderData.storeName || undefined
       }).catch(() => {});
     }
+
+    // Notify Axionix Backend Live Telemetry
+    try {
+      fetch(`${BACKEND_URL}/api/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderNumber: createdOrder?.order_number || orderNumber,
+          customerName: orderData.customerName,
+          customerPhone: orderData.customerPhone,
+          customerEmail: orderData.customerEmail,
+          storeName: orderData.storeName,
+          items: orderData.items,
+          totalAmount: orderData.totalAmount,
+          rawAmount: orderData.rawAmount,
+          discountAmount: orderData.discountAmount,
+          appliedCoupon: orderData.appliedCoupon,
+          paymentMethod: orderData.paymentMethod
+        })
+      }).catch(() => {});
+    } catch (e) {}
 
     return { order: createdOrder };
   } catch (err: any) {
@@ -325,22 +317,40 @@ export async function createReservationInSupabase(resData: {
   guestEmail?: string;
   partySize: number;
   timeSlot: string;
+  reservationDate?: string;
+  date?: string;
   specialNotes?: string;
 }): Promise<{ reservation: any | null; error?: string }> {
   if (!isSupabaseConfigured) return { reservation: null };
 
   try {
-    const refCode = resData.refCode || `RES-${resData.storeName.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 899)}`;
+    const activeUserId = await getEffectiveUserId(resData.userId);
+    const refCode = resData.refCode || `RES-${(resData.storeName || 'MAL').slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 899)}`;
+
+    let brandId = resData.brandId || null;
+    if (!brandId && resData.storeName) {
+      const { data: b } = await supabase
+        .from('brands')
+        .select('id')
+        .ilike('name', resData.storeName.trim())
+        .maybeSingle();
+      if (b?.id) {
+        brandId = b.id;
+      }
+    }
+
+    const bookingDate = resData.reservationDate || resData.date || new Date().toISOString().split('T')[0];
 
     const resRow = {
       ref_code: refCode,
-      user_id: resData.userId || null,
-      brand_id: resData.brandId || null,
-      guest_name: resData.guestName,
-      guest_phone: resData.guestPhone,
+      user_id: activeUserId,
+      brand_id: brandId,
+      guest_name: resData.guestName || 'Valued Guest',
+      guest_phone: resData.guestPhone || null,
       guest_email: resData.guestEmail || null,
-      party_size: resData.partySize,
-      time_slot: resData.timeSlot,
+      party_size: Number(resData.partySize) || 2,
+      reservation_date: bookingDate,
+      time_slot: resData.timeSlot || '17:00 PM',
       notes: resData.specialNotes || 'VIP Guest Booking',
       status: 'Confirmed'
     };
@@ -359,11 +369,33 @@ export async function createReservationInSupabase(resData: {
     // Log Activity for Live Admin Feed
     if (createdRes?.id) {
       logActivityInSupabase({
-        userId: resData.userId || undefined,
+        userId: activeUserId || undefined,
         action: 'reserved',
-        details: `${resData.guestName || 'VIP Guest'} booked a table/slot at ${resData.storeName} (${resData.timeSlot}, party of ${resData.partySize}).`
+        detail: 'Table Reservation',
+        details: `${resData.guestName || 'VIP Guest'} booked a table/slot at ${resData.storeName || 'Mall Store'} (${resData.timeSlot}, party of ${resData.partySize}).`,
+        storeName: resData.storeName || undefined
       }).catch(() => {});
     }
+
+    // Notify Axionix Backend Live Telemetry
+    try {
+      fetch(`${BACKEND_URL}/api/reservations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: createdRes?.id,
+          refCode: createdRes?.ref_code || refCode,
+          storeName: resData.storeName,
+          guestName: resData.guestName,
+          guestPhone: resData.guestPhone,
+          guestEmail: resData.guestEmail,
+          partySize: resData.partySize,
+          timeSlot: resData.timeSlot,
+          date: bookingDate,
+          specialNotes: resData.specialNotes
+        })
+      }).catch(() => {});
+    } catch (e) {}
 
     return { reservation: createdRes };
   } catch (err: any) {
@@ -392,27 +424,104 @@ export async function cancelReservationInSupabase(refCodeOrId: string): Promise<
 }
 
 export async function fetchReservationAvailability(storeName: string, date?: string): Promise<{ success: boolean; slots: any[] }> {
+  const targetDate = date || new Date().toISOString().split('T')[0];
+
+  let liveReservations: any[] = [];
+  if (isSupabaseConfigured) {
+    try {
+      const { data: dbRes } = await supabase
+        .from('reservations')
+        .select('*, brands(name)')
+        .eq('reservation_date', targetDate)
+        .neq('status', 'Cancelled')
+        .neq('status', 'No Show');
+
+      if (dbRes && Array.isArray(dbRes)) {
+        liveReservations = dbRes.map((r: any) => ({
+          storeName: r.brands?.name || r.store_name || storeName,
+          timeSlot: r.time_slot,
+          partySize: Number(r.party_size) || 2,
+          date: r.reservation_date
+        }));
+      }
+    } catch (e) {}
+  }
+
+  // Fetch real-time capacity configurations & waitlist from backend
+  let backendCapacities: any = {};
+  let backendWaitlist: any[] = [];
   try {
-    const res = await fetch(`${BACKEND_URL}/api/reservations/availability?store=${encodeURIComponent(storeName)}&date=${date || new Date().toISOString().split('T')[0]}`);
-    const data = await res.json();
-    if (data.success && Array.isArray(data.slots)) {
-      return { success: true, slots: data.slots };
-    }
+    const capRes = await fetch(`${BACKEND_URL}/api/reservations/capacity?store=${encodeURIComponent(storeName)}`);
+    const capData = await capRes.json();
+    if (capData?.capacities) backendCapacities = capData.capacities;
+
+    const wlRes = await fetch(`${BACKEND_URL}/api/reservations/waitlist?store=${encodeURIComponent(storeName)}&date=${targetDate}`);
+    const wlData = await wlRes.json();
+    if (wlData?.waitlist) backendWaitlist = wlData.waitlist;
   } catch (e) {}
 
-  // Fallback default slots
-  return {
-    success: true,
-    slots: [
-      { timeSlot: '12:00 PM', maxCapacity: 8, bookedCount: 1, available: 7, isFull: false, waitlistCount: 0 },
-      { timeSlot: '14:00 PM', maxCapacity: 8, bookedCount: 2, available: 6, isFull: false, waitlistCount: 0 },
-      { timeSlot: '16:00 PM', maxCapacity: 8, bookedCount: 3, available: 5, isFull: false, waitlistCount: 0 },
-      { timeSlot: '17:00 PM', maxCapacity: 8, bookedCount: 5, available: 3, isFull: false, waitlistCount: 0 },
-      { timeSlot: '18:30 PM', maxCapacity: 6, bookedCount: 6, available: 0, isFull: true, waitlistCount: 1 },
-      { timeSlot: '20:00 PM', maxCapacity: 6, bookedCount: 4, available: 2, isFull: false, waitlistCount: 0 },
-      { timeSlot: '21:30 PM', maxCapacity: 6, bookedCount: 1, available: 5, isFull: false, waitlistCount: 0 }
-    ]
+  const DEFAULT_SLOT_CAPACITIES: Record<string, { default: number; [slot: string]: number }> = {
+    // Food & Dining
+    'Starbucks Reserve': { default: 8, '16:00 PM': 8, '17:00 PM': 8, '18:30 PM': 6, '20:00 PM': 6 },
+    'Häagen-Dazs': { default: 6, '16:00 PM': 6, '17:00 PM': 6, '18:30 PM': 6, '20:00 PM': 6 },
+    'Din Tai Fung': { default: 6, '17:00 PM': 6, '18:30 PM': 6, '20:00 PM': 6, '21:30 PM': 4 },
+    'PizzaExpress Gourmet': { default: 8, '17:00 PM': 8, '18:30 PM': 8, '20:00 PM': 8 },
+    'Coffee Drama Cafe': { default: 6, '16:00 PM': 6, '17:00 PM': 6, '18:30 PM': 6 },
+    'Subway Fresh Gourmet': { default: 6, '12:00 PM': 6, '14:00 PM': 6, '17:00 PM': 6 },
+
+    // Fashion & Apparel
+    'Nike Flagship': { default: 4, '14:00 PM': 4, '16:00 PM': 4, '17:00 PM': 4, '18:30 PM': 3 },
+    'Zara Flagship': { default: 5, '16:00 PM': 5, '17:00 PM': 5, '18:30 PM': 4 },
+    'Zara Boutique': { default: 5, '16:00 PM': 5, '17:00 PM': 5, '18:30 PM': 4 },
+    'Gucci Boutique': { default: 3, '16:00 PM': 3, '17:00 PM': 3, '18:30 PM': 3 },
+    'Prada Atelier': { default: 3, '16:00 PM': 3, '17:00 PM': 3, '18:30 PM': 3 },
+    'U.S. Polo Assn.': { default: 4, '16:00 PM': 4, '17:00 PM': 4, '18:30 PM': 4 },
+    'H&M Flagship': { default: 5, '16:00 PM': 5, '17:00 PM': 5, '18:30 PM': 5 },
+
+    // Accessories, Watches & Luxury
+    'Rolex Boutique': { default: 2, '16:00 PM': 2, '17:00 PM': 2, '18:30 PM': 2 },
+    'Louis Vuitton Maison': { default: 3, '16:00 PM': 3, '17:00 PM': 3, '18:30 PM': 3 },
+    'Tiffany & Co.': { default: 3, '16:00 PM': 3, '17:00 PM': 3, '18:30 PM': 3 },
+    'Cartier High Jewelry': { default: 2, '16:00 PM': 2, '17:00 PM': 2, '18:30 PM': 2 },
+    'Apple Experience Store': { default: 6, '14:00 PM': 6, '16:00 PM': 6, '17:00 PM': 6 },
+    'Ray-Ban Sunglass Hut': { default: 4, '14:00 PM': 4, '16:00 PM': 4, '17:00 PM': 4 },
+    'Sephora Beauty': { default: 4, '14:00 PM': 4, '16:00 PM': 4, '17:00 PM': 4 },
+    "PVR Director's Cut": { default: 10, '17:00 PM': 10, '20:00 PM': 10 }
   };
+
+  const defaultCapsForStore = DEFAULT_SLOT_CAPACITIES[storeName] || { default: 6 };
+  const storeCaps = { ...defaultCapsForStore, ...backendCapacities };
+  const storeRes = liveReservations.filter((r: any) => 
+    !storeName || storeName === 'All Stores' || (r.storeName?.toLowerCase().trim() === storeName.toLowerCase().trim())
+  );
+
+  const STANDARD_TIME_SLOTS = ['12:00 PM', '14:00 PM', '16:00 PM', '17:00 PM', '18:30 PM', '20:00 PM', '21:30 PM'];
+
+  const slots = STANDARD_TIME_SLOTS.map(slot => {
+    const maxCapacity = storeCaps[slot] !== undefined ? Number(storeCaps[slot]) : (storeCaps.default !== undefined ? Number(storeCaps.default) : 6);
+    const cleanSlot = slot.replace(' PM', '').replace(' AM', '').trim();
+    const slotRes = storeRes.filter((r: any) => {
+      const rSlotClean = (r.timeSlot || '').replace(' PM', '').replace(' AM', '').trim();
+      return rSlotClean === cleanSlot || (r.timeSlot || '').includes(cleanSlot) || r.timeSlot === slot;
+    });
+    const bookedCount = slotRes.reduce((sum: number, r: any) => sum + (Number(r.partySize) || 1), 0);
+    const available = Math.max(0, maxCapacity - bookedCount);
+    const isFull = available <= 0;
+    const waitingCount = backendWaitlist.filter((w: any) => 
+      (w.timeSlot === slot || (w.timeSlot || '').includes(cleanSlot)) && w.status === 'Waiting'
+    ).length;
+
+    return {
+      timeSlot: slot,
+      maxCapacity,
+      bookedCount,
+      available,
+      isFull,
+      waitlistCount: waitingCount
+    };
+  });
+
+  return { success: true, slots };
 }
 
 export async function joinReservationWaitlist(waitlistData: {
@@ -505,6 +614,7 @@ export async function redeemCouponInSupabase(redemptionData: {
   couponId?: string;
   couponCode?: string;
   userId?: string;
+  customerName?: string;
   orderId?: string;
   brandId?: string;
   savingsAmount?: number;
@@ -513,6 +623,14 @@ export async function redeemCouponInSupabase(redemptionData: {
   if (!isSupabaseConfigured) return { redemption: null };
 
   try {
+    const activeUserId = await getEffectiveUserId(redemptionData.userId);
+
+    let customerName = redemptionData.customerName;
+    if (!customerName && activeUserId) {
+      const { data: p } = await supabase.from('profiles').select('full_name').eq('id', activeUserId).maybeSingle();
+      if (p?.full_name) customerName = p.full_name;
+    }
+
     let resolvedCoupon: any = null;
     if (redemptionData.couponId) {
       const { data: cpn } = await supabase
@@ -525,7 +643,7 @@ export async function redeemCouponInSupabase(redemptionData: {
       const { data: cpn } = await supabase
         .from('coupons')
         .select('id, brand_id, discount_type, discount_value')
-        .eq('code', redemptionData.couponCode.trim().toUpperCase())
+        .ilike('code', redemptionData.couponCode.trim())
         .maybeSingle();
       resolvedCoupon = cpn;
     }
@@ -559,7 +677,8 @@ export async function redeemCouponInSupabase(redemptionData: {
 
     const row: any = {
       coupon_id: resolvedCoupon.id,
-      user_id: redemptionData.userId || null,
+      user_id: activeUserId,
+      customer_name: customerName || null,
       order_id: redemptionData.orderId || null,
       brand_id: brandId,
       discount_applied: discountApplied,
@@ -578,6 +697,18 @@ export async function redeemCouponInSupabase(redemptionData: {
       return { redemption: null, error: error.message };
     }
 
+    // Log Activity for Live Admin Feed
+    if (activeUserId) {
+      logActivityInSupabase({
+        userId: activeUserId,
+        customerName: customerName || undefined,
+        action: 'redeemed_coupon',
+        detail: 'Coupon Redeemed',
+        details: `${customerName || 'Customer'} redeemed voucher ${redemptionData.couponCode || 'PROMO'} for ₹${savingsAmount.toLocaleString()} savings.`,
+        createdAt: row.redeemed_at
+      }).catch(() => {});
+    }
+
     return { redemption: data };
   } catch (err: any) {
     return { redemption: null, error: err.message };
@@ -587,25 +718,58 @@ export async function redeemCouponInSupabase(redemptionData: {
 // ---------------------------------------------------------------------------
 // STORE VISITS & WIFI SESSIONS
 // ---------------------------------------------------------------------------
-export async function recordWifiSessionInSupabase(userId?: string, phone?: string): Promise<void> {
+export async function recordWifiSessionInSupabase(userId?: string): Promise<{ session: any | null; error?: string }> {
+  if (!isSupabaseConfigured) return { session: null };
+  try {
+    const activeUserId = await getEffectiveUserId(userId);
+    const row = {
+      user_id: activeUserId,
+      mac_address: 'FE:88:99:A1:B2:C3',
+      ip_address: '192.168.10.142',
+      is_active: true,
+      connected_at: new Date().toISOString()
+    };
+    const { data, error } = await supabase.from('wifi_sessions').insert(row).select().maybeSingle();
+    if (error) {
+      console.warn('[Supabase] recordWifiSession error:', error.message);
+      return { session: null, error: error.message };
+    }
+    return { session: data };
+  } catch (e: any) {
+    return { session: null, error: e.message };
+  }
+}
+
+export async function disconnectWifiSessionInSupabase(userId?: string): Promise<void> {
   if (!isSupabaseConfigured) return;
   try {
-    await supabase.from('wifi_sessions').insert({
-      user_id: userId || null,
-      phone: phone || null,
-      mac_address: 'FE:88:99:A1:B2:C3',
-      ip_address: '192.168.10.142'
-    });
+    const activeUserId = await getEffectiveUserId(userId);
+    if (activeUserId) {
+      await supabase
+        .from('wifi_sessions')
+        .update({ is_active: false, disconnected_at: new Date().toISOString() })
+        .eq('user_id', activeUserId)
+        .eq('is_active', true);
+    }
   } catch (e) {}
 }
 
 export async function recordStoreVisitInSupabase(
   userId?: string,
   brandIdOrName?: string,
-  durationSeconds: number = 1800
+  durationSeconds: number = 1800,
+  customerName?: string
 ): Promise<{ visit: any | null; error?: string }> {
   if (!isSupabaseConfigured || !brandIdOrName) return { visit: null };
   try {
+    const activeUserId = await getEffectiveUserId(userId);
+
+    let activeCustomerName = customerName;
+    if (!activeCustomerName && activeUserId) {
+      const { data: p } = await supabase.from('profiles').select('full_name').eq('id', activeUserId).maybeSingle();
+      if (p?.full_name) activeCustomerName = p.full_name;
+    }
+
     let resolvedBrandId = brandIdOrName;
     let storeName = typeof brandIdOrName === 'string' && !brandIdOrName.includes('-') ? brandIdOrName : '';
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandIdOrName);
@@ -633,10 +797,11 @@ export async function recordStoreVisitInSupabase(
       }
     }
 
-    const row = {
-      user_id: userId || null,
+    const row: any = {
+      user_id: activeUserId,
+      customer_name: activeCustomerName || null,
       brand_id: resolvedBrandId,
-      duration_seconds: durationSeconds,
+      duration_seconds: durationSeconds || 1800,
       created_at: new Date().toISOString()
     };
 
@@ -650,14 +815,15 @@ export async function recordStoreVisitInSupabase(
       console.warn('[Supabase] recordStoreVisit (store_visits) error:', error.message);
     }
 
-    // Persist to customer_journey only when an authenticated userId exists
-    if (userId) {
+    // Persist to customer_journey
+    if (activeUserId) {
       const { error: journeyErr } = await supabase
         .from('customer_journey')
         .insert({
-          user_id: userId,
+          user_id: activeUserId,
+          customer_name: activeCustomerName || null,
           brand_id: resolvedBrandId,
-          duration_seconds: durationSeconds,
+          duration_seconds: durationSeconds || 1800,
           created_at: row.created_at
         });
 
@@ -665,19 +831,16 @@ export async function recordStoreVisitInSupabase(
         console.warn('[Supabase] recordStoreVisit (customer_journey) error:', journeyErr.message);
       }
 
-      // Persist to activity_logs only when an authenticated userId exists
-      const { error: activityErr } = await logActivityInSupabase({
-        userId,
+      // Persist to activity_logs
+      logActivityInSupabase({
+        userId: activeUserId,
+        customerName: activeCustomerName || undefined,
         action: 'visited',
         detail: 'Store Visit',
-        details: `Visited ${storeName || 'store'} at The Grand Mall.`,
+        details: `${activeCustomerName || 'Customer'} visited ${storeName || 'store'} at The Grand Mall.`,
         storeName: storeName || undefined,
         createdAt: row.created_at
-      });
-
-      if (activityErr) {
-        console.warn('[Supabase] recordStoreVisit (activity_logs) error:', activityErr);
-      }
+      }).catch(() => {});
     }
 
     if (error) {
@@ -740,6 +903,7 @@ export async function fetchCustomerJourneyFromSupabase(userId?: string): Promise
 // ---------------------------------------------------------------------------
 export async function logActivityInSupabase(activity: {
   userId?: string;
+  customerName?: string;
   action: 'connected' | 'visited' | 'ordered' | 'redeemed_coupon' | 'reserved' | 'scanned_qr' | string;
   detail?: string;
   details: string;
@@ -749,8 +913,16 @@ export async function logActivityInSupabase(activity: {
   if (!isSupabaseConfigured) return { log: null };
 
   try {
-    const row = {
-      user_id: activity.userId || null,
+    const activeUserId = await getEffectiveUserId(activity.userId);
+    let activeCustomerName = activity.customerName;
+    if (!activeCustomerName && activeUserId) {
+      const { data: p } = await supabase.from('profiles').select('full_name').eq('id', activeUserId).maybeSingle();
+      if (p?.full_name) activeCustomerName = p.full_name;
+    }
+
+    const row: any = {
+      user_id: activeUserId,
+      customer_name: activeCustomerName || null,
       action: activity.action,
       detail: activity.detail || activity.action.replace('_', ' ').toUpperCase(),
       details: activity.details,

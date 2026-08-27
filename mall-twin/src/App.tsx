@@ -48,20 +48,64 @@ export default function App() {
   const fetchLiveBrands = async () => {
     if (!isSupabaseConfigured) return;
     try {
-      const { data, error } = await supabase
-        .from('brands')
-        .select('id, name, category, floor, zone, logo_url, logo_variant, rating, status, revenue_today, visitors_today, orders_count')
-        .order('name', { ascending: true });
+      const [brandsRes, visitsRes, ordersRes] = await Promise.all([
+        supabase
+          .from('brands')
+          .select('id, name, category, floor, zone, logo_url, logo_variant, rating, status, revenue_today, visitors_today, orders_count')
+          .order('name', { ascending: true }),
+        supabase
+          .from('store_visits')
+          .select('brand_id, customer_name, brands(name)'),
+        supabase
+          .from('orders')
+          .select('id, total_amount, subtotal, order_items(*, products(*, brands(*)))')
+      ]);
 
-      if (error) {
-        console.warn('[MallTwin] Supabase fetch error:', error.message);
+      if (brandsRes.error) {
+        console.warn('[MallTwin] Supabase fetch error:', brandsRes.error.message);
         return;
       }
 
-      // Always update state with whatever Supabase returns (even 0 rows).
-      // This guarantees Mall Twin store list == public.brands exactly.
-      const liveBrands: StoreMapPin[] = (data || []).map(mapSupabaseBrand);
-      console.info(`[MallTwin] Loaded ${liveBrands.length} brands from Supabase public.brands`);
+      const visitsData = visitsRes.data || [];
+      const ordersData = ordersRes.data || [];
+
+      const liveBrands: StoreMapPin[] = (brandsRes.data || []).map((b: any, idx: number) => {
+        const bId = String(b.id || '');
+        const bName = (b.name || '').toLowerCase().trim();
+
+        let liveRevenue = 0;
+        const storeOrderIds = new Set<string>();
+
+        ordersData.forEach((ord: any) => {
+          (ord.order_items || []).forEach((oi: any) => {
+            const itemBrandId = String(oi.products?.brand_id || oi.products?.brands?.id || '');
+            const itemBrandName = (oi.products?.brands?.name || '').toLowerCase().trim();
+
+            if (itemBrandId === bId || (itemBrandName && itemBrandName === bName)) {
+              storeOrderIds.add(ord.id);
+              const itemAmt = Number(oi.subtotal) || (Number(oi.unit_price || 0) * Number(oi.quantity || 1));
+              liveRevenue += itemAmt;
+            }
+          });
+        });
+
+        const brandVisits = visitsData.filter((v: any) => String(v.brand_id) === bId);
+
+        return {
+          id: String(b.id || `brand-${idx + 1}`),
+          name: b.name || 'Store Tenant',
+          category: b.category || 'Retail',
+          floor: b.floor || 'Ground Floor',
+          zone: b.zone || 'Central Atrium',
+          revenueToday: (Number(b.revenue_today) || 0) + liveRevenue,
+          visitorsToday: (Number(b.visitors_today) || 0) + brandVisits.length,
+          ordersCount: (Number(b.orders_count) || 0) + storeOrderIds.size,
+          status: b.status || 'Open',
+          rating: typeof b.rating === 'number' ? b.rating : (parseFloat(b.rating) || 4.5),
+          logo: b.logo_variant || defaultLogoForCategory(b.category),
+        };
+      });
+
       setBrands(liveBrands);
     } catch (e) {
       console.warn('[MallTwin] Supabase fetch exception:', e);
@@ -72,7 +116,7 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveBrands();
-    const interval = setInterval(fetchLiveBrands, 3000);
+    const interval = setInterval(fetchLiveBrands, 2000);
 
     let bc: BroadcastChannel | null = null;
     try {
@@ -82,19 +126,39 @@ export default function App() {
       };
     } catch (e) {}
 
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith('axionix_')) {
+        fetchLiveBrands();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    let sse: EventSource | null = null;
+    try {
+      sse = new EventSource('https://axionix-backend-sage.vercel.app/api/realtime/stream');
+      sse.onmessage = () => {
+        fetchLiveBrands();
+      };
+    } catch (e) {}
+
     let channel: any = null;
     if (isSupabaseConfigured) {
       channel = supabase
-        .channel('mall-twin-brands-realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'brands' }, () => {
-          fetchLiveBrands();
-        })
+        .channel('mall-twin-live-telemetry-react')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { fetchLiveBrands(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => { fetchLiveBrands(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'store_visits' }, () => { fetchLiveBrands(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => { fetchLiveBrands(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => { fetchLiveBrands(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'brands' }, () => { fetchLiveBrands(); })
         .subscribe();
     }
 
     return () => {
       clearInterval(interval);
       bc?.close();
+      window.removeEventListener('storage', handleStorage);
+      sse?.close();
       if (channel) supabase.removeChannel(channel);
     };
   }, []);

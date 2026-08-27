@@ -74,6 +74,16 @@ class CentralizedRealtimeManager {
         )
         .on(
           'postgres_changes',
+          { event: '*', schema: 'public', table: 'profiles' },
+          payload => this.dispatch('wifi_sessions', payload)
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'store_visits' },
+          payload => this.dispatch('wifi_sessions', payload)
+        )
+        .on(
+          'postgres_changes',
           { event: '*', schema: 'public', table: 'orders' },
           payload => this.dispatch('orders', payload)
         )

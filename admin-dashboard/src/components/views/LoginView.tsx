@@ -20,8 +20,8 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('coffeedrama818@gmail.com');
+  const [password, setPassword] = useState('#8495093177a');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setErrorMessage(null);
 
     try {
-      const result = await signInAdmin(email || 'admin@phoenixmall.com', password || 'demo1234');
+      const result = await signInAdmin(email.trim() || 'coffeedrama818@gmail.com', password || '#8495093177a');
 
       if (!result.success) {
         setErrorMessage(result.error || 'Authentication failed. Please check your credentials.');

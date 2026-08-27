@@ -208,17 +208,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       }
     } catch (e) {}
 
-    // 5. Initial base seed transactions so table always has high-fidelity context
-    const seedTxs: LiveMallPayTx[] = [
-      { id: 'seed-1', timestamp: 'Just now', phone: '+91 98987 65432', customerName: 'Reynold Ricky', type: 'DEBIT', description: 'Order Checkout at Nike Flagship (#AX-9496)', amount: 2849, multiplier: '⚡ 2x VIP Points' },
-      { id: 'seed-2', timestamp: '12 mins ago', phone: '+91 84950 93170', customerName: 'yoshi', type: 'CREDIT', description: 'Instant Top-Up via UPI / Google Pay (Ref: TOPUP-9281)', amount: 5000, multiplier: 'Standard' },
-      { id: 'seed-3', timestamp: '28 mins ago', phone: '+91 98123 98765', customerName: 'Aastha Sharma', type: 'DEBIT', description: 'Food Court Checkout at Starbucks (#AX-9491)', amount: 1250, multiplier: '⚡ 2x VIP Points' },
-      { id: 'seed-4', timestamp: '45 mins ago', phone: '+91 98765 11111', customerName: 'Sophia Ricky - Family', type: 'DEBIT', description: 'Shared Wallet Checkout at Zara Flagship (#AX-9485)', amount: 4599, multiplier: '⚡ 2x VIP Points' },
-      { id: 'seed-5', timestamp: '1 hour ago', phone: '+91 98345 67890', customerName: 'Priya Sharma', type: 'CREDIT', description: 'Welcome Top-Up Bonus (Ref: TOPUP-INIT)', amount: 2500, multiplier: 'Standard' }
-    ];
-
     const uniqueMap = new Map<string, LiveMallPayTx>();
-    [...liveTxs, ...seedTxs].forEach(tx => {
+    liveTxs.forEach(tx => {
       const key = `${tx.phone}-${tx.amount}-${tx.type}-${tx.description}`;
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, tx);

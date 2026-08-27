@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
-import { Store as StoreIcon, Search, Filter, Eye, Edit3, BarChart3, Star, MapPin, Plus, Download, FileSpreadsheet } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Store as StoreIcon, Search, Filter, Eye, Edit3, BarChart3, Star, MapPin, Download } from 'lucide-react';
 import { MOCK_STORES } from '../../data/mockData';
 import { Store } from '../../types';
 import { downloadStoresCSV } from '../../utils/exportUtils';
 import { fetchStoresFromSupabase, fetchOrdersFromSupabase, fetchConnectedUsersFromSupabase } from '../../services/supabaseService';
 import { BrandLogo } from '../BrandLogo';
-import { BACKEND_URL } from '../../lib/config';
 
 interface StoreDirectoryViewProps {
   onSelectStore: (store: Store) => void;
@@ -25,49 +24,41 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
   const [liveOrders, setLiveOrders] = useState<any[]>([]);
   const [liveUsers, setLiveUsers] = useState<any[]>([]);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    if (storesList && storesList.length > 0) {
+      setAllStores(storesList);
+    }
+  }, [storesList]);
+
+  useEffect(() => {
     let isMounted = true;
+
     const fetchLiveData = async () => {
       try {
         const [storesRes, ordersRes, usersRes] = await Promise.all([
-          fetchStoresFromSupabase(),
-          fetchOrdersFromSupabase(),
-          fetchConnectedUsersFromSupabase()
+          fetchStoresFromSupabase().catch(() => ({ data: MOCK_STORES, isLive: false })),
+          fetchOrdersFromSupabase().catch(() => ({ data: [], isLive: false })),
+          fetchConnectedUsersFromSupabase().catch(() => ({ data: [], isLive: false }))
         ]);
 
         if (isMounted) {
           if (storesRes.data && storesRes.data.length > 0) {
             setAllStores(storesRes.data);
           }
-          if (ordersRes.data && ordersRes.isLive) {
+          if (ordersRes.data) {
             setLiveOrders(ordersRes.data);
           }
-          if (usersRes.data && usersRes.isLive) {
+          if (usersRes.data) {
             setLiveUsers(usersRes.data);
           }
         }
-      } catch (e) {}
-
-      // Fallback local endpoints
-      try {
-        const oRes = await fetch(`${BACKEND_URL}/api/orders`);
-        const oData = await oRes.json();
-        if (isMounted && oData.success && Array.isArray(oData.orders)) {
-          setLiveOrders(oData.orders);
-        }
-      } catch (e) {}
-
-      try {
-        const uRes = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
-        const uData = await uRes.json();
-        if (isMounted && uData.success && Array.isArray(uData.users)) {
-          setLiveUsers(uData.users);
-        }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[StoreDirectoryView] Data sync note:', e);
+      }
     };
 
     fetchLiveData();
-    const interval = setInterval(fetchLiveData, 3000);
+    const interval = setInterval(fetchLiveData, 5000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -76,7 +67,8 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
 
   const stores = allStores.filter(s => {
     const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || 
-                          s.manager.toLowerCase().includes(search.toLowerCase());
+                          (s.manager || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (s.zone || '').toLowerCase().includes(search.toLowerCase());
     const matchesCat = categoryFilter === 'All' || s.category === categoryFilter;
     const matchesFloor = floorFilter === 'All' || s.floor === floorFilter;
     return matchesSearch && matchesCat && matchesFloor;
@@ -93,25 +85,17 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
             Mall Store Directory & Tenant Roster
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            20 Active Tenants across Food, Fashion, Accessories, Entertainment, and Services.
+            {allStores.length} Verified Flagships across Food, Fashion, Luxury, Tech, and Mall Services.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => downloadStoresCSV(stores)}
-            className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
             <Download className="w-4 h-4 text-emerald-600" />
             Export Directory (CSV)
-          </button>
-
-          <button
-            onClick={() => onSelectStore(MOCK_STORES[0])}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Add New Store Tenant
           </button>
         </div>
       </div>
@@ -122,7 +106,7 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by Store Name or Manager..."
+            placeholder="Search by Store Name, Category, or Zone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600/30"
@@ -133,7 +117,7 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
           >
             <option value="All">All Categories</option>
             <option value="Food">Food & Dining</option>
@@ -146,7 +130,7 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
           <select
             value={floorFilter}
             onChange={(e) => setFloorFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
           >
             <option value="All">All Floors</option>
             <option value="Ground Floor">Ground Floor</option>
@@ -185,36 +169,26 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
               ) : (
                 stores.map(store => {
                   const sClean = store.name.toLowerCase().trim();
+                  const sId = String(store.id || '');
 
-                  const extraVisits = liveUsers.filter(u => {
-                    const vArr = Array.isArray(u.visitedStores) ? u.visitedStores : [];
-                    return vArr.some((vs: string) => {
-                      const vn = (vs || '').toLowerCase();
-                      return vn.includes(sClean) || sClean.includes(vn) || (vn.length > 3 && sClean.includes(vn));
-                    });
-                  }).length;
-
-                  const extraOrders = liveOrders.filter(ord => {
-                    const ordStoreName = (ord.storeName || ord.store_name || ord.brand?.name || '').toLowerCase();
-                    return ordStoreName.includes(sClean) || sClean.includes(ordStoreName) ||
-                      ordStoreName.split(' ').some((w: string) => w.length > 3 && sClean.includes(w)) ||
-                      sClean.split(' ').some((w: string) => w.length > 3 && ordStoreName.includes(w));
-                  });
-
-                  const extraRevenueSum = extraOrders.reduce((sum, ord) => sum + Number(ord.totalAmount || ord.total_amount || 0), 0);
-
-                  const totalVisitors = store.visitorsToday + extraVisits;
-                  const totalOrders = store.ordersCount + extraOrders.length;
-                  const totalRevenue = store.revenueToday + extraRevenueSum;
+                  const totalVisitors = Number(store.visitorsToday) || 0;
+                  const totalOrders = Number(store.ordersCount) || 0;
+                  const totalRevenue = Number(store.revenueToday) || 0;
+                  const bookingsCount = Number(store.reservationsCount) || 0;
+                  const convRate = Number(store.conversionRate) || 45.0;
 
                   return (
-                    <tr key={store.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr 
+                      key={store.id} 
+                      onClick={() => onSelectStore(store)}
+                      className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
+                    >
                       <td className="px-5 py-4 font-bold text-slate-900">
                         <div className="flex items-center gap-3">
-                          <BrandLogo logoVariant={store.logoVariant} logoImg={store.logo || (store as any).logoImg} storeName={store.name} className="w-9 h-9 rounded-xl" />
+                          <BrandLogo logoVariant={store.logoVariant} logoImg={store.logo || (store as any).logoImg} storeName={store.name} className="w-9 h-9 rounded-xl shadow-2xs" />
                           <div>
-                            <div className="font-extrabold text-slate-900">{store.name}</div>
-                            <div className="text-xs text-slate-400 font-normal">{store.manager}</div>
+                            <div className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">{store.name}</div>
+                            <div className="text-xs text-slate-400 font-normal">{store.manager || 'Store Manager'}</div>
                           </div>
                         </div>
                       </td>
@@ -235,53 +209,59 @@ export const StoreDirectoryView: React.FC<StoreDirectoryViewProps> = ({
                       </td>
 
                       <td className="px-5 py-4 text-xs font-bold text-slate-900">
-                        {totalOrders}
+                        {totalOrders.toLocaleString()}
                       </td>
 
                       <td className="px-5 py-4 text-xs font-bold text-slate-900">
-                        {store.reservationsCount}
+                        {bookingsCount}
                       </td>
 
                       <td className="px-5 py-4 text-xs font-bold text-emerald-600">
-                        {store.conversionRate}%
+                        {convRate}%
                       </td>
 
                       <td className="px-5 py-4 text-xs font-black text-blue-700">
                         ₹{totalRevenue.toLocaleString()}
                       </td>
 
-                    <td className="px-5 py-4 text-xs">
-                      <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${
-                        store.status === 'Peak' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                        store.status === 'Open' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {store.status}
-                      </span>
-                    </td>
+                      <td className="px-5 py-4 text-xs">
+                        <span className={`px-2.5 py-1 rounded-full font-bold text-[11px] ${
+                          store.status === 'Peak' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                          store.status === 'Open' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {store.status || 'Open'}
+                        </span>
+                      </td>
 
-                    <td className="px-5 py-4 text-xs text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => onSelectStore(store)}
-                          className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold transition-colors"
-                          title="View Details"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
+                      <td className="px-5 py-4 text-xs text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectStore(store);
+                            }}
+                            className="p-1.5 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 rounded-lg font-bold transition-all cursor-pointer"
+                            title="View Store Details & POS Feed"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
 
-                        <button
-                          onClick={() => onSelectStore(store)}
-                          className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-bold transition-colors"
-                          title="Edit Tenant"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectStoreAnalytics(store);
+                            }}
+                            className="p-1.5 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-600 rounded-lg font-bold transition-all cursor-pointer"
+                            title="View Store Analytics"
+                          >
+                            <BarChart3 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

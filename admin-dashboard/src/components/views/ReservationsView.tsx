@@ -218,22 +218,30 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
       if (supaRes.data && supaRes.isLive) supaItems = supaRes.data;
     } catch (e) {}
 
-    const combined = [...backendItems, ...localItems, ...supaItems, ...reservationsList];
+    let combined: any[] = [];
+    if (supaItems.length > 0) {
+      combined = [...supaItems, ...backendItems];
+    } else if (backendItems.length > 0) {
+      combined = [...backendItems];
+    } else {
+      combined = [...localItems, ...reservationsList];
+    }
+
     const seenRefs = new Set();
     const seenIds = new Set();
     const seenSemanticKeys = new Set();
     const formatted: Reservation[] = [];
 
     for (const r of combined) {
-      const storeName = r.storeName || r.venue || r.store_name || (r.brand ? r.brand.name : 'Starbucks Reserve');
-      const guestName = r.guestName || r.user_name || r.guest_name || 'Valued Guest';
-      const guestPhone = r.guestPhone || r.user_phone || r.guest_phone || '+91 84950 93170';
+      const storeName = r.storeName || r.store_name || (r.brands ? r.brands.name : 'Starbucks Reserve');
+      const guestName = r.guestName || r.guest_name || 'Valued Guest';
+      const guestPhone = r.guestPhone || r.guest_phone || '';
       const stableId = String(r.id || r.refCode || r.ref_code || '');
       const refCode = r.refCode || r.ref_code || (`RES-${storeName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase()}-${stableId.replace(/\D/g, '').slice(-3) || '082'}`);
-      const partySize = Number(r.partySize || r.guest_count || r.party_size || 2);
-      const timeSlot = r.timeSlot || r.preferred_time || r.reservation_time || '17:00 PM';
-      const date = r.date || (r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
-      const specialNotes = r.specialNotes || r.special_notes || r.specialRequest || r.special_request || 'Priority Suite / Dining';
+      const partySize = Number(r.partySize || r.party_size || 2);
+      const timeSlot = r.timeSlot || r.time_slot || '14:00 PM';
+      const date = r.reservation_date || r.date || (r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      const specialNotes = r.specialNotes || r.special_notes || r.notes || r.specialRequest || 'VIP Table Reservation';
       const resIdStr = String(r.id || refCode);
       const savedOverride = localStorage.getItem(`axionix_res_status_${resIdStr}`) || localStorage.getItem(`axionix_res_status_${refCode}`);
       const rawStatus = savedOverride || r.status || 'Confirmed';
@@ -467,6 +475,67 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     setDraggedResId(null);
   };
 
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const occ = getSlotOccupancy(newStoreName, newDate, newTimeSlot);
+      if (occ.isFull) {
+        showToast(`⛔ Slot ${newTimeSlot} is FULL for ${newStoreName}. Please choose another slot.`, 'warning');
+        return;
+      }
+      if (Number(newPartySize) > occ.available) {
+        showToast(`⛔ Slot unavailable: Party size (${newPartySize}) exceeds remaining seats (${occ.available} left out of ${occ.maxCap} for ${newStoreName}). Please choose another slot.`, 'warning');
+        return;
+      }
+
+      const refCode = `RES-${newStoreName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+      const newResObj: Reservation = {
+        id: `res-${Date.now()}`,
+        refCode,
+        guestName: newGuestName.trim() || 'Valued Guest',
+        guestPhone: newGuestPhone.trim() || '+91 98000 00000',
+        storeName: newStoreName,
+        partySize: Number(newPartySize) || 2,
+        timeSlot: newTimeSlot,
+        date: newDate,
+        status: 'Confirmed',
+        specialNotes: newSpecialNotes.trim() || 'Direct Admin Reservation',
+        createdAt: new Date().toISOString()
+      };
+
+      // 1. Update local state immediately
+      setLiveReservations(prev => [newResObj, ...prev]);
+      setShowCreateModal(false);
+      showToast(`🎉 Reservation ${refCode} created successfully for ${newGuestName}!`);
+
+      // 2. Persist to localStorage
+      try {
+        const local = JSON.parse(localStorage.getItem('axionix_reservations_list') || '[]');
+        localStorage.setItem('axionix_reservations_list', JSON.stringify([newResObj, ...local]));
+      } catch (err) {}
+
+      // 3. Post to backend
+      try {
+        await fetch(`${BACKEND_URL}/api/reservations/book`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeName: newStoreName,
+            date: newDate,
+            timeSlot: newTimeSlot,
+            guestName: newGuestName,
+            guestPhone: newGuestPhone,
+            partySize: newPartySize,
+            specialNotes: newSpecialNotes
+          })
+        });
+      } catch (err) {}
+    } catch (error) {
+      console.error('Create reservation error:', error);
+      showToast('Error creating reservation', 'warning');
+    }
+  };
+
   // Feature 08 — Save Capacity Settings
   const handleSaveCapacity = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -524,11 +593,18 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
   // Calculate Slot Capacity and Booked Count for a specific date and time slot
   const getSlotOccupancy = (storeName: string, dateStr: string, slotStr: string) => {
+    const isAllStores = !storeName || storeName === 'All Stores';
     const storeCaps = slotCapacities[storeName] || { default: 6 };
-    const maxCap = storeCaps[slotStr] !== undefined ? storeCaps[slotStr] : (storeCaps.default || 6);
+    
+    // When viewing All Stores, capacity is the aggregate capacity across all operating stores in the mall
+    const maxCap = isAllStores 
+      ? (Object.keys(slotCapacities).length > 0 
+          ? Object.values(slotCapacities).reduce((acc: number, sc: any) => acc + (sc[slotStr] !== undefined ? Number(sc[slotStr]) : Number(sc.default || 6)), 0)
+          : (18 * 6))
+      : (storeCaps[slotStr] !== undefined ? Number(storeCaps[slotStr]) : Number(storeCaps.default || 6));
 
     const slotReservations = activeReservationsList.filter(r => {
-      const matchesStore = storeName === 'All Stores' || r.storeName === storeName;
+      const matchesStore = isAllStores || r.storeName === storeName;
       const matchesDate = r.date === dateStr || (r.date === 'Today' && dateStr === new Date().toISOString().split('T')[0]);
       const cleanSlot = slotStr.replace(' PM', '').replace(' AM', '');
       const matchesSlot = (r.timeSlot || '').includes(cleanSlot) || r.timeSlot === slotStr;
@@ -545,27 +621,6 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Toast Alert */}
-      {toastNotice && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 border animate-in slide-in-from-bottom-4 duration-200 ${
-            toastType === 'warning'
-              ? 'bg-rose-900 text-rose-100 border-rose-700'
-              : toastType === 'info'
-              ? 'bg-indigo-900 text-indigo-100 border-indigo-700'
-              : 'bg-slate-900 text-white border-slate-700'
-          }`}
-        >
-          {toastType === 'warning' ? (
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
-          ) : toastType === 'info' ? (
-            <BellRing className="w-5 h-5 text-amber-400 flex-shrink-0 animate-bounce" />
-          ) : (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          )}
-          <span className="font-extrabold text-xs">{toastNotice}</span>
-        </div>
-      )}
 
       {/* HEADER CONTROLS & TAB SWITCHER */}
       <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
@@ -628,11 +683,12 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
             </button>
 
             <button
+              type="button"
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 whitespace-nowrap"
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 whitespace-nowrap z-10"
             >
               <Plus className="w-4 h-4" />
-              + New Reservation
+              <span>New Reservation</span>
             </button>
           </div>
         </div>
@@ -723,8 +779,8 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
                   {weekDates[0]?.monthName} {weekDates[0]?.dayNum} – {weekDates[6]?.monthName} {weekDates[6]?.dayNum}, 2026
                 </h3>
                 <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
-                  <MoveHorizontal className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Drag &amp; drop any reservation card between time slots to reschedule instantly</span>
+                  <CalendarCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Real-time table &amp; fitting suite reservations across all mall stores</span>
                 </p>
               </div>
             </div>
@@ -897,12 +953,6 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
                                     </div>
                                   </div>
                                 ))}
-
-                                {occupancy.reservations.length === 0 && (
-                                  <div className="h-full border border-dashed border-slate-200/80 rounded-xl flex items-center justify-center p-2 text-[10px] text-slate-300 font-medium">
-                                    Drop here
-                                  </div>
-                                )}
                               </div>
                             </td>
                           );

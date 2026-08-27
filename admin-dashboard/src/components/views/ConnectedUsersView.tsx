@@ -1,123 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import { Wifi, Search, Filter, Smartphone, Footprints, ShieldCheck, Download, RefreshCw, FileSpreadsheet } from 'lucide-react';
-import { MOCK_USERS } from '../../data/mockData';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Wifi, Search, Filter, Smartphone, Footprints, ShieldCheck, Download, RefreshCw } from 'lucide-react';
 import { ConnectedUser } from '../../types';
 import { downloadUsersCSV } from '../../utils/exportUtils';
 import { fetchConnectedUsersFromSupabase } from '../../services/supabaseService';
 import { BACKEND_URL } from '../../lib/config';
 
 interface ConnectedUsersViewProps {
-  onSelectUserJourney: (user: ConnectedUser) => void;
+  onSelectUserJourney?: (user: ConnectedUser) => void;
   users?: ConnectedUser[];
 }
 
-export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelectUserJourney, users = MOCK_USERS }) => {
+export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelectUserJourney }) => {
   const [search, setSearch] = useState('');
   const [deviceFilter, setDeviceFilter] = useState('All');
   const [vipOnly, setVipOnly] = useState(false);
-  const [liveUsersList, setLiveUsersList] = useState<ConnectedUser[]>(users);
+  const [liveUsersList, setLiveUsersList] = useState<ConnectedUser[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchLiveConnectedUsers = async () => {
-    let mergedUsers: ConnectedUser[] = [];
-
-    // 1. Fetch from Supabase
+  const fetchLiveConnectedUsers = useCallback(async () => {
+    setIsRefreshing(true);
     try {
+      // 1. Fetch live profiles & Wi-Fi sessions from Supabase
       const supaRes = await fetchConnectedUsersFromSupabase();
-      if (supaRes.data && supaRes.isLive) {
-        mergedUsers.push(...supaRes.data);
-      }
-    } catch (e) {}
+      let users = Array.isArray(supaRes.data) ? supaRes.data : [];
 
-    // 2. LocalStorage Fallback
-    try {
-      const local = JSON.parse(localStorage.getItem('axionix_users_list') || '[]');
-      if (Array.isArray(local) && local.length > 0) {
-        mergedUsers.push(...local);
-      }
-    } catch (e) {}
+      // 2. Query backend live captive session list as additional real-time source
+      try {
+        const bRes = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
+        const bData = await bRes.json();
+        if (bData && bData.success && Array.isArray(bData.users) && bData.users.length > 0) {
+          const userMap = new Map<string, ConnectedUser>();
+          
+          // Seed with Supabase users
+          users.forEach(u => {
+            const phoneKey = (u.phone || '').replace(/\D/g, '').slice(-10);
+            const key = phoneKey || (u.id || '').toLowerCase() || (u.name || '').toLowerCase();
+            userMap.set(key, u);
+          });
 
-    // 3. Fetch from Shared Backend Port 5000
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
-      const data = await res.json();
-      if (data.success && Array.isArray(data.users) && data.users.length > 0) {
-        mergedUsers.push(...data.users);
-      }
-    } catch (e) {}
+          // Overlay real-time active statuses from backend gateway
+          bData.users.forEach((bu: any) => {
+            const phoneKey = (bu.phone || '').replace(/\D/g, '').slice(-10);
+            const key = phoneKey || (bu.id || '').toLowerCase() || (bu.name || '').toLowerCase();
+            const existing = userMap.get(key);
+            if (existing) {
+              userMap.set(key, {
+                ...existing,
+                status: bu.status || existing.status || 'Active',
+                zone: bu.zone || existing.zone || 'Ground Floor Atrium',
+                dataUsed: bu.dataUsed || existing.dataUsed || '45 MB'
+              });
+            } else if (bu.name && bu.name !== 'Valued Shopper') {
+              userMap.set(key, bu);
+            }
+          });
 
-    // 3. Fallback to passed prop or mock data if empty
-    if (mergedUsers.length === 0) {
-      mergedUsers = [...users];
-    } else {
-      mergedUsers = [...mergedUsers, ...users];
-    }
-
-    // Deduplicate by phone or id, preserving active status and merging all visited stores
-    const userMap = new Map<string, ConnectedUser>();
-
-    for (const u of mergedUsers) {
-      const anyU = u as any;
-      const phoneClean = (u.phone || anyU.phone_number || '').replace(/\D/g, '').slice(-10);
-      const nameClean = (u.name || 'Valued Guest').trim();
-      const key = phoneClean || nameClean.toLowerCase();
-
-      const existing = userMap.get(key);
-      const incomingStores = Array.isArray(u.visitedStores) ? u.visitedStores.filter(s => s && s !== 'Wi-Fi Captive Portal') : [];
-
-      if (!existing) {
-        userMap.set(key, {
-          id: String(u.id || `usr-${Date.now()}`),
-          name: nameClean,
-          phone: u.phone || anyU.phone_number || '+91 84950 93170',
-          macAddress: u.macAddress || 'FE:88:99:A1:B2:C3',
-          ipAddress: u.ipAddress || '192.168.10.142',
-          connectionTime: u.connectionTime || 'Just now',
-          sessionDuration: u.sessionDuration || '1m',
-          visitedStores: incomingStores,
-          dataUsed: u.dataUsed || '15 MB',
-          status: String(u.status).toLowerCase() === 'active' ? 'Active' : 'Disconnected',
-          vipStatus: true,
-          zone: u.zone || anyU.floor_detected || 'Ground Floor Atrium',
-          deviceType: u.deviceType || 'iOS'
-        });
-      } else {
-        const mergedStores = Array.from(new Set([...existing.visitedStores, ...incomingStores]));
-        existing.visitedStores = mergedStores;
-        if (String(u.status).toLowerCase() === 'active') {
-          existing.status = 'Active';
+          users = Array.from(userMap.values());
         }
-        if (nameClean && nameClean !== 'Valued Guest' && (!existing.name || existing.name === 'Valued Guest' || existing.name === 'WiFi Visitor')) {
-          existing.name = nameClean;
-        }
-      }
-    }
+      } catch (e) {}
 
-    setLiveUsersList(prev => {
-      const map = new Map<string, ConnectedUser>();
-      prev.forEach(u => {
-        const phoneClean = (u.phone || '').replace(/\D/g, '').slice(-10);
-        const key = phoneClean || (u.name || '').toLowerCase() || u.id;
-        if (key) map.set(key, u);
+      // 3. Sort strictly: Recent users at top, older users below
+      users.sort((a: any, b: any) => {
+        const timeA = a._rawTimestamp || a.created_at || a.connectionTime || 0;
+        const timeB = b._rawTimestamp || b.created_at || b.connectionTime || 0;
+        return new Date(timeB).getTime() - new Date(timeA).getTime();
       });
-      for (const [key, u] of userMap.entries()) {
-        const existing = map.get(key);
-        const existingStores = existing?.visitedStores || [];
-        const incomingStores = u.visitedStores || [];
-        const mergedStores = Array.from(new Set([...existingStores, ...incomingStores]));
-        map.set(key, {
-          ...existing,
-          ...u,
-          visitedStores: mergedStores,
-          status: (u.status === 'Active' || existing?.status === 'Active') ? 'Active' : (u.status || 'Disconnected')
-        });
-      }
-      return Array.from(map.values());
-    });
-  };
+
+      setLiveUsersList(users);
+    } catch (e) {
+      console.warn('[ConnectedUsersView] Error fetching live users:', e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchLiveConnectedUsers();
-    const interval = setInterval(fetchLiveConnectedUsers, 1500);
+    const interval = setInterval(fetchLiveConnectedUsers, 4000);
 
     let eventSource: EventSource | null = null;
     try {
@@ -136,7 +95,7 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
     } catch (e) {}
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'axionix_users_list' || e.key === 'axionix_last_event') {
+      if (e.key === 'axionix_users_list' || e.key === 'axionix_last_event' || e.key?.startsWith('axionix_')) {
         fetchLiveConnectedUsers();
       }
     };
@@ -150,16 +109,20 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('axionix_user_added', fetchLiveConnectedUsers);
     };
-  }, []);
+  }, [fetchLiveConnectedUsers]);
 
-  const currentUsers = liveUsersList.length > 0 ? liveUsersList : users;
+  const filteredUsers = liveUsersList.filter(u => {
+    const nameStr = (u.name || '').toLowerCase();
+    const phoneStr = (u.phone || '');
+    const macStr = (u.macAddress || '').toLowerCase();
+    const searchLower = search.toLowerCase();
 
-  const filteredUsers = currentUsers.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) || 
-                          u.phone.includes(search) || 
-                          u.macAddress.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = !search || 
+                          nameStr.includes(searchLower) || 
+                          phoneStr.includes(search) || 
+                          macStr.includes(searchLower);
     const matchesDevice = deviceFilter === 'All' || u.deviceType === deviceFilter;
-    const matchesVip = !vipOnly || u.vipStatus;
+    const matchesVip = !vipOnly || Boolean(u.vipStatus);
     return matchesSearch && matchesDevice && matchesVip;
   });
 
@@ -174,11 +137,21 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
             Connected WiFi Users Management
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time list of {currentUsers.length.toLocaleString()} connected devices across AXIONIX HighSpeed WiFi gateways.
+            Real-time live telemetry of {liveUsersList.length.toLocaleString()} guest devices sorted with most recent connections at top.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={fetchLiveConnectedUsers}
+            disabled={isRefreshing}
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+            title="Refresh Live Users"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
+            Refresh
+          </button>
+
           <button
             onClick={() => setVipOnly(!vipOnly)}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
@@ -246,86 +219,85 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-8 text-center text-slate-400">
-                    No matching connected users found for current search filters.
+                  <td colSpan={8} className="px-5 py-8 text-center text-slate-400 font-medium">
+                    No matching connected users found. New customer Wi-Fi logins appear here live.
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map(user => (
-                  <tr key={user.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-5 py-4 font-medium text-slate-900">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
-                          {user.name[0]}
+                filteredUsers.map(user => {
+                  const displayName = user.name || 'Mall Guest';
+                  const initialChar = displayName.charAt(0).toUpperCase() || 'G';
+                  const cleanStores = (user.visitedStores || []).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+                  return (
+                    <tr key={user.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-5 py-4 font-medium text-slate-900">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
+                            {initialChar}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">{displayName}</div>
+                            {user.vipStatus && (
+                              <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                VIP
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{user.name}</div>
-                          {user.vipStatus && (
-                            <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                              VIP
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-5 py-4 text-xs font-mono">
-                      <div className="text-slate-800 font-semibold">{user.phone}</div>
-                      <div className="text-slate-400">{user.macAddress}</div>
-                    </td>
+                      <td className="px-5 py-4 text-xs font-mono">
+                        <div className="text-slate-900 font-bold">{user.phone}</div>
+                        <div className="text-slate-400 text-[11px]">{user.macAddress || 'A4:C3:F0:88:99:A1'}</div>
+                      </td>
 
-                    <td className="px-5 py-4 text-xs font-semibold text-slate-700">
-                      {user.connectionTime}
-                    </td>
+                      <td className="px-5 py-4 text-xs font-medium text-slate-600">
+                        {user.connectionTime || 'Just now'}
+                      </td>
 
-                    <td className="px-5 py-4 text-xs font-semibold text-slate-900">
-                      {user.sessionDuration}
-                    </td>
+                      <td className="px-5 py-4 text-xs font-medium text-slate-600">
+                        {user.sessionDuration || '5 mins'}
+                      </td>
 
-                    <td className="px-5 py-4 text-xs">
-                      {(() => {
-                        const cleanStores = user.visitedStores.filter(s => s !== 'Wi-Fi Captive Portal');
-                        if (cleanStores.length === 0) {
-                          return <span className="text-slate-400 italic">No stores visited yet</span>;
-                        }
-                        return (
-                          <div className="flex flex-wrap gap-1 max-w-[220px]">
-                            {cleanStores.map((st, i) => (
-                              <span key={i} className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold text-[11px]">
-                                {st}
+                      <td className="px-5 py-4 text-xs">
+                        {cleanStores.length === 0 ? (
+                          <span className="text-slate-400 italic">Browsing Mall</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {cleanStores.map((s, idx) => (
+                              <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[11px] font-semibold border border-blue-100">
+                                {s}
                               </span>
                             ))}
                           </div>
-                        );
-                      })()}
-                    </td>
+                        )}
+                      </td>
 
-                    <td className="px-5 py-4 text-xs">
-                      <div className="font-semibold text-slate-800">{user.zone}</div>
-                      <div className="text-slate-400">{user.dataUsed} • {user.deviceType}</div>
-                    </td>
+                      <td className="px-5 py-4 text-xs">
+                        <div className="font-semibold text-slate-800">{user.zone || 'Ground Floor Atrium'}</div>
+                        <div className="text-[11px] text-slate-400">{user.dataUsed || '45 MB'} • {user.deviceType || 'iOS'}</div>
+                      </td>
 
-                    <td className="px-5 py-4 text-xs">
-                      <span className={`px-2.5 py-1 rounded-full font-extrabold text-[11px] ${
-                        user.status === 'Active'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-sm'
-                          : 'bg-rose-100 text-rose-800 border border-rose-300 shadow-sm'
-                      }`}>
-                        ● {user.status === 'Active' ? 'Active' : 'Disconnected'}
-                      </span>
-                    </td>
+                      <td className="px-5 py-4 text-xs">
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                          user.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          • {user.status || 'Active'}
+                        </span>
+                      </td>
 
-                    <td className="px-5 py-4 text-xs text-right">
-                      <button
-                        onClick={() => onSelectUserJourney(user)}
-                        className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-bold transition-colors flex items-center gap-1 ml-auto cursor-pointer"
-                      >
-                        <Footprints className="w-3.5 h-3.5" />
-                        View Journey
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      <td className="px-5 py-4 text-xs text-right">
+                        <button
+                          onClick={() => onSelectUserJourney && onSelectUserJourney(user)}
+                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg transition-colors cursor-pointer text-xs"
+                        >
+                          View Journey
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

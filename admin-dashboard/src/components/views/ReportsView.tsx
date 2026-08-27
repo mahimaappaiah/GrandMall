@@ -112,7 +112,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onOpenReportModal }) =
             Executive Reports & Export Center
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Download formatted CSV management files for Mall Management stakeholders across all 10 core system modules.
+            Download formatted Excel (.xls), PDF documents & CSV management files with live Supabase telemetry.
           </p>
         </div>
 
@@ -121,7 +121,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onOpenReportModal }) =
           className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all self-start md:self-auto cursor-pointer"
         >
           <ShieldCheck className="w-4 h-4 text-amber-300" />
-          Export Master System Audit (.csv)
+          Export Master Audit (.xls / .pdf)
         </button>
       </div>
 
@@ -167,9 +167,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onOpenReportModal }) =
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  Format: Standard CSV (.csv)
+                  Format: <strong className="text-slate-700">Excel (.xls), PDF & CSV</strong>
                 </span>
                 <button
                   onClick={() => onOpenReportModal(rep.title)}

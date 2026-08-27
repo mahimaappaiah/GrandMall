@@ -100,30 +100,77 @@ export const StoreDetailModal: React.FC<StoreDetailModalProps> = ({ store, onClo
     setPOSFeedLoading(true);
 
     try {
-      const thisName = store.name.toLowerCase();
+      const thisName = (store.name || '').trim().toLowerCase();
+      const thisId = store.id ? String(store.id) : '';
       const realTxns: POSTransaction[] = [];
       const visitingUsers: any[] = [];
 
       // 1. Fetch live Orders from Supabase
       try {
-        const supaOrdersRes = await fetchOrdersFromSupabase(store.id);
+        const supaOrdersRes = await fetchOrdersFromSupabase();
         if (supaOrdersRes.data && supaOrdersRes.isLive && supaOrdersRes.data.length > 0) {
           supaOrdersRes.data.forEach(ord => {
             const rawMethod = (ord.paymentMethod || ord.payment_method || '').toLowerCase();
             let method: PaymentMethod = 'UPI';
-            if (rawMethod.includes('card') || rawMethod.includes('credit') || rawMethod.includes('debit')) method = 'Card';
-            else if (rawMethod.includes('cash')) method = 'Cash';
-            else if (rawMethod.includes('bnpl')) method = 'BNPL';
+            if (rawMethod.includes('card') || rawMethod.includes('credit') || rawMethod.includes('debit') || rawMethod.includes('apple')) method = 'Card';
+            else if (rawMethod.includes('cash') || rawMethod.includes('counter') || rawMethod.includes('pay at')) method = 'Cash';
+            else if (rawMethod.includes('bnpl') || rawMethod.includes('later')) method = 'BNPL';
 
-            realTxns.push({
-              id: ord.orderNumber || ord.id,
-              time: ord.timestamp || 'Today',
-              customer: ord.customerName || 'Mall Guest',
-              items: ord.itemsCount || 1,
-              amount: ord.totalAmount || 0,
-              method: method,
-              status: ord.status === 'Completed' ? 'Completed' : 'Pending'
-            });
+            const ordItems = Array.isArray(ord.items) ? ord.items : [];
+
+            // Filter ONLY the items that belong to THIS store
+            if (ordItems.length > 0) {
+              const storeItems = ordItems.filter((item: any) => {
+                const itemBrandName = (item.products?.brands?.name || item.brands?.name || item.storeName || item.store_name || '').trim().toLowerCase();
+                const itemBrandId = item.products?.brands?.id || item.brand_id || item.brandId;
+                
+                if (thisId && itemBrandId && String(itemBrandId) === thisId) return true;
+                if (itemBrandName) {
+                  return itemBrandName === thisName || itemBrandName.includes(thisName) || thisName.includes(itemBrandName);
+                }
+                // If item has no brand info, check parent order store name
+                const parentStoreName = (ord.storeName || ord.store_name || '').trim().toLowerCase();
+                return parentStoreName === thisName;
+              });
+
+              if (storeItems.length > 0) {
+                const itemsCount = storeItems.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0);
+                const storeAmount = storeItems.reduce((sum: number, it: any) => {
+                  const lineSubtotal = Number(it.subtotal);
+                  if (!isNaN(lineSubtotal) && lineSubtotal > 0) return sum + lineSubtotal;
+                  const qty = Number(it.quantity) || 1;
+                  const price = Number(it.unit_price || it.price || it.products?.price || 0);
+                  return sum + (qty * price);
+                }, 0);
+
+                realTxns.push({
+                  id: ord.orderNumber || ord.id,
+                  time: ord.timestamp || 'Today',
+                  customer: ord.customerName || 'Mall Guest',
+                  items: itemsCount,
+                  amount: storeAmount,
+                  method: method,
+                  status: ord.status === 'Completed' ? 'Completed' : 'Pending'
+                });
+              }
+            } else {
+              // Direct order without order_items array: check if order belongs strictly to this store
+              const ordStore = (ord.storeName || ord.store_name || '').trim().toLowerCase();
+              const ordBrandId = ord.brand_id ? String(ord.brand_id) : '';
+              const isDirectMatch = (thisId && ordBrandId && ordBrandId === thisId) || (ordStore === thisName);
+
+              if (isDirectMatch) {
+                realTxns.push({
+                  id: ord.orderNumber || ord.id,
+                  time: ord.timestamp || 'Today',
+                  customer: ord.customerName || 'Mall Guest',
+                  items: ord.itemsCount || 1,
+                  amount: Number(ord.totalAmount) || 0,
+                  method: method,
+                  status: ord.status === 'Completed' ? 'Completed' : 'Pending'
+                });
+              }
+            }
           });
         }
       } catch (e) {}
@@ -134,14 +181,7 @@ export const StoreDetailModal: React.FC<StoreDetailModalProps> = ({ store, onClo
           const res = await fetch(`${BACKEND_URL}/api/orders`);
           const data = await res.json();
           if (data.success && Array.isArray(data.orders)) {
-          const storeOrders = data.orders.filter((ord: any) => {
-            const ordStoreName: string = (ord.storeName || ord.store_name || ord.brand?.name || '').toLowerCase();
-            return ordStoreName.includes(thisName) || thisName.includes(ordStoreName) ||
-              ordStoreName.split(' ').some((w: string) => w.length > 3 && thisName.includes(w)) ||
-              thisName.split(' ').some((w: string) => w.length > 3 && ordStoreName.includes(w));
-          });
-
-            storeOrders.forEach((ord: any, i: number) => {
+            data.orders.forEach((ord: any, i: number) => {
               const rawMethod = (ord.paymentMethod || ord.payment_method || '').toLowerCase();
               let method: PaymentMethod = 'UPI';
               if (rawMethod.includes('card') || rawMethod.includes('credit') || rawMethod.includes('debit') || rawMethod.includes('apple')) method = 'Card';
@@ -152,18 +192,42 @@ export const StoreDetailModal: React.FC<StoreDetailModalProps> = ({ store, onClo
               const ts = ord.createdAt || ord.created_at || ord.timestamp || '';
               const timeStr = ts && ts !== 'Just now' ? (isNaN(Date.parse(ts)) ? ts : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })) : 'Just now';
               const customerName = ord.customerName || ord.user_name || ord.customer?.name || ord.user?.name || `Guest ${i + 1}`;
-              const itemCount = ord.itemsCount || (Array.isArray(ord.items) ? ord.items.length : 1);
-              const amount = Number(ord.totalAmount || ord.total_amount || ord.total || ord.amount || 500);
 
-              realTxns.push({
-                id: ord.orderId || ord.id || ord._id || `TXN-${store.id}-${i}`,
-                time: timeStr,
-                customer: customerName,
-                items: itemCount,
-                amount,
-                method,
-                status: 'Completed',
-              });
+              const ordItems = Array.isArray(ord.items) ? ord.items : [];
+              if (ordItems.length > 0) {
+                const storeItems = ordItems.filter((it: any) => {
+                  const itStore = (it.storeName || it.store_name || it.brand?.name || it.brand || '').trim().toLowerCase();
+                  return itStore === thisName || itStore.includes(thisName) || thisName.includes(itStore);
+                });
+
+                if (storeItems.length > 0) {
+                  const itemsCount = storeItems.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0);
+                  const storeAmount = storeItems.reduce((sum: number, it: any) => sum + (Number(it.subtotal) || (Number(it.quantity || 1) * Number(it.price || it.unit_price || 0))), 0);
+
+                  realTxns.push({
+                    id: ord.orderId || ord.id || ord._id || `TXN-${store.id}-${i}`,
+                    time: timeStr,
+                    customer: customerName,
+                    items: itemsCount,
+                    amount: storeAmount,
+                    method,
+                    status: 'Completed',
+                  });
+                }
+              } else {
+                const ordStoreName: string = (ord.storeName || ord.store_name || ord.brand?.name || '').trim().toLowerCase();
+                if (ordStoreName === thisName) {
+                  realTxns.push({
+                    id: ord.orderId || ord.id || ord._id || `TXN-${store.id}-${i}`,
+                    time: timeStr,
+                    customer: customerName,
+                    items: ord.itemsCount || 1,
+                    amount: Number(ord.totalAmount || ord.total_amount || ord.total || ord.amount || 0),
+                    method,
+                    status: 'Completed',
+                  });
+                }
+              }
             });
           }
         } catch (e) {}

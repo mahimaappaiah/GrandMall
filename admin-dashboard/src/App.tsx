@@ -39,6 +39,7 @@ import {
   fetchOrdersFromSupabase, 
   fetchReservationsFromSupabase, 
   fetchCouponsFromSupabase,
+  fetchCampaignsFromSupabase,
   fetchNotificationsFromSupabase,
   markNotificationAsReadInSupabase,
   markAllNotificationsAsReadInSupabase,
@@ -92,7 +93,7 @@ export default function App() {
       const saved = localStorage.getItem('axionix_users_list');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return MOCK_USERS;
+    return [];
   });
 
   const [ordersList, setOrdersList] = useState<Order[]>(() => {
@@ -100,7 +101,7 @@ export default function App() {
       const saved = localStorage.getItem('axionix_orders_list');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return MOCK_ORDERS;
+    return [];
   });
 
   const [reservationsList, setReservationsList] = useState<Reservation[]>(() => {
@@ -108,7 +109,7 @@ export default function App() {
       const saved = localStorage.getItem('axionix_reservations_list');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return MOCK_RESERVATIONS;
+    return [];
   });
 
   const [couponsList, setCouponsList] = useState<Coupon[]>(() => {
@@ -124,6 +125,8 @@ export default function App() {
     localStorage.removeItem('axionix_coupons_list');
     return MOCK_COUPONS;
   });
+
+  const [campaignsList, setCampaignsList] = useState<Campaign[]>([]);
 
   useEffect(() => {
     try { localStorage.setItem('axionix_users_list', JSON.stringify(usersList)); } catch (e) {}
@@ -235,12 +238,49 @@ export default function App() {
     };
   }, []);
 
+  const loadSupabaseData = async () => {
+    try {
+      const [storesRes, usersRes, ordersRes, resRes, cpnRes, campRes] = await Promise.all([
+        fetchStoresFromSupabase(),
+        fetchConnectedUsersFromSupabase(),
+        fetchOrdersFromSupabase(),
+        fetchReservationsFromSupabase(),
+        fetchCouponsFromSupabase(),
+        fetchCampaignsFromSupabase()
+      ]);
+
+      if (storesRes.data && storesRes.data.length > 0) {
+        setStoresList(storesRes.data);
+      }
+      if (usersRes.data && usersRes.isLive) {
+        setUsersList(usersRes.data);
+      }
+      if (ordersRes.data && ordersRes.isLive) {
+        setOrdersList(ordersRes.data);
+      }
+      if (resRes.data && resRes.isLive) {
+        setReservationsList(resRes.data);
+      }
+      if (cpnRes.data && cpnRes.isLive) {
+        setCouponsList(cpnRes.data);
+      }
+      if (campRes.data && campRes.data.length > 0) {
+        setCampaignsList(campRes.data);
+      }
+    } catch (err) {
+      console.warn('[App] Supabase data load error:', err);
+    }
+  };
+
   // Centralized Controlled Supabase Realtime Subscriptions
   useEffect(() => {
     if (!currentUser) {
       realtimeManager.cleanup();
       return;
     }
+
+    // Load full historical baseline immediately when authenticated admin session is ready
+    loadSupabaseData();
 
     realtimeManager.init();
 
@@ -302,12 +342,13 @@ export default function App() {
 
   const handleRealtimeEvent = (type: string, payload: any) => {
     if (type === 'GUEST_CHECKIN') {
-      const guestName = payload.user?.name || 'Valued Guest';
+      const guestName = payload.user?.name || payload.name || 'Valued Guest';
       const guestFloor = payload.user?.floor || payload.floor || 'Ground Floor';
-      const guestPhone = payload.user?.phone_number || '+91 98765 43210';
+      const guestPhone = payload.user?.phone_number || payload.phone || '+91 98765 43210';
+      const guestId = payload.user?.id || payload.userId || payload.id;
 
       const newUser: ConnectedUser = {
-        id: 'usr-' + Date.now(),
+        id: guestId || 'usr-' + Date.now(),
         name: guestName,
         phone: guestPhone,
         macAddress: 'FE:88:99:A1:B2:C3',
@@ -322,65 +363,60 @@ export default function App() {
         deviceType: 'iOS'
       };
 
-      setUsersList(prev => [newUser, ...prev.filter(u => !matchUser(u, guestPhone, guestName))]);
+      setUsersList(prev => {
+        const cleanP = (guestPhone || '').replace(/\D/g, '').slice(-10);
+        const filtered = prev.filter(u => {
+          const uP = (u.phone || '').replace(/\D/g, '').slice(-10);
+          return !(cleanP && uP === cleanP) && !(guestId && (u.id === guestId || (u as any).user_id === guestId));
+        });
+        const existing = prev.find(u => {
+          const uP = (u.phone || '').replace(/\D/g, '').slice(-10);
+          return (cleanP && uP === cleanP) || (guestId && (u.id === guestId || (u as any).user_id === guestId));
+        });
+        const visitedStores = existing?.visitedStores || [];
+        return [{ ...newUser, ...existing, visitedStores, status: 'Active', connectionTime: 'Just now' }, ...filtered];
+      });
+
       setLiveToast({
         title: 'New Guest Connected Wi-Fi',
         message: `${guestName} checked in at ${guestFloor}`
       });
-    } else if (type === 'GUEST_DISCONNECTED') {
-      const phone = payload.user?.phone_number;
-      const name = payload.user?.name;
+    } else if (type === 'GUEST_DISCONNECTED' || type === 'GUEST_DISCONNECT') {
+      const phone = payload.phone || payload.phone_number || payload.user?.phone_number || payload.user?.phone;
+      const name = payload.name || payload.userName || payload.user?.name;
+      const userId = payload.userId || payload.user_id || payload.id || payload.user?.id;
 
       setUsersList(prev => {
-        let matched = false;
-        const updated = prev.map(u => {
-          if (matchUser(u, phone, name) || (name && u.name.toLowerCase().includes(name.toLowerCase())) || (phone && u.phone.includes(phone))) {
-            matched = true;
+        return prev.map(u => {
+          if (matchUser(u, phone, name) || (userId && (u.id === userId || (u as any).user_id === userId))) {
             return { ...u, status: 'Disconnected' as const };
           }
           return u;
         });
-
-        if (!matched && prev.length > 0) {
-          const activeIdx = prev.findIndex(u => u.status === 'Active');
-          const targetIdx = activeIdx !== -1 ? activeIdx : 0;
-          return prev.map((u, i) => i === targetIdx ? { ...u, status: 'Disconnected' as const } : u);
-        }
-
-        return updated;
       });
 
       setLiveToast({
         title: 'Guest Disconnected / Logged Out',
-        message: `${payload.user?.name || 'Guest'} session closed.`
+        message: `${name || payload.user?.name || 'Guest'} session closed.`
       });
     } else if (type === 'STORE_VISITED' || type === 'STORE_VISIT') {
       const phone = payload.user_phone || payload.phone || (payload.user && payload.user.phone);
       const name = payload.user_name || payload.userName || (payload.user && payload.user.name);
       const store = payload.store_name || payload.storeName;
-      if (!store) return;
+      if (!store || store === 'Wi-Fi Captive Portal') return;
 
-      setUsersList(prev => prev.map((u, idx) => {
-        if (matchUser(u, phone, name) || idx === 0) {
+      setUsersList(prev => prev.map(u => {
+        if (matchUser(u, phone, name)) {
           const currentStores = (u.visitedStores || []).filter(s => s !== 'Wi-Fi Captive Portal');
           const stores = currentStores.includes(store) ? currentStores : [...currentStores, store];
-          return { ...u, visitedStores: stores, dataUsed: `${(stores.length * 20) + 15} MB` };
+          return { ...u, visitedStores: stores, dataUsed: `${(stores.length * 45) + 15} MB` };
         }
         return u;
       }));
 
-      setStoresList(prev => prev.map(s => {
-        if (s.name.toLowerCase() === store.toLowerCase() || s.id === store) {
-          const updated = {
-            ...s,
-            visitorsToday: (s.visitorsToday || 0) + 1
-          };
-          const mockIdx = MOCK_STORES.findIndex(ms => ms.name.toLowerCase() === s.name.toLowerCase());
-          if (mockIdx !== -1) MOCK_STORES[mockIdx] = updated;
-          return updated;
-        }
-        return s;
-      }));
+      fetchStoresFromSupabase().then(res => {
+        if (res.data && res.data.length > 0) setStoresList(res.data);
+      });
     } else if (type === 'ORDER_CREATED' || type === 'NEW_ORDER') {
       const orderPayload = payload.order || payload || {};
       const orderNum = orderPayload.orderNumber || orderPayload.order_number || `#AX-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -429,31 +465,21 @@ export default function App() {
 
       setOrdersList(prev => [newOrder, ...prev.filter(o => o.orderNumber !== newOrder.orderNumber)]);
 
-      // Update visited stores for customer
-      setUsersList(prev => prev.map((u, idx) => {
-        if (matchUser(u, custPhone, custName) || idx === 0) {
+      // Update visited stores only for the matched customer
+      setUsersList(prev => prev.map(u => {
+        if (matchUser(u, custPhone, custName)) {
           const currentStores = (u.visitedStores || []).filter(s => s !== 'Wi-Fi Captive Portal');
           const storesToAdd = itemStores.length > 0 ? itemStores : [combinedStoreName];
-          const stores = Array.from(new Set([...currentStores, ...storesToAdd]));
-          return { ...u, visitedStores: stores, dataUsed: `${(stores.length * 25) + 20} MB` };
+          const stores = Array.from(new Set([...currentStores, ...storesToAdd])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+          return { ...u, visitedStores: stores, dataUsed: `${(stores.length * 45) + 15} MB` };
         }
         return u;
       }));
 
-      // Update store revenue and orders live
-      setStoresList(prev => prev.map(s => {
-        if (s.name.toLowerCase() === targetStore.toLowerCase() || s.id === targetStore) {
-          const updated = {
-            ...s,
-            revenueToday: (s.revenueToday || 0) + newOrder.totalAmount,
-            ordersCount: (s.ordersCount || 0) + 1
-          };
-          const mockIdx = MOCK_STORES.findIndex(ms => ms.name.toLowerCase() === s.name.toLowerCase());
-          if (mockIdx !== -1) MOCK_STORES[mockIdx] = updated;
-          return updated;
-        }
-        return s;
-      }));
+      // Refresh authoritative store metrics from Supabase
+      fetchStoresFromSupabase().then(res => {
+        if (res.data && res.data.length > 0) setStoresList(res.data);
+      });
 
       setLiveToast({
         title: `Order ${newOrder.orderNumber} Placed`,
@@ -481,14 +507,18 @@ export default function App() {
 
       setReservationsList(prev => [newRes, ...prev.filter(r => r.refCode !== newRes.refCode)]);
 
-      setUsersList(prev => prev.map((u, idx) => {
-        if (matchUser(u, gPhone, gName) || idx === 0) {
+      setUsersList(prev => prev.map(u => {
+        if (matchUser(u, gPhone, gName)) {
           const currentStores = (u.visitedStores || []).filter(s => s !== 'Wi-Fi Captive Portal');
           const stores = currentStores.includes(targetVenue) ? currentStores : [...currentStores, targetVenue];
           return { ...u, visitedStores: stores };
         }
         return u;
       }));
+
+      fetchStoresFromSupabase().then(res => {
+        if (res.data && res.data.length > 0) setStoresList(res.data);
+      });
 
       setLiveToast({
         title: 'Fitting Room / Table Reserved',
@@ -839,7 +869,7 @@ export default function App() {
 
           {currentView === 'loyalty' && <LoyaltyView />}
 
-          {currentView === 'analytics' && <AnalyticsView />}
+          {currentView === 'analytics' && <AnalyticsView onSelectView={setCurrentView} />}
 
           {currentView === 'reports' && (
             <ReportsView onOpenReportModal={(type) => setReportModalType(type)} />
@@ -872,6 +902,12 @@ export default function App() {
         <ExportReportModal
           reportType={reportModalType}
           onClose={() => setReportModalType(null)}
+          stores={storesList}
+          users={usersList}
+          orders={ordersList}
+          reservations={reservationsList}
+          coupons={couponsList}
+          campaigns={campaignsList}
         />
       )}
 

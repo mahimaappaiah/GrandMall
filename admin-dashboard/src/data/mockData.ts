@@ -863,302 +863,11 @@ export const MOCK_ACTIVITY_FEED: ActivityLog[] = [
   }
 ];
 
-export const MOCK_USERS: ConnectedUser[] = [
-  {
-    id: 'usr-101',
-    name: 'Mahima Roy',
-    phone: '+91 98123 45678',
-    macAddress: '7A:4E:3F:11:8B:C2',
-    ipAddress: '192.168.10.142',
-    connectionTime: '10:42 AM',
-    sessionDuration: '1h 24m',
-    visitedStores: ['Nike Flagship', 'Starbucks Reserve', 'Zara'],
-    dataUsed: '480 MB',
-    status: 'Active',
-    vipStatus: true,
-    zone: 'Central Atrium',
-    deviceType: 'iOS'
-  },
-  {
-    id: 'usr-102',
-    name: 'Aarav Patel',
-    phone: '+91 98234 56789',
-    macAddress: 'BC:8F:90:D4:21:E5',
-    ipAddress: '192.168.10.188',
-    connectionTime: '11:15 AM',
-    sessionDuration: '52m',
-    visitedStores: ['Nike Flagship', 'Apple Store'],
-    dataUsed: '230 MB',
-    status: 'Active',
-    vipStatus: false,
-    zone: 'North Wing',
-    deviceType: 'Android'
-  },
-  {
-    id: 'usr-103',
-    name: 'Priya Sharma',
-    phone: '+91 98345 67890',
-    macAddress: '48:D7:05:89:12:3F',
-    ipAddress: '192.168.10.201',
-    connectionTime: '11:30 AM',
-    sessionDuration: '38m',
-    visitedStores: ['Sephora Beauty', 'H&M'],
-    dataUsed: '190 MB',
-    status: 'Active',
-    vipStatus: true,
-    zone: 'South Wing',
-    deviceType: 'iOS'
-  },
-  {
-    id: 'usr-104',
-    name: 'Rohan Deshmukh',
-    phone: '+91 98456 78901',
-    macAddress: 'DE:AD:BE:EF:88:11',
-    ipAddress: '192.168.10.105',
-    connectionTime: '09:50 AM',
-    sessionDuration: '2h 15m',
-    visitedStores: ['Starbucks Reserve', 'Crossword Bookstore'],
-    dataUsed: '850 MB',
-    status: 'Active',
-    vipStatus: false,
-    zone: 'North Wing',
-    deviceType: 'macOS'
-  },
-  {
-    id: 'usr-105',
-    name: 'Kavya Menon',
-    phone: '+91 98567 89012',
-    macAddress: '90:B1:12:34:56:78',
-    ipAddress: '192.168.10.222',
-    connectionTime: '12:05 PM',
-    sessionDuration: '18m',
-    visitedStores: ['Taco Bell'],
-    dataUsed: '95 MB',
-    status: 'Active',
-    vipStatus: false,
-    zone: 'Food Court',
-    deviceType: 'Android'
-  },
-  {
-    id: 'usr-106',
-    name: 'Siddharth Varma',
-    phone: '+91 98678 90123',
-    macAddress: '33:44:55:66:77:88',
-    ipAddress: '192.168.10.150',
-    connectionTime: '10:10 AM',
-    sessionDuration: '1h 55m',
-    visitedStores: ['Apple Store', 'Dyson Demo Store', 'McDonald\'s'],
-    dataUsed: '620 MB',
-    status: 'Active',
-    vipStatus: true,
-    zone: 'Central Atrium',
-    deviceType: 'iOS'
-  },
-  {
-    id: 'usr-107',
-    name: 'Sneha Kulkarni',
-    phone: '+91 98789 01234',
-    macAddress: 'AA:BB:CC:DD:EE:FF',
-    ipAddress: '192.168.10.112',
-    connectionTime: '11:45 AM',
-    sessionDuration: '28m',
-    visitedStores: ['Sephora Beauty', 'Bath & Body Works'],
-    dataUsed: '140 MB',
-    status: 'Active',
-    vipStatus: false,
-    zone: 'West Wing',
-    deviceType: 'iOS'
-  },
-  {
-    id: 'usr-108',
-    name: 'Vikramjit Singh',
-    phone: '+91 98890 12345',
-    macAddress: '11:22:33:44:55:66',
-    ipAddress: '192.168.10.199',
-    connectionTime: '01:10 PM',
-    sessionDuration: '12m',
-    visitedStores: ['PVR Director’s Cut'],
-    dataUsed: '75 MB',
-    status: 'Active',
-    vipStatus: true,
-    zone: 'Multiplex',
-    deviceType: 'Android'
-  },
-  {
-    id: 'usr-109',
-    name: 'Ananya Roy',
-    phone: '+91 98901 23456',
-    macAddress: '77:88:99:00:11:22',
-    ipAddress: '192.168.10.231',
-    connectionTime: '11:00 AM',
-    sessionDuration: '1h 10m',
-    visitedStores: ['Nike Flagship', 'Decathlon Sports'],
-    dataUsed: '410 MB',
-    status: 'Active',
-    vipStatus: false,
-    zone: 'Central Atrium',
-    deviceType: 'iOS'
-  },
-  {
-    id: 'usr-110',
-    name: 'Devansh Malhotra',
-    phone: '+91 99012 34567',
-    macAddress: '55:66:77:88:99:00',
-    ipAddress: '192.168.10.245',
-    connectionTime: '01:20 PM',
-    sessionDuration: '5m',
-    visitedStores: [],
-    dataUsed: '15 MB',
-    status: 'Active',
-    vipStatus: false,
-    zone: 'Central Atrium',
-    deviceType: 'Windows'
-  }
-];
+export const MOCK_USERS: ConnectedUser[] = [];
 
-export const MOCK_ORDERS: Order[] = [
-  {
-    id: 'ord-1001',
-    orderNumber: '#AX-9421',
-    customerName: 'Siddharth Varma',
-    customerPhone: '+91 98678 90123',
-    storeName: 'Apple Store',
-    storeCategory: 'Accessories',
-    itemsCount: 2,
-    itemsList: ['AirPods Pro (2nd Gen)', 'MagSafe Wallet Leather'],
-    totalAmount: 28900,
-    orderType: 'Click & Collect',
-    paymentMethod: 'UPI / GPay',
-    timestamp: '12 mins ago',
-    status: 'Completed'
-  },
-  {
-    id: 'ord-1002',
-    orderNumber: '#AX-9422',
-    customerName: 'Rohan Deshmukh',
-    customerPhone: '+91 98456 78901',
-    storeName: 'Starbucks Reserve',
-    storeCategory: 'Food',
-    itemsCount: 3,
-    itemsList: ['Hazelnut Cold Brew (L)', 'Blueberry Muffin', 'Flat White (M)'],
-    totalAmount: 1150,
-    orderType: 'Dine-in',
-    paymentMethod: 'Mall Pay',
-    timestamp: '18 mins ago',
-    status: 'Completed'
-  },
-  {
-    id: 'ord-1003',
-    orderNumber: '#AX-9423',
-    customerName: 'Aarav Patel',
-    customerPhone: '+91 98234 56789',
-    storeName: 'Nike Flagship',
-    storeCategory: 'Fashion',
-    itemsCount: 1,
-    itemsList: ['Nike Air Zoom Pegasus 40'],
-    totalAmount: 11895,
-    orderType: 'Store Pickup',
-    paymentMethod: 'Credit Card',
-    timestamp: '25 mins ago',
-    status: 'Completed'
-  },
-  {
-    id: 'ord-1004',
-    orderNumber: '#AX-9424',
-    customerName: 'Priya Sharma',
-    customerPhone: '+91 98345 67890',
-    storeName: 'Sephora Beauty',
-    storeCategory: 'Accessories',
-    itemsCount: 4,
-    itemsList: ['Fenty Hydrating Primer', 'Rare Beauty Blush', 'Dior Lip Oil', 'Mini Perfume Set'],
-    totalAmount: 14200,
-    orderType: 'Click & Collect',
-    paymentMethod: 'Apple Pay',
-    timestamp: '32 mins ago',
-    status: 'Processing'
-  },
-  {
-    id: 'ord-1005',
-    orderNumber: '#AX-9425',
-    customerName: 'Kavya Menon',
-    customerPhone: '+91 98567 89012',
-    storeName: 'Taco Bell',
-    storeCategory: 'Food',
-    itemsCount: 2,
-    itemsList: ['Crunchwrap Supreme Combo', 'Cheesy Gordita Crunch'],
-    totalAmount: 680,
-    orderType: 'Dine-in',
-    paymentMethod: 'UPI / GPay',
-    timestamp: '45 mins ago',
-    status: 'Completed'
-  },
-  {
-    id: 'ord-1006',
-    orderNumber: '#AX-9426',
-    customerName: 'Vikramjit Singh',
-    customerPhone: '+91 98890 12345',
-    storeName: 'PVR Director’s Cut',
-    storeCategory: 'Entertainment',
-    itemsCount: 2,
-    itemsList: ['2x Recliner Movie Tickets', 'Large Cheese Popcorn & Gourmet Soda'],
-    totalAmount: 3200,
-    orderType: 'Express Delivery',
-    paymentMethod: 'Credit Card',
-    timestamp: '1 hour ago',
-    status: 'Completed'
-  }
-];
+export const MOCK_ORDERS: Order[] = [];
 
-export const MOCK_RESERVATIONS: Reservation[] = [
-  {
-    id: 'res-501',
-    refCode: 'RES-STB-082',
-    guestName: 'Rohan Deshmukh',
-    guestPhone: '+91 98456 78901',
-    storeName: 'Starbucks Reserve',
-    partySize: 2,
-    timeSlot: '02:30 PM Today',
-    date: '2026-08-03',
-    specialRequest: 'Quiet window seat near outlet',
-    status: 'Confirmed'
-  },
-  {
-    id: 'res-502',
-    refCode: 'RES-PVR-109',
-    guestName: 'Vikramjit Singh',
-    guestPhone: '+91 98890 12345',
-    storeName: 'PVR Director’s Cut',
-    partySize: 4,
-    timeSlot: '05:00 PM Today',
-    date: '2026-08-03',
-    specialRequest: 'VIP Recliner Row D',
-    status: 'Checked-in'
-  },
-  {
-    id: 'res-503',
-    refCode: 'RES-SEP-044',
-    guestName: 'Priya Sharma',
-    guestPhone: '+91 98345 67890',
-    storeName: 'Sephora Beauty',
-    partySize: 1,
-    timeSlot: '04:00 PM Today',
-    date: '2026-08-03',
-    specialRequest: 'Bridal makeover trial session',
-    status: 'Confirmed'
-  },
-  {
-    id: 'res-504',
-    refCode: 'RES-SPA-012',
-    guestName: 'Natasha Fernandez',
-    guestPhone: '+91 98999 11122',
-    storeName: 'Urban Salon & Spa',
-    partySize: 1,
-    timeSlot: '06:00 PM Today',
-    date: '2026-08-03',
-    specialRequest: 'Aromatherapy Full Body Massage',
-    status: 'Confirmed'
-  }
-];
+export const MOCK_RESERVATIONS: Reservation[] = [];
 
 export const MOCK_COUPONS: Coupon[] = [
   {
@@ -1169,15 +878,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Nike Flagship',
     category: 'Fashion',
     issuedCount: 1500,
-    redeemedCount: 342,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'All Mall Guests',
-    redeemedCustomers: [
-      { id: 'rdm-101', couponId: 'cpn-1', couponCode: 'NIKEVIP15', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '12 mins ago', storeName: 'Nike Flagship', discountApplied: '15% OFF', savingsAmount: '₹2,549 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1090', vipStatus: true },
-      { id: 'rdm-102', couponId: 'cpn-1', couponCode: 'NIKEVIP15', customerName: 'Aastha Sharma', customerPhone: '+91 98123 98765', redeemedAt: '25 mins ago', storeName: 'Nike Flagship', discountApplied: '15% OFF', savingsAmount: '₹2,379 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1088', vipStatus: true },
-      { id: 'rdm-103', couponId: 'cpn-1', couponCode: 'NIKEVIP15', customerName: 'Mahima Roy', customerPhone: '+91 98123 45678', redeemedAt: '42 mins ago', storeName: 'Nike Flagship', discountApplied: '15% OFF', savingsAmount: '₹1,850 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1075', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-2',
@@ -1187,15 +892,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Zara Flagship',
     category: 'Fashion',
     issuedCount: 2000,
-    redeemedCount: 520,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Fashion Lovers',
-    redeemedCustomers: [
-      { id: 'rdm-201', couponId: 'cpn-2', couponCode: 'ZARASUMMER10', customerName: 'Aastha Sharma', customerPhone: '+91 98123 98765', redeemedAt: '18 mins ago', storeName: 'Zara Flagship', discountApplied: '10% OFF', savingsAmount: '₹499 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1088', vipStatus: true },
-      { id: 'rdm-202', couponId: 'cpn-2', couponCode: 'ZARASUMMER10', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '35 mins ago', storeName: 'Zara Flagship', discountApplied: '10% OFF', savingsAmount: '₹359 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1082', vipStatus: true },
-      { id: 'rdm-203', couponId: 'cpn-2', couponCode: 'ZARASUMMER10', customerName: 'Natasha Fernandez', customerPhone: '+91 98999 11122', redeemedAt: '1 hour ago', storeName: 'Zara Flagship', discountApplied: '10% OFF', savingsAmount: '₹459 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1060', vipStatus: false }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-3',
@@ -1205,14 +906,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Gucci Boutique',
     category: 'Luxury',
     issuedCount: 500,
-    redeemedCount: 88,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'VIP Shoppers',
-    redeemedCustomers: [
-      { id: 'rdm-301', couponId: 'cpn-3', couponCode: 'GUCCIEXCLUSIVE', customerName: 'Priya Sharma', customerPhone: '+91 98345 67890', redeemedAt: '30 mins ago', storeName: 'Gucci Boutique', discountApplied: '₹10,000 OFF', savingsAmount: '₹10,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1085', vipStatus: true },
-      { id: 'rdm-302', couponId: 'cpn-3', couponCode: 'GUCCIEXCLUSIVE', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '50 mins ago', storeName: 'Gucci Boutique', discountApplied: '₹10,000 OFF', savingsAmount: '₹10,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1078', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-4',
@@ -1222,14 +920,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Prada Atelier',
     category: 'Luxury',
     issuedCount: 450,
-    redeemedCount: 64,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'VIP Shoppers',
-    redeemedCustomers: [
-      { id: 'rdm-401', couponId: 'cpn-4', couponCode: 'PRADAVIP15', customerName: 'Claire Montrose', customerPhone: '+91 98111 22334', redeemedAt: '15 mins ago', storeName: 'Prada Atelier', discountApplied: '15% OFF', savingsAmount: '₹12,750 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1092', vipStatus: true },
-      { id: 'rdm-402', couponId: 'cpn-4', couponCode: 'PRADAVIP15', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '40 mins ago', storeName: 'Prada Atelier', discountApplied: '15% OFF', savingsAmount: '₹13,800 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1081', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-5',
@@ -1239,14 +934,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Starbucks Reserve',
     category: 'Food',
     issuedCount: 2200,
-    redeemedCount: 680,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Coffee & Brunch Diners',
-    redeemedCustomers: [
-      { id: 'rdm-501', couponId: 'cpn-5', couponCode: 'STARBUCKSFREE', customerName: 'Mahima Roy', customerPhone: '+91 98123 45678', redeemedAt: '5 mins ago', storeName: 'Starbucks Reserve', discountApplied: '₹300 OFF', savingsAmount: '₹300 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1095', vipStatus: true },
-      { id: 'rdm-502', couponId: 'cpn-5', couponCode: 'STARBUCKSFREE', customerName: 'Ananya Sharma', customerPhone: '+91 98555 66778', redeemedAt: '22 mins ago', storeName: 'Starbucks Reserve', discountApplied: '₹300 OFF', savingsAmount: '₹300 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1087', vipStatus: false }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-6',
@@ -1256,14 +948,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Din Tai Fung',
     category: 'Food',
     issuedCount: 1200,
-    redeemedCount: 310,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Fine Diners',
-    redeemedCustomers: [
-      { id: 'rdm-601', couponId: 'cpn-6', couponCode: 'DINTAIFUNG20', customerName: 'Chen Wei', customerPhone: '+91 98111 99887', redeemedAt: '14 mins ago', storeName: 'Din Tai Fung', discountApplied: '20% OFF', savingsAmount: '₹1,200 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1091', vipStatus: true },
-      { id: 'rdm-602', couponId: 'cpn-6', couponCode: 'DINTAIFUNG20', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '45 mins ago', storeName: 'Din Tai Fung', discountApplied: '20% OFF', savingsAmount: '₹1,440 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1077', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-7',
@@ -1273,13 +962,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Rolex Boutique',
     category: 'Accessories',
     issuedCount: 300,
-    redeemedCount: 42,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Watch Enthusiasts',
-    redeemedCustomers: [
-      { id: 'rdm-701', couponId: 'cpn-7', couponCode: 'ROLEX5000', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '10:42 AM', storeName: 'Rolex Boutique', discountApplied: '₹5,000 OFF', savingsAmount: '₹5,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1089', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-8',
@@ -1289,14 +976,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Louis Vuitton Maison',
     category: 'Accessories',
     issuedCount: 600,
-    redeemedCount: 112,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Luxury Accessories',
-    redeemedCustomers: [
-      { id: 'rdm-801', couponId: 'cpn-8', couponCode: 'LVMAISON10', customerName: 'Charlotte Dubois', customerPhone: '+91 98777 88990', redeemedAt: '28 mins ago', storeName: 'Louis Vuitton Maison', discountApplied: '10% OFF', savingsAmount: '₹16,500 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1084', vipStatus: true },
-      { id: 'rdm-802', couponId: 'cpn-8', couponCode: 'LVMAISON10', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '1 hour ago', storeName: 'Louis Vuitton Maison', discountApplied: '10% OFF', savingsAmount: '₹18,500 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1062', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-9',
@@ -1306,14 +990,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Tiffany & Co.',
     category: 'Accessories',
     issuedCount: 400,
-    redeemedCount: 95,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Fine Jewelry Buyers',
-    redeemedCustomers: [
-      { id: 'rdm-901', couponId: 'cpn-9', couponCode: 'TIFFANYDIAMOND', customerName: 'Reynold Ricky', customerPhone: '+91 98987 65432', redeemedAt: 'Just now', storeName: 'Tiffany & Co.', discountApplied: '₹15,000 OFF', savingsAmount: '₹15,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1098', vipStatus: true },
-      { id: 'rdm-902', couponId: 'cpn-9', couponCode: 'TIFFANYDIAMOND', customerName: 'Eleanor Vance', customerPhone: '+91 98123 45678', redeemedAt: '38 mins ago', storeName: 'Tiffany & Co.', discountApplied: '₹15,000 OFF', savingsAmount: '₹15,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1083', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-10',
@@ -1323,14 +1004,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Cartier High Jewelry',
     category: 'Accessories',
     issuedCount: 350,
-    redeemedCount: 58,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'High Net Worth Shoppers',
-    redeemedCustomers: [
-      { id: 'rdm-1001', couponId: 'cpn-10', couponCode: 'CARTIERLUX20', customerName: 'Elena Rossi', customerPhone: '+91 98765 43236', redeemedAt: '19 mins ago', storeName: 'Cartier High Jewelry', discountApplied: '₹20,000 OFF', savingsAmount: '₹20,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1086', vipStatus: true },
-      { id: 'rdm-1002', couponId: 'cpn-10', couponCode: 'CARTIERLUX20', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '1 hour ago', storeName: 'Cartier High Jewelry', discountApplied: '₹20,000 OFF', savingsAmount: '₹20,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1055', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-11',
@@ -1340,14 +1018,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Apple Experience Store',
     category: 'Accessories',
     issuedCount: 1800,
-    redeemedCount: 420,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Tech Lovers',
-    redeemedCustomers: [
-      { id: 'rdm-1101', couponId: 'cpn-11', couponCode: 'APPLEVIP5', customerName: 'David Miller', customerPhone: '+91 98333 44556', redeemedAt: '10 mins ago', storeName: 'Apple Experience Store', discountApplied: '₹5,000 OFF', savingsAmount: '₹5,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1093', vipStatus: true },
-      { id: 'rdm-1102', couponId: 'cpn-11', couponCode: 'APPLEVIP5', customerName: 'Aarav Patel', customerPhone: '+91 98234 56789', redeemedAt: '48 mins ago', storeName: 'Apple Experience Store', discountApplied: '₹5,000 OFF', savingsAmount: '₹5,000 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1076', vipStatus: false }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-12',
@@ -1357,14 +1032,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'Ray-Ban Sunglass Hut',
     category: 'Accessories',
     issuedCount: 1500,
-    redeemedCount: 290,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'Lifestyle & Sunglasses',
-    redeemedCustomers: [
-      { id: 'rdm-1201', couponId: 'cpn-12', couponCode: 'RAYBAN20', customerName: 'Kavita B.', customerPhone: '+91 98765 43247', redeemedAt: '33 mins ago', storeName: 'Ray-Ban Sunglass Hut', discountApplied: '20% OFF', savingsAmount: '₹2,498 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1082', vipStatus: false },
-      { id: 'rdm-1202', couponId: 'cpn-12', couponCode: 'RAYBAN20', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '1 hour ago', storeName: 'Ray-Ban Sunglass Hut', discountApplied: '20% OFF', savingsAmount: '₹2,998 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1052', vipStatus: true }
-    ]
+    redeemedCustomers: []
   },
   {
     id: 'cpn-13',
@@ -1374,14 +1046,11 @@ export const MOCK_COUPONS: Coupon[] = [
     storeName: 'The Grand Mall',
     category: 'All Stores',
     issuedCount: 3000,
-    redeemedCount: 890,
+    redeemedCount: 0,
     expiryDate: '2026-08-31',
     status: 'Active',
     targetSegment: 'WiFi Captive Portal Users',
-    redeemedCustomers: [
-      { id: 'rdm-1301', couponId: 'cpn-13', couponCode: 'GRANDMALL20', customerName: 'Reynold Ricky', customerPhone: '+91 98987 65432', redeemedAt: '45 mins ago', storeName: 'The Grand Mall', discountApplied: '20% OFF', savingsAmount: '₹3,200 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1080', vipStatus: true },
-      { id: 'rdm-1302', couponId: 'cpn-13', couponCode: 'GRANDMALL20', customerName: 'yoshi', customerPhone: '+91 84950 93170', redeemedAt: '1 hour ago', storeName: 'The Grand Mall', discountApplied: '20% OFF', savingsAmount: '₹2,500 Saved', channel: 'WiFi Captive Portal', orderNumber: '#AX-1065', vipStatus: true }
-    ]
+    redeemedCustomers: []
   }
 ];
 

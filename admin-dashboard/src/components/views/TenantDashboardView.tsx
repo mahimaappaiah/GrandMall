@@ -41,6 +41,8 @@ import {
   fetchProductsFromSupabase, 
   fetchOrdersFromSupabase, 
   fetchReservationsFromSupabase,
+  updateOrderStatusInSupabase,
+  updateReservationStatusInSupabase,
   updateProductStockApi,
   broadcastEvent,
   recordAuditLog
@@ -127,7 +129,7 @@ export const TenantDashboardView: React.FC = () => {
       if (supa.data && supa.isLive) supaOrders = supa.data;
     } catch (e) {}
 
-    const combinedOrders: any[] = [...backendOrders, ...localOrders, ...supaOrders, ...MOCK_ORDERS];
+    const combinedOrders: any[] = [...localOrders, ...supaOrders, ...backendOrders, ...MOCK_ORDERS];
     const seenOrderIds = new Set();
     const formattedOrders: Order[] = [];
 
@@ -155,14 +157,17 @@ export const TenantDashboardView: React.FC = () => {
     }
     setAllLiveOrders(prev => {
       const map = new Map<string, Order>();
-      prev.forEach(o => {
+      formattedOrders.forEach(o => {
         const k = (o.orderNumber || o.id || '').trim();
         if (k) map.set(k, o);
       });
-      formattedOrders.forEach(o => {
+      // Preserve recent in-memory status changes if newer
+      prev.forEach(o => {
         const k = (o.orderNumber || o.id || '').trim();
         const existing = map.get(k);
-        map.set(k, { ...existing, ...o });
+        if (existing && existing.status === 'Pending' && o.status !== 'Pending') {
+          map.set(k, { ...existing, status: o.status });
+        }
       });
       return Array.from(map.values());
     });
@@ -190,7 +195,7 @@ export const TenantDashboardView: React.FC = () => {
       if (supa.data && supa.isLive) supaRes = supa.data;
     } catch (e) {}
 
-    const combinedRes: any[] = [...backendRes, ...localRes, ...supaRes, ...MOCK_RESERVATIONS];
+    const combinedRes: any[] = [...localRes, ...supaRes, ...backendRes, ...MOCK_RESERVATIONS];
     const seenRefs = new Set();
     const seenSemanticKeys = new Set();
     const formattedRes: Reservation[] = [];
@@ -218,7 +223,9 @@ export const TenantDashboardView: React.FC = () => {
           refCode,
           guestName,
           guestPhone,
+          guestEmail: r.guestEmail || r.guest_email,
           storeName,
+          storeCategory: r.storeCategory || r.category || 'Dining',
           partySize,
           timeSlot,
           date,
@@ -230,14 +237,17 @@ export const TenantDashboardView: React.FC = () => {
     }
     setAllLiveReservations(prev => {
       const map = new Map<string, Reservation>();
-      prev.forEach(r => {
+      formattedRes.forEach(r => {
         const k = (r.refCode || r.id || '').trim();
         if (k) map.set(k, r);
       });
-      formattedRes.forEach(r => {
+      // Preserve recent in-memory status changes if newer
+      prev.forEach(r => {
         const k = (r.refCode || r.id || '').trim();
         const existing = map.get(k);
-        map.set(k, { ...existing, ...r });
+        if (existing && existing.status === 'Confirmed' && r.status !== 'Confirmed') {
+          map.set(k, { ...existing, status: r.status });
+        }
       });
       return Array.from(map.values());
     });
@@ -246,7 +256,17 @@ export const TenantDashboardView: React.FC = () => {
   // Sync Inventory for the selected store
   useEffect(() => {
     let isMounted = true;
-    if (selectedStoreId && currentStore) {
+    if (selectedStoreId === 'ALL') {
+      const allStoreProds = [
+        { id: 'p-all-1', name: 'Nike Dunk Low Retro White Black', category: 'Fashion', stock: 18, minStock: 5, sku: 'NKE-DNK-01', price: '₹8,241', history: [20, 19, 18, 18] },
+        { id: 'p-all-2', name: 'Tiffany Eternity Swiss Sapphire Watch', category: 'Luxury', stock: 4, minStock: 2, sku: 'TIF-WAT-02', price: '₹635,000', history: [5, 4, 4, 4] },
+        { id: 'p-all-3', name: 'Apple Vision Pro Spatial Eyewear', category: 'Electronics', stock: 6, minStock: 3, sku: 'APP-VIS-03', price: '₹372,400', history: [8, 7, 6, 6] },
+        { id: 'p-all-4', name: 'Gucci Monogram Leather Handbag', category: 'Fashion', stock: 9, minStock: 3, sku: 'GUC-BAG-04', price: '₹145,000', history: [12, 10, 9, 9] },
+        { id: 'p-all-5', name: 'Starbucks Reserve Cold Brew Master Blend', category: 'Dining', stock: 45, minStock: 10, sku: 'SBUX-CLD-05', price: '₹475', history: [50, 48, 45, 45] }
+      ];
+      setInventory(allStoreProds);
+      setSelectedHistoryItem('p-all-1');
+    } else if (selectedStoreId && currentStore) {
       fetchProductsFromSupabase(selectedStoreId).then(prodsRes => {
         if (!isMounted) return;
         if (prodsRes.data && prodsRes.data.length > 0) {
@@ -280,7 +300,7 @@ export const TenantDashboardView: React.FC = () => {
   // Initial Load and Real-time SSE / BroadcastChannel / Polling Setup
   useEffect(() => {
     fetchLiveTenantData();
-    const interval = setInterval(fetchLiveTenantData, 2500);
+    const interval = setInterval(fetchLiveTenantData, 4000);
 
     // SSE Stream
     let es: EventSource | null = null;
@@ -366,12 +386,27 @@ export const TenantDashboardView: React.FC = () => {
     const targetOrder = allLiveOrders.find(o => o.id === orderId || o.orderNumber === orderId);
     const targetStore = targetOrder?.storeName || currentStore.name;
 
-    setAllLiveOrders(prev => prev.map(o => o.id === orderId || o.orderNumber === orderId ? { ...o, status: newStatus } : o));
+    // 1. Instant local state update
+    setAllLiveOrders(prev => prev.map(o => (o.id === orderId || o.orderNumber === orderId) ? { ...o, status: newStatus } : o));
     if (selectedOrderForModal && (selectedOrderForModal.id === orderId || selectedOrderForModal.orderNumber === orderId)) {
       setSelectedOrderForModal(prev => prev ? { ...prev, status: newStatus } : null);
     }
     showToast(`Order ${targetOrder?.orderNumber || orderId} status updated to '${newStatus}'`);
 
+    // 2. Persist in LocalStorage
+    try {
+      const local = JSON.parse(localStorage.getItem('axionix_orders_list') || '[]');
+      const updatedLocal = local.map((o: any) => (o.id === orderId || o.orderNumber === orderId) ? { ...o, status: newStatus } : o);
+      if (!updatedLocal.some((o: any) => o.id === orderId || o.orderNumber === orderId) && targetOrder) {
+        updatedLocal.unshift({ ...targetOrder, status: newStatus });
+      }
+      localStorage.setItem('axionix_orders_list', JSON.stringify(updatedLocal));
+    } catch (e) {}
+
+    // 3. Persist directly to Supabase
+    updateOrderStatusInSupabase(orderId, newStatus);
+
+    // 4. Broadcast event across tabs
     broadcastEvent('ORDER_STATUS_UPDATE', { 
       id: orderId, 
       orderNumber: targetOrder?.orderNumber || orderId, 
@@ -380,6 +415,8 @@ export const TenantDashboardView: React.FC = () => {
       status: newStatus, 
       storeName: targetStore 
     });
+
+    recordAuditLog('ORDER_STATUS_CHANGED', 'order', orderId, { newStatus, store: targetStore });
 
     try {
       await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
@@ -400,15 +437,33 @@ export const TenantDashboardView: React.FC = () => {
     const targetRes = allLiveReservations.find(r => r.id === resId || r.refCode === resId);
     const targetStore = targetRes?.storeName || currentStore.name;
 
-    setAllLiveReservations(prev => prev.map(r => r.id === resId || r.refCode === resId ? { ...r, status: newStatus as any } : r));
+    // 1. Instant local state update
+    setAllLiveReservations(prev => prev.map(r => (r.id === resId || r.refCode === resId) ? { ...r, status: newStatus as any } : r));
     showToast(`Reservation updated to '${newStatus}'`);
 
+    // 2. Persist in LocalStorage
+    try {
+      const local = JSON.parse(localStorage.getItem('axionix_reservations_list') || localStorage.getItem('axionix_reservations') || '[]');
+      const updatedLocal = local.map((r: any) => (r.id === resId || r.refCode === resId) ? { ...r, status: newStatus } : r);
+      if (!updatedLocal.some((r: any) => r.id === resId || r.refCode === resId) && targetRes) {
+        updatedLocal.unshift({ ...targetRes, status: newStatus });
+      }
+      localStorage.setItem('axionix_reservations_list', JSON.stringify(updatedLocal));
+      localStorage.setItem('axionix_reservations', JSON.stringify(updatedLocal));
+    } catch (e) {}
+
+    // 3. Persist directly to Supabase
+    updateReservationStatusInSupabase(resId, newStatus);
+
+    // 4. Broadcast event across tabs
     broadcastEvent('RESERVATION_STATUS_UPDATE', { 
       id: resId, 
       refCode: targetRes?.refCode || resId, 
       status: newStatus, 
       storeName: targetStore 
     });
+
+    recordAuditLog('RESERVATION_STATUS_CHANGED', 'reservation', resId, { newStatus, store: targetStore });
 
     try {
       await fetch(`${BACKEND_URL}/api/reservations/${resId}/status`, {
@@ -423,15 +478,33 @@ export const TenantDashboardView: React.FC = () => {
     const targetRes = allLiveReservations.find(r => r.id === resId || r.refCode === resId);
     const targetStore = targetRes?.storeName || currentStore.name;
 
-    setAllLiveReservations(prev => prev.map(r => r.id === resId || r.refCode === resId ? { ...r, status: 'No Show' as any } : r));
+    // 1. Instant local state update
+    setAllLiveReservations(prev => prev.map(r => (r.id === resId || r.refCode === resId) ? { ...r, status: 'No Show' as any } : r));
     showToast(`❌ Marked ${refCode} as No-Show. Slot freed!`, 'warning');
 
+    // 2. Persist in LocalStorage
+    try {
+      const local = JSON.parse(localStorage.getItem('axionix_reservations_list') || localStorage.getItem('axionix_reservations') || '[]');
+      const updatedLocal = local.map((r: any) => (r.id === resId || r.refCode === resId) ? { ...r, status: 'No Show' } : r);
+      if (!updatedLocal.some((r: any) => r.id === resId || r.refCode === resId) && targetRes) {
+        updatedLocal.unshift({ ...targetRes, status: 'No Show' });
+      }
+      localStorage.setItem('axionix_reservations_list', JSON.stringify(updatedLocal));
+      localStorage.setItem('axionix_reservations', JSON.stringify(updatedLocal));
+    } catch (e) {}
+
+    // 3. Persist directly to Supabase
+    updateReservationStatusInSupabase(resId, 'No Show');
+
+    // 4. Broadcast event across tabs
     broadcastEvent('RESERVATION_STATUS_UPDATE', { 
       id: resId, 
       refCode: refCode, 
       status: 'No Show', 
       storeName: targetStore 
     });
+
+    recordAuditLog('RESERVATION_NO_SHOW', 'reservation', resId, { refCode, store: targetStore });
 
     try {
       await fetch(`${BACKEND_URL}/api/reservations/${resId}/no-show`, {

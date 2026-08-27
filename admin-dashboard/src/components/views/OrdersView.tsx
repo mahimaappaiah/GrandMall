@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Receipt, Search, Filter, CheckCircle2, Clock, XCircle, ShoppingBag, Eye, ExternalLink, Download, FileSpreadsheet, Printer, X, Tag } from 'lucide-react';
 import { MOCK_ORDERS } from '../../data/mockData';
 import { Order } from '../../types';
-import { downloadOrdersCSV, downloadOrderReceiptTXT } from '../../utils/exportUtils';
-import { fetchOrdersFromSupabase, recordAuditLog } from '../../services/supabaseService';
+import { downloadOrdersCSV, downloadOrderReceiptTXT, printOrderReceipt, downloadOrderReceiptPDF } from '../../utils/exportUtils';
+import { fetchOrdersFromSupabase, updateOrderStatusInSupabase, recordAuditLog } from '../../services/supabaseService';
 import { BACKEND_URL } from '../../lib/config';
 
 interface OrdersViewProps {
   ordersList?: Order[];
 }
 
-export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS }) => {
+export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = [] }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -19,7 +19,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
   const fetchLiveOrders = async () => {
     let rawOrders: any[] = [];
 
-    // 1. Fetch from Supabase FIRST so database orders take precedence
+    // 1. Fetch from Supabase as primary authoritative source
     try {
       const supaRes = await fetchOrdersFromSupabase();
       if (supaRes.data && supaRes.isLive) {
@@ -27,15 +27,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
       }
     } catch (e) {}
 
-    // 2. Read from LocalStorage
-    try {
-      const local = JSON.parse(localStorage.getItem('axionix_orders_list') || '[]');
-      if (Array.isArray(local)) {
-        rawOrders.push(...local);
-      }
-    } catch (e) {}
-
-    // 3. Fetch from Backend REST endpoint
+    // 2. Fetch from Backend REST endpoint for live stream orders
     try {
       const res = await fetch(`${BACKEND_URL}/api/orders`);
       const data = await res.json();
@@ -44,8 +36,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
       }
     } catch (e) {}
 
-    // 4. Always include initial mock orders as baseline
-    rawOrders.push(...ordersList);
+    // 3. If passed prop has explicit orders, merge them
+    if (ordersList && ordersList.length > 0) {
+      rawOrders.push(...ordersList);
+    }
 
     // Deduplicate and parse order objects
     const orderMap = new Map<string, Order>();
@@ -57,13 +51,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
       const dedupeKey = orderNum.trim();
       if (orderMap.has(dedupeKey)) continue;
 
-      const custName = String(o.customerName || o.user_name || 'Valued Guest').trim();
-      const custPhone = o.customerPhone || o.user_phone || '+91 84950 93170';
+      const custName = String(o.customerName || o.user_name || 'Mall Guest').trim();
+      const custPhone = o.customerPhone || o.user_phone || '+91 98000 00000';
       const rawItems = Array.isArray(o.items) && o.items.length > 0 ? o.items.map((i: any) => {
-        const itemName = i.name || (i.item && i.item.name) || i.item_name || 'Designer Item';
-        const itemPrice = Number(i.price !== undefined ? i.price : (i.item && i.item.price !== undefined ? i.item.price : 2495));
+        const itemName = i.name || (i.item && i.item.name) || i.item_name || i.products?.name || 'Store Item';
+        const itemPrice = Number(i.price !== undefined ? i.price : (i.item && i.item.price !== undefined ? i.item.price : (i.unit_price || 0)));
         const itemQty = Number(i.quantity || i.qty || 1);
-        const itemStore = i.brandName || (i.item && i.item.brandName) || i.storeName || i.store_name || o.storeName || o.store_name || 'Grand Mall Store';
+        const itemStore = i.brandName || (i.item && i.item.brandName) || i.storeName || i.store_name || i.products?.brands?.name || o.storeName || o.store_name;
         return {
           name: itemName,
           quantity: itemQty,
@@ -72,19 +66,19 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
           storeName: itemStore
         };
       }) : [
-        { name: o.item_name || 'Designer Item', quantity: Number(o.quantity || o.itemsCount || 1), price: Number(o.totalAmount || 2495), storeName: o.storeName || o.store_name || 'Grand Mall Store', brandName: o.storeName || o.store_name || 'Grand Mall Store' }
+        { name: o.item_name || 'Store Item', quantity: Number(o.quantity || o.itemsCount || 1), price: Number(o.totalAmount || o.total_amount || 0), storeName: o.storeName || o.store_name, brandName: o.storeName || o.store_name }
       ];
 
       const itemStores = Array.from(new Set(rawItems.map((it: any) => it.storeName || it.brandName).filter(Boolean)));
-      const finalStoreName = o.storeName || (itemStores.length > 1 ? itemStores.join(', ') : (itemStores[0] || (o.store_name || 'Nike Flagship')));
+      const finalStoreName = o.storeName || (itemStores.length > 1 ? itemStores.join(', ') : (itemStores[0] || (o.store_name && o.store_name !== 'Mall Boutique' ? o.store_name : 'Direct Store Purchase')));
 
       let storeCategory = o.storeCategory || 'Fashion';
       const snLower = finalStoreName.toLowerCase();
-      if (snLower.includes('starbucks') || snLower.includes('dintai') || snLower.includes('kfc') || snLower.includes('cirque') || snLower.includes('haagen') || snLower.includes('food')) {
+      if (snLower.includes('starbucks') || snLower.includes('dintai') || snLower.includes('kfc') || snLower.includes('cirque') || snLower.includes('haagen') || snLower.includes('food') || snLower.includes('pizza') || snLower.includes('subway')) {
         storeCategory = 'Food';
-      } else if (snLower.includes('rolex') || snLower.includes('tag') || snLower.includes('leather') || snLower.includes('cartier') || snLower.includes('tiffany') || snLower.includes('sunglass') || snLower.includes('ray-ban')) {
+      } else if (snLower.includes('rolex') || snLower.includes('tag') || snLower.includes('leather') || snLower.includes('cartier') || snLower.includes('tiffany') || snLower.includes('sunglass') || snLower.includes('ray-ban') || snLower.includes('watch') || snLower.includes('bvlgari')) {
         storeCategory = 'Accessories';
-      } else if (snLower.includes('timezone') || snLower.includes('arcade')) {
+      } else if (snLower.includes('timezone') || snLower.includes('arcade') || snLower.includes('pvr') || snLower.includes('cinema')) {
         storeCategory = 'Entertainment';
       } else if (snLower.includes('spa') || snLower.includes('salon')) {
         storeCategory = 'Services';
@@ -155,6 +149,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
       return o;
     }));
 
+    try {
+      const local = JSON.parse(localStorage.getItem('axionix_orders_list') || '[]');
+      const updatedLocal = local.map((o: any) => (o.id === orderId || o.orderNumber === orderId) ? { ...o, status: nextStatus } : o);
+      localStorage.setItem('axionix_orders_list', JSON.stringify(updatedLocal));
+    } catch (e) {}
+
+    updateOrderStatusInSupabase(orderId, nextStatus);
     recordAuditLog('ORDER_STATUS_CHANGED', 'order', orderId, { newStatus: nextStatus });
 
     fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
@@ -390,7 +391,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-white w-full max-w-md max-h-[85vh] rounded-3xl border border-slate-200 shadow-2xl p-6 flex flex-col justify-between animate-scale-up relative overflow-hidden space-y-4"
+            className="bg-white w-full max-w-md max-h-[92vh] rounded-3xl border border-slate-200 shadow-2xl p-6 flex flex-col justify-between animate-scale-up relative overflow-hidden space-y-4"
           >
             
             {/* Top Close Button (X) */}
@@ -403,7 +404,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
             </button>
 
             {/* Scrollable Content Body */}
-            <div className="overflow-y-auto space-y-4 pr-1">
+            <div className="overflow-y-auto space-y-4 pr-1 max-h-[calc(92vh-120px)]">
               
               {/* Receipt Header */}
               <div className="text-center space-y-1 border-b border-slate-100 pb-3">
@@ -443,16 +444,16 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
                     <span>Price</span>
                   </div>
 
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                     {selectedOrder.items && selectedOrder.items.length > 0 ? (
                       selectedOrder.items.map((item: any, idx: number) => {
-                        const itName = item.name || item.item?.name || item.item_name || 'Item';
+                        const itName = item.name || item.item?.name || item.item_name || item.title || 'Item';
                         const itQty = Number(item.quantity || item.qty || 1);
                         const itPrice = Number(item.price !== undefined ? item.price : (item.item?.price !== undefined ? item.item.price : 0));
                         const itStore = item.storeName || item.brandName || item.item?.brandName || selectedOrder.storeName;
 
                         return (
-                          <div key={idx} className="flex justify-between items-start text-xs py-1.5 border-b border-slate-50">
+                          <div key={idx} className="flex justify-between items-start text-xs py-2 border-b border-slate-50">
                             <div className="pr-2">
                               <div className="font-semibold text-slate-800 leading-snug">{itName}</div>
                               <div className="text-[10px] text-slate-500 mt-0.5">
@@ -466,7 +467,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
                       })
                     ) : (
                       (selectedOrder.itemsList || []).map((itemStr, idx) => (
-                        <div key={idx} className="flex justify-between text-xs py-1 border-b border-slate-50">
+                        <div key={idx} className="flex justify-between text-xs py-1.5 border-b border-slate-50">
                           <span className="font-medium text-slate-800">{itemStr}</span>
                         </div>
                       ))
@@ -489,7 +490,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-shrink-0">
               <button
                 onClick={() => downloadOrderReceiptTXT(selectedOrder)}
-                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Download Receipt TXT"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-600" />
@@ -497,9 +498,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ ordersList = MOCK_ORDERS
               </button>
 
               <button
-                onClick={() => window.print()}
-                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                title="Print Receipt"
+                onClick={() => printOrderReceipt(selectedOrder)}
+                className="px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Download PDF & Print Receipt"
               >
                 <Printer className="w-3.5 h-3.5 text-blue-600" />
                 Print

@@ -4,9 +4,12 @@ import { Coupon, CouponRedemption } from '../../types';
 import { downloadCouponsCSV, downloadRedeemedCustomersCSV } from '../../utils/exportUtils';
 import { fetchCouponsFromSupabase, recordAuditLog } from '../../services/supabaseService';
 import { BACKEND_URL } from '../../lib/config';
+import { MOCK_COUPONS } from '../../data/mockData';
 
 // WEBSITE ACTIVE COUPONS DATABASE MAPPED STRICTLY TO CUSTOMER PORTAL & ALL MALL BRANDS
-const WEBSITE_WEBSITE_COUPONS: Coupon[] = [
+const WEBSITE_WEBSITE_COUPONS: Coupon[] = MOCK_COUPONS;
+
+const OLD_UNUSED_COUPONS: Coupon[] = [
   {
     id: 'cpn-1',
     code: 'NIKEVIP15',
