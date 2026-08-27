@@ -2025,11 +2025,18 @@ export default function App() {
       });
   };
 
+  const sessionVisitedStores = useRef(new Set<string>());
+
   const recordUserStoreVisit = (storeNameOrBrand: string | Brand) => {
     if (!storeNameOrBrand) return;
     const brandName = typeof storeNameOrBrand === 'string' ? storeNameOrBrand : storeNameOrBrand.name;
     const brandObj = typeof storeNameOrBrand === 'string' ? brands.find(b => b.name === storeNameOrBrand) : storeNameOrBrand;
     const brandId = brandObj?.id;
+    const storeKey = (brandId || brandName || '').toLowerCase().trim();
+
+    // Prevent duplicate visit recording for the same store in the same customer session
+    if (sessionVisitedStores.current.has(storeKey)) return;
+    sessionVisitedStores.current.add(storeKey);
 
     const phoneToUse = mobileNumber || customerProfile?.phone || localStorage.getItem('axionix_active_guest_phone') || '';
     const nameToUse = fullName || customerProfile?.full_name || localStorage.getItem('axionix_active_guest_name') || 'Valued Guest';
@@ -2109,6 +2116,7 @@ export default function App() {
     }
     localStorage.removeItem('axionix_active_guest_phone');
     localStorage.removeItem('axionix_active_guest_name');
+    sessionVisitedStores.current.clear();
     setCustomerProfile(null);
     setCurrentStep('login');
     setOtpSent(false);
@@ -2330,9 +2338,6 @@ export default function App() {
   const [optQuantity, setOptQuantity] = useState<number>(1);
 
   const handleOpenProductOptions = (item: BrandItem, storeName: string) => {
-    if (storeName) {
-      recordUserStoreVisit(storeName);
-    }
     const cat = (item.category || '').toLowerCase();
     const name = (item.name || '').toLowerCase();
     const foodSubtype = getFoodSubtype(item, storeName);
@@ -2530,9 +2535,6 @@ export default function App() {
 
     setAppliedCoupon(coupon);
     setCouponInput(coupon.code);
-    if (coupon.storeName) {
-      recordUserStoreVisit(coupon.storeName);
-    }
 
     const activeCustName = fullName.trim() || localStorage.getItem('axionix_active_guest_name') || 'Valued Guest';
     const activeCustPhone = mobileNumber.trim() || localStorage.getItem('axionix_active_guest_phone') || '+91 98000 00000';
@@ -2653,9 +2655,6 @@ export default function App() {
 
     const storeNames = Array.from(new Set(cart.map(c => c.brandName).filter(Boolean)));
     const mainStore = storeNames.length > 1 ? storeNames.join(', ') : (storeNames[0] || 'The Grand Mall Store');
-    storeNames.forEach(st => {
-      recordUserStoreVisit(st);
-    });
 
     const itemsList = cart.map(c => ({
       productId: c.item.id,

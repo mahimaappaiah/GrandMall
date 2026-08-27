@@ -80,6 +80,8 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
     try {
       await ensureAdminSession();
 
+      const todayStartIso = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
+
       const [brandsRes, ordersRes, visitsRes, resvsRes] = await Promise.all([
         supabase.from('brands').select('*').order('name', { ascending: true }),
         supabase.from('orders').select(`
@@ -107,9 +109,9 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
               )
             )
           )
-        `),
-        supabase.from('store_visits').select('id, brand_id, user_id, customer_name, created_at'),
-        supabase.from('reservations').select('id, brand_id, guest_name, party_size, status, created_at')
+        `).gte('created_at', todayStartIso),
+        supabase.from('store_visits').select('id, brand_id, user_id, customer_name, created_at').gte('created_at', todayStartIso),
+        supabase.from('reservations').select('id, brand_id, guest_name, party_size, status, created_at').gte('created_at', todayStartIso)
       ]);
 
       const supaBrands = brandsRes.data || [];
@@ -127,20 +129,26 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
           const storeOrderIds = new Set<string>();
 
           orders.forEach((ord: any) => {
+            const ordSubtotal = Number(ord.subtotal) || 0;
+            const ordTotal = typeof ord.total_amount === 'number' ? ord.total_amount : (Number(ord.total_amount) || ordSubtotal);
+            const discountRatio = (ordSubtotal > 0 && typeof ordTotal === 'number' && !isNaN(ordTotal)) ? (ordTotal / ordSubtotal) : 1;
+
             (ord.order_items || []).forEach((oi: any) => {
               const itemBrandId = String(oi.products?.brand_id || oi.products?.brands?.id || '');
               const itemBrandName = (oi.products?.brands?.name || '').toLowerCase().trim();
 
               if (itemBrandId === bId || (itemBrandName && itemBrandName === bName)) {
                 storeOrderIds.add(ord.id);
-                const itemAmt = Number(oi.subtotal) || (Number(oi.unit_price || 0) * Number(oi.quantity || 1));
-                storeLiveRevenue += itemAmt;
+                const grossItemAmt = Number(oi.subtotal) || (Number(oi.unit_price || 0) * Number(oi.quantity || 1));
+                const netItemAmt = Math.round(grossItemAmt * discountRatio);
+                storeLiveRevenue += netItemAmt;
               }
             });
           });
 
-          // Matching visits for this brand
+          // Matching visits for this brand (counting unique visitors)
           const brandVisits = visits.filter((v: any) => String(v.brand_id) === bId);
+          const uniqueVisitors = new Set(brandVisits.map((v: any) => v.user_id || v.customer_name || v.id));
 
           // Matching reservations for this brand
           const brandResvs = reservations.filter((r: any) => String(r.brand_id) === bId);
@@ -150,7 +158,7 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
           const baseRevenue = Number(b.revenue_today) || 0;
           const baseBookings = Number(b.reservations_count) || 0;
 
-          const totalVisitors = baseVisitors + brandVisits.length;
+          const totalVisitors = baseVisitors + uniqueVisitors.size;
           const totalOrders = baseOrders + storeOrderIds.size;
           const totalRevenue = baseRevenue + storeLiveRevenue;
           const totalBookings = baseBookings + brandResvs.length;
@@ -158,7 +166,7 @@ export async function fetchStoresFromSupabase(): Promise<{ data: Store[]; isLive
           // Project conversion rate formula: (totalOrders / totalVisitors) * 100
           const conversionRate = totalVisitors > 0 
             ? Math.min(100, Math.round(((totalOrders / totalVisitors) * 100) * 10) / 10) 
-            : (Number(b.conversion_rate) || 0);
+            : 0;
 
           return {
             id: b.id || `store-${idx + 1}`,

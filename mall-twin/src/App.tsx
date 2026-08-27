@@ -47,6 +47,7 @@ export default function App() {
 
   const fetchLiveBrands = async () => {
     if (!isSupabaseConfigured) return;
+    const todayStartIso = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
     try {
       const [brandsRes, visitsRes, ordersRes] = await Promise.all([
         supabase
@@ -55,10 +56,12 @@ export default function App() {
           .order('name', { ascending: true }),
         supabase
           .from('store_visits')
-          .select('brand_id, customer_name, brands(name)'),
+          .select('brand_id, user_id, customer_name, created_at, brands(name)')
+          .gte('created_at', todayStartIso),
         supabase
           .from('orders')
-          .select('id, total_amount, subtotal, order_items(*, products(*, brands(*)))')
+          .select('id, total_amount, subtotal, created_at, order_items(*, products(*, brands(*)))')
+          .gte('created_at', todayStartIso)
       ]);
 
       if (brandsRes.error) {
@@ -77,19 +80,25 @@ export default function App() {
         const storeOrderIds = new Set<string>();
 
         ordersData.forEach((ord: any) => {
+          const ordSubtotal = Number(ord.subtotal) || 0;
+          const ordTotal = typeof ord.total_amount === 'number' ? ord.total_amount : (Number(ord.total_amount) || ordSubtotal);
+          const discountRatio = (ordSubtotal > 0 && typeof ordTotal === 'number' && !isNaN(ordTotal)) ? (ordTotal / ordSubtotal) : 1;
+
           (ord.order_items || []).forEach((oi: any) => {
             const itemBrandId = String(oi.products?.brand_id || oi.products?.brands?.id || '');
             const itemBrandName = (oi.products?.brands?.name || '').toLowerCase().trim();
 
             if (itemBrandId === bId || (itemBrandName && itemBrandName === bName)) {
               storeOrderIds.add(ord.id);
-              const itemAmt = Number(oi.subtotal) || (Number(oi.unit_price || 0) * Number(oi.quantity || 1));
-              liveRevenue += itemAmt;
+              const grossItemAmt = Number(oi.subtotal) || (Number(oi.unit_price || 0) * Number(oi.quantity || 1));
+              const netItemAmt = Math.round(grossItemAmt * discountRatio);
+              liveRevenue += netItemAmt;
             }
           });
         });
 
         const brandVisits = visitsData.filter((v: any) => String(v.brand_id) === bId);
+        const uniqueVisitors = new Set(brandVisits.map((v: any) => v.user_id || v.customer_name || v.id));
 
         return {
           id: String(b.id || `brand-${idx + 1}`),
@@ -98,7 +107,7 @@ export default function App() {
           floor: b.floor || 'Ground Floor',
           zone: b.zone || 'Central Atrium',
           revenueToday: (Number(b.revenue_today) || 0) + liveRevenue,
-          visitorsToday: (Number(b.visitors_today) || 0) + brandVisits.length,
+          visitorsToday: (Number(b.visitors_today) || 0) + uniqueVisitors.size,
           ordersCount: (Number(b.orders_count) || 0) + storeOrderIds.size,
           status: b.status || 'Open',
           rating: typeof b.rating === 'number' ? b.rating : (parseFloat(b.rating) || 4.5),
