@@ -166,7 +166,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   useEffect(() => {
     loadAllLiveDashboardData();
-    const interval = setInterval(loadAllLiveDashboardData, 4000);
+    const interval = setInterval(loadAllLiveDashboardData, 6000);
     return () => clearInterval(interval);
   }, [selectedMall]);
 
@@ -190,26 +190,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [selectedMall, isLivePaused]);
 
-  // Calculate Real Dynamic Live Metrics strictly from live authoritative data
-  const liveUsersCount = usersList.length;
-  
-  const totalStoreFootfall = storesList.reduce((sum, s) => sum + (Number(s.visitorsToday || (s as any).visitors_today) || 0), 0);
-  const totalStoreOrders = storesList.reduce((sum, s) => sum + (Number(s.ordersCount || (s as any).orders_count) || 0), 0);
-  const totalStoreBookings = storesList.reduce((sum, s) => sum + (Number(s.reservationsCount || (s as any).reservations_count) || 0), 0);
-  const totalStoreRevenue = storesList.reduce((sum, s) => sum + (Number(s.revenueToday || (s as any).revenue_today) || 0), 0);
+  // Use authoritative unified active datasets
+  const activeStores = (propStores && propStores.length > 0) ? propStores : storesList;
+  const activeUsers = (propUsers && propUsers.length > 0) ? propUsers : usersList;
+  const activeOrders = (propOrders && propOrders.length > 0) ? propOrders : ordersList;
+  const activeReservations = (propReservations && propReservations.length > 0) ? propReservations : reservationsList;
+  const activeCoupons = (propCoupons && propCoupons.length > 0) ? propCoupons : couponsList;
+  const activeCampaigns = (propCampaigns && propCampaigns.length > 0) ? propCampaigns : campaignsList;
 
-  const liveOrdersRev = ordersList.reduce((sum, o) => sum + (Number(o.totalAmount || (o as any).total_amount) || 0), 0);
+  // Calculate Real Dynamic Live Metrics strictly from live authoritative data
+  const liveUsersCount = activeUsers.length;
+  
+  const totalStoreFootfall = activeStores.reduce((sum, s) => sum + (Number(s.visitorsToday || (s as any).visitors_today) || 0), 0);
+  const totalStoreOrders = activeStores.reduce((sum, s) => sum + (Number(s.ordersCount || (s as any).orders_count) || 0), 0);
+  const totalStoreBookings = activeStores.reduce((sum, s) => sum + (Number(s.reservationsCount || (s as any).reservations_count) || 0), 0);
+  const totalStoreRevenue = activeStores.reduce((sum, s) => sum + (Number(s.revenueToday || (s as any).revenue_today) || 0), 0);
+
+  const liveOrdersRev = activeOrders.reduce((sum, o) => sum + (Number(o.totalAmount || (o as any).total_amount) || 0), 0);
   const totalGrossRevenue = totalStoreRevenue + liveOrdersRev;
-  const totalOrdersCount = totalStoreOrders + ordersList.length;
-  const totalReservationsCount = totalStoreBookings + reservationsList.length;
-  const totalVisitorsCount = totalStoreFootfall + usersList.length;
+  const totalOrdersCount = totalStoreOrders + activeOrders.length;
+  const totalReservationsCount = totalStoreBookings + activeReservations.length;
+  const totalVisitorsCount = totalStoreFootfall + activeUsers.length;
 
   const liveRevenueStr = totalGrossRevenue >= 10000000 
     ? `₹${(totalGrossRevenue / 10000000).toFixed(2)} Cr`
     : (totalGrossRevenue >= 100000 ? `₹${(totalGrossRevenue / 100000).toFixed(2)} L` : `₹${totalGrossRevenue.toLocaleString()}`);
 
-  const totalCouponsRedeemed = couponsList.reduce((sum, c) => sum + (Number(c.redeemedCount) || 0), 0) ||
-    campaignsList.reduce((sum, c) => sum + (Number(c.couponsRedeemed) || 0), 0);
+  const totalCouponsRedeemed = activeCoupons.reduce((sum, c) => sum + (Number(c.redeemedCount) || 0), 0) ||
+    activeCampaigns.reduce((sum, c) => sum + (Number(c.couponsRedeemed) || 0), 0);
 
   // 8 Dynamic KPI Cards matching real live database state
   const dynamicKpiData: KpiItem[] = useMemo(() => [

@@ -1045,7 +1045,9 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
     const userMap = new Map<string, any>();
 
     function getCleanPhone(p?: string): string {
-      return (p || '').replace(/\D/g, '').slice(-10);
+      const clean = (p || '').replace(/\D/g, '').slice(-10);
+      if (!clean || clean === '9800000000' || clean === '0000000000' || /^0+$/.test(clean)) return '';
+      return clean;
     }
 
     function getCleanName(n?: string): string {

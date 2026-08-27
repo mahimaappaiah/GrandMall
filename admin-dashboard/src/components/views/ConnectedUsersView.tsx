@@ -17,15 +17,62 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
   const [liveUsersList, setLiveUsersList] = useState<ConnectedUser[]>(propUsers && propUsers.length > 0 ? propUsers : []);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  function getCleanPhone(p?: string): string {
+    const clean = (p || '').replace(/\D/g, '').slice(-10);
+    if (!clean || clean === '9800000000' || clean === '0000000000' || /^0+$/.test(clean)) return '';
+    return clean;
+  }
+
+  function getCleanName(n?: string): string {
+    const s = (n || '').trim().toLowerCase();
+    if (!s || s === 'mall guest' || s === 'valued guest' || s === 'customer' || s.startsWith('guest ') || s.startsWith('customer')) return '';
+    return s;
+  }
+
+  function findKey(u: any): string {
+    const cleanPhone = getCleanPhone(u.phone || u.customer_phone);
+    if (cleanPhone && cleanPhone.length === 10) return 'phone:' + cleanPhone;
+
+    const cleanName = getCleanName(u.name || u.customer_name || u.full_name);
+    if (cleanName) return 'name:' + cleanName;
+
+    if (u.id && String(u.id).length > 10) return 'id:' + u.id;
+    if (u.user_id && String(u.user_id).length > 10) return 'id:' + u.user_id;
+
+    return u.id || u.user_id || `rec-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
   // Synchronize state when parent passes updated live users
   useEffect(() => {
     if (propUsers && propUsers.length > 0) {
-      setLiveUsersList(propUsers);
+      setLiveUsersList(prev => {
+        const userMap = new Map<string, ConnectedUser>();
+        prev.forEach(u => userMap.set(findKey(u), u));
+        propUsers.forEach(u => {
+          const key = findKey(u);
+          const existing = userMap.get(key);
+          const existingStores = existing?.visitedStores || [];
+          const incomingStores = u.visitedStores || [];
+          const mergedStores = Array.from(new Set([...existingStores, ...incomingStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+          userMap.set(key, {
+            ...existing,
+            ...u,
+            visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || [])
+          });
+        });
+        const list = Array.from(userMap.values());
+        list.sort((a: any, b: any) => {
+          const timeA = a._rawTimestamp || a.created_at || a.connectionTime || 0;
+          const timeB = b._rawTimestamp || b.created_at || b.connectionTime || 0;
+          return new Date(timeB).getTime() - new Date(timeA).getTime();
+        });
+        return list;
+      });
     }
   }, [propUsers]);
 
   const fetchLiveConnectedUsers = useCallback(async () => {
-    setIsRefreshing(true);
     try {
       // 1. Fetch live profiles & Wi-Fi sessions from Supabase
       const supaRes = await fetchConnectedUsersFromSupabase();
@@ -37,18 +84,6 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
         const bData = await bRes.json();
         if (bData && bData.success && Array.isArray(bData.users) && bData.users.length > 0) {
           const userMap = new Map<string, ConnectedUser>();
-          
-          function findKey(u: any): string {
-            const cleanPhone = (u.phone || '').replace(/\D/g, '').slice(-10);
-            if (cleanPhone && cleanPhone.length === 10) return 'phone:' + cleanPhone;
-            if (u.id && u.id.length > 10) return 'id:' + u.id;
-            if (u.user_id && u.user_id.length > 10) return 'id:' + u.user_id;
-            const cleanName = (u.name || '').trim().toLowerCase();
-            if (cleanName && cleanName !== 'valued guest' && cleanName !== 'mall guest' && !cleanName.startsWith('guest ') && !cleanName.startsWith('customer')) {
-              return 'name:' + cleanName;
-            }
-            return u.id || `rec-${Math.random().toString(36).slice(2, 9)}`;
-          }
 
           // Seed with Supabase users
           users.forEach(u => {
@@ -80,26 +115,51 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
         }
       } catch (e) {}
 
-      // 3. Sort strictly: Recent users at top, older users below
-      users.sort((a: any, b: any) => {
-        const timeA = a._rawTimestamp || a.created_at || a.connectionTime || 0;
-        const timeB = b._rawTimestamp || b.created_at || b.connectionTime || 0;
-        return new Date(timeB).getTime() - new Date(timeA).getTime();
-      });
-
+      // 3. Atomically update without flashing or resetting existing state
       if (users.length > 0) {
-        setLiveUsersList(users);
+        setLiveUsersList(prev => {
+          const userMap = new Map<string, ConnectedUser>();
+          prev.forEach(u => userMap.set(findKey(u), u));
+          users.forEach(u => {
+            const key = findKey(u);
+            const existing = userMap.get(key);
+            const existingStores = existing?.visitedStores || [];
+            const incomingStores = u.visitedStores || [];
+            const mergedStores = Array.from(new Set([...existingStores, ...incomingStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+            userMap.set(key, {
+              ...existing,
+              ...u,
+              visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || [])
+            });
+          });
+
+          const mergedList = Array.from(userMap.values());
+          mergedList.sort((a: any, b: any) => {
+            const timeA = a._rawTimestamp || a.created_at || a.connectionTime || 0;
+            const timeB = b._rawTimestamp || b.created_at || b.connectionTime || 0;
+            return new Date(timeB).getTime() - new Date(timeA).getTime();
+          });
+          return mergedList;
+        });
       }
     } catch (e) {
       console.warn('[ConnectedUsersView] Error fetching live users:', e);
-    } finally {
-      setIsRefreshing(false);
     }
   }, []);
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchLiveConnectedUsers();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     fetchLiveConnectedUsers();
-    const interval = setInterval(fetchLiveConnectedUsers, 4000);
+    const interval = setInterval(fetchLiveConnectedUsers, 6000);
 
     let eventSource: EventSource | null = null;
     try {
@@ -166,7 +226,7 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
 
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchLiveConnectedUsers}
+            onClick={handleManualRefresh}
             disabled={isRefreshing}
             className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
             title="Refresh Live Users"
@@ -194,39 +254,42 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
         </div>
       </div>
 
-      {/* Filters & Search */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search by Customer Name, Phone, or MAC address..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600/30"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-500 uppercase">Device:</span>
-          <select
-            value={deviceFilter}
-            onChange={(e) => setDeviceFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
-          >
-            <option value="All">All Devices</option>
-            <option value="iOS">iOS / Apple</option>
-            <option value="Android">Android</option>
-            <option value="Windows">Windows</option>
-            <option value="macOS">macOS</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Data Table */}
+      {/* Main Table Container */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_2px_10px_rgba(0,0,0,0.03)] overflow-hidden">
+        
+        {/* Table Filters Bar */}
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by name, phone (+91), MAC..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-xs font-bold text-slate-600">Device:</span>
+            <select
+              value={deviceFilter}
+              onChange={(e) => setDeviceFilter(e.target.value)}
+              className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="All">All Devices</option>
+              <option value="iOS">iOS (iPhone)</option>
+              <option value="Android">Android</option>
+              <option value="Windows">Windows Laptop</option>
+              <option value="macOS">MacBook</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Users Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-700">
+          <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               <tr>
                 <th className="px-5 py-3.5">Customer Name</th>
@@ -240,7 +303,7 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {isRefreshing && liveUsersList.length === 0 ? (
+              {liveUsersList.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-5 py-12 text-center text-slate-400 font-medium">
                     <div className="flex flex-col items-center justify-center gap-2">

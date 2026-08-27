@@ -1941,7 +1941,9 @@ app.get('/api/auth/connected-users', async (req, res) => {
     const userMap = new Map();
 
     function getCleanPhone(p) {
-      return (p || '').replace(/\D/g, '').slice(-10);
+      const clean = (p || '').replace(/\D/g, '').slice(-10);
+      if (!clean || clean === '9800000000' || clean === '0000000000' || /^0+$/.test(clean)) return '';
+      return clean;
     }
 
     function getCleanName(n) {

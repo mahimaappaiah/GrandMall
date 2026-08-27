@@ -563,6 +563,31 @@ export default function App() {
     }
   };
 
+  function getAppCleanPhone(p?: string): string {
+    const clean = (p || '').replace(/\D/g, '').slice(-10);
+    if (!clean || clean === '9800000000' || clean === '0000000000' || /^0+$/.test(clean)) return '';
+    return clean;
+  }
+
+  function getAppCleanName(n?: string): string {
+    const s = (n || '').trim().toLowerCase();
+    if (!s || s === 'mall guest' || s === 'valued guest' || s === 'customer' || s.startsWith('guest ') || s.startsWith('customer')) return '';
+    return s;
+  }
+
+  function getAppUserKey(u: any): string {
+    const p = getAppCleanPhone(u.phone || u.customer_phone);
+    if (p && p.length === 10) return 'phone:' + p;
+
+    const n = getAppCleanName(u.name || u.customer_name || u.full_name);
+    if (n) return 'name:' + n;
+
+    if (u.id && String(u.id).length > 10) return 'id:' + u.id;
+    if (u.user_id && String(u.user_id).length > 10) return 'id:' + u.user_id;
+
+    return u.id || u.user_id || `usr-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
   const fetchBackendConnectedUsers = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
@@ -571,11 +596,10 @@ export default function App() {
         setUsersList(prev => {
           const map = new Map<string, ConnectedUser>();
           prev.forEach(u => {
-            const key = (u.phone || '').replace(/\D/g, '').slice(-10) || (u.name || '').toLowerCase();
-            map.set(key, { ...u });
+            map.set(getAppUserKey(u), { ...u });
           });
           data.users.forEach((u: any) => {
-            const key = (u.phone || '').replace(/\D/g, '').slice(-10) || (u.name || '').toLowerCase();
+            const key = getAppUserKey(u);
             const existing = map.get(key);
             const existingStores = existing?.visitedStores || [];
             const incomingStores = Array.isArray(u.visitedStores) ? u.visitedStores : [];
@@ -654,7 +678,7 @@ export default function App() {
 
   useEffect(() => {
     fetchBackendConnectedUsers();
-    const interval = setInterval(fetchBackendConnectedUsers, 1500);
+    const interval = setInterval(fetchBackendConnectedUsers, 6000);
     return () => clearInterval(interval);
   }, []);
 
