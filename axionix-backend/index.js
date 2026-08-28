@@ -1212,190 +1212,260 @@ app.get('/', (req, res) => {
       const svg = document.getElementById('spatial-svg-map');
       if (!svg) return;
 
+      const filteredStores = storesData.filter(function(s) {
+        if (currentFloor === 'All Stores') return true;
+        return (s.floor || '').toLowerCase().includes(currentFloor.toLowerCase().replace('floor', '').trim());
+      });
+
+      function getZoneDensity(zoneKey) {
+        const zk = (zoneKey || '').toLowerCase();
+        const matches = filteredStores.filter(function(s) {
+          const sz = (s.zone || '').toLowerCase();
+          return sz.includes(zk) || (zk.includes('auditorium') && (sz.includes('north') || sz.includes('zone d')))
+            || (zk.includes('stands') && (sz.includes('south') || sz.includes('zone a')))
+            || (zk.includes('hall') && (sz.includes('east') || sz.includes('zone b')))
+            || (zk.includes('entrance 2') && (sz.includes('west') || sz.includes('entrance 2')))
+            || (zk.includes('exhibition') && (sz.includes('central') || sz.includes('zone c')));
+        });
+        if (!matches.length) return 42;
+        const totalVisits = matches.reduce(function(acc, s) { return acc + (s.visitorsToday || 0); }, 0);
+        return Math.min(98, Math.max(30, Math.floor(totalVisits / 10)));
+      }
+
+      function getHeatColor(density) {
+        if (density >= 75) return 'rgba(239, 68, 68, 0.45)';
+        if (density >= 50) return 'rgba(245, 158, 11, 0.35)';
+        return 'rgba(16, 185, 129, 0.3)';
+      }
+
+      const storeCoords = {
+        'nike flagship': { x: 395, y: 190 },
+        'nike': { x: 395, y: 190 },
+        'adidas': { x: 430, y: 220 },
+        'adidas originals': { x: 430, y: 220 },
+        'gucci': { x: 280, y: 190 },
+        'gucci boutique': { x: 280, y: 190 },
+        'h&m flagship': { x: 280, y: 305 },
+        'h&m': { x: 280, y: 305 },
+        'zara flagship': { x: 160, y: 245 },
+        'zara': { x: 160, y: 245 },
+        'ray-ban sunglass hut': { x: 130, y: 245 },
+        'ray-ban': { x: 130, y: 245 },
+        'starbucks reserve': { x: 360, y: 312 },
+        'starbucks': { x: 360, y: 312 },
+        'brew & bean': { x: 450, y: 312 },
+        'rolex boutique': { x: 470, y: 295 },
+        'louis vuitton': { x: 340, y: 295 },
+        'din tai fung': { x: 335, y: 440 },
+        'prada atelier': { x: 410, y: 440 },
+        'prada': { x: 410, y: 440 },
+        'pvr cinemas': { x: 335, y: 480 },
+        'sephora': { x: 420, y: 480 },
+        'apple experience store': { x: 630, y: 365 },
+        'apple store': { x: 630, y: 365 }
+      };
+
+      const zoneDDensity = getZoneDensity('auditorium');
+      const entrance2Density = getZoneDensity('entrance 2');
+      const zoneCDensity = getZoneDensity('exhibition');
+      const zoneADensity = getZoneDensity('stands');
+      const zoneBDensity = getZoneDensity('hall');
+
+      const fillD = showHeatmapOverlay ? getHeatColor(zoneDDensity) : 'rgba(59, 130, 246, 0.12)';
+      const fillE2 = showHeatmapOverlay ? getHeatColor(entrance2Density) : 'rgba(239, 68, 68, 0.08)';
+      const fillC = showHeatmapOverlay ? getHeatColor(zoneCDensity) : 'rgba(100, 116, 139, 0.12)';
+      const fillA = showHeatmapOverlay ? getHeatColor(zoneADensity) : 'rgba(148, 163, 184, 0.12)';
+      const fillB = showHeatmapOverlay ? getHeatColor(zoneBDensity) : 'rgba(217, 119, 6, 0.12)';
+
       let html = '<defs>' +
-        '<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">' +
-          '<path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(0,0,0,0.05)" stroke-width="1" />' +
+        '<pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">' +
+          '<path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f8fafc" stroke-width="0.8" />' +
         '</pattern>' +
-        '<radialGradient id="atriumHeat" cx="50%" cy="50%" r="50%">' +
-          '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.55" />' +
-          '<stop offset="40%" stop-color="#60a5fa" stop-opacity="0.3" />' +
-          '<stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />' +
-        '</radialGradient>' +
-        '<radialGradient id="luxuryHeat" cx="50%" cy="50%" r="50%">' +
-          '<stop offset="0%" stop-color="#ef4444" stop-opacity="0.5" />' +
-          '<stop offset="60%" stop-color="#f87171" stop-opacity="0.2" />' +
-          '<stop offset="100%" stop-color="#ef4444" stop-opacity="0" />' +
-        '</radialGradient>' +
-        '<radialGradient id="techHeat" cx="50%" cy="50%" r="50%">' +
-          '<stop offset="0%" stop-color="#10b981" stop-opacity="0.45" />' +
-          '<stop offset="70%" stop-color="#34d399" stop-opacity="0.15" />' +
-          '<stop offset="100%" stop-color="#10b981" stop-opacity="0" />' +
-        '</radialGradient>' +
-        '<radialGradient id="jewelryHeat" cx="50%" cy="50%" r="50%">' +
-          '<stop offset="0%" stop-color="#f59e0b" stop-opacity="0.5" />' +
-          '<stop offset="70%" stop-color="#fbbf24" stop-opacity="0.2" />' +
-          '<stop offset="100%" stop-color="#f59e0b" stop-opacity="0" />' +
-        '</radialGradient>' +
-        '<radialGradient id="cafeHeat" cx="50%" cy="50%" r="50%">' +
-          '<stop offset="0%" stop-color="#a855f7" stop-opacity="0.5" />' +
-          '<stop offset="70%" stop-color="#c084fc" stop-opacity="0.2" />' +
-          '<stop offset="100%" stop-color="#a855f7" stop-opacity="0" />' +
-        '</radialGradient>' +
-        '<filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">' +
-          '<feGaussianBlur stdDeviation="8" result="blur" />' +
-          '<feComposite in="SourceGraphic" in2="blur" operator="over" />' +
+        '<filter id="shadowFilter" x="-10%" y="-10%" width="120%" height="120%">' +
+          '<feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08" />' +
         '</filter>' +
       '</defs>' +
-      '<rect width="840" height="560" fill="url(#grid)" />' +
-      '<rect x="30" y="30" width="780" height="500" rx="32" fill="none" stroke="rgba(0,0,0,0.12)" stroke-width="2" stroke-dasharray="6 6" />';
+      '<rect width="800" height="560" fill="#ffffff" />' +
+      '<rect width="800" height="560" fill="url(#grid)" />' +
 
-      if (currentFloor === 'Ground Floor') {
-        html += 
-          '<!-- North Wing: Luxury Promenade -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'fashion-3\\')">' +
-            '<path d="M 230 50 L 610 50 L 550 170 L 290 170 Z" fill="' + (showHeatmapOverlay ? '#fee2e2' : '#f8fafc') + '" stroke="#ef4444" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="420" cy="110" rx="140" ry="45" fill="url(#luxuryHeat)" />' : '') +
-            '<text x="420" y="95" fill="#0f172a" font-size="14" font-weight="900" text-anchor="middle">Luxury Promenade (North Wing)</text>' +
-            '<text x="420" y="115" fill="#dc2626" font-size="10" font-weight="800" text-anchor="middle">⚡ 480 visitors • High Footfall Density (88%)</text>' +
-            '<g class="interactive-pin" transform="translate(480, 85)" onclick="event.stopPropagation(); handleZoneClick(\\'fashion-3\\')">' +
-              '<rect x="-35" y="-12" width="70" height="20" rx="10" fill="#0f172a" stroke="#ef4444" stroke-width="1.5" />' +
-              '<text x="0" y="2" fill="#10b981" font-size="9" font-weight="900" text-anchor="middle">₹21.5L Today</text>' +
-              '<circle cx="-16" cy="22" r="13" fill="#0f172a" stroke="#ef4444" stroke-width="2" />' +
-              '<text x="-16" y="26" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle">GC</text>' +
-            '</g>' +
-            '<g class="interactive-pin" transform="translate(360, 85)" onclick="event.stopPropagation(); handleZoneClick(\\'fashion-4\\')">' +
-              '<circle cx="-16" cy="22" r="13" fill="#0f172a" stroke="#3b82f6" stroke-width="2" />' +
-              '<text x="-16" y="26" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle">PRADA</text>' +
-            '</g>' +
+      '<!-- Left vertical guideline -->' +
+      '<line x1="130" y1="90" x2="130" y2="480" stroke="#cbd5e1" stroke-width="1.5" />' +
+      '<path d="M 130 430 A 25 25 0 0 0 130 480" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5" />' +
+
+      '<!-- Room E & Room F under Entrance 2 on left -->' +
+      '<rect x="230" y="175" width="45" height="42" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1" rx="2" />' +
+      '<text x="252" y="200" fill="#94a3b8" font-size="13" font-weight="bold" text-anchor="middle">E</text>' +
+
+      '<rect x="230" y="225" width="45" height="42" fill="#fee2e2" stroke="#fca5a5" stroke-width="1" rx="2" />' +
+      '<text x="252" y="250" fill="#f87171" font-size="13" font-weight="bold" text-anchor="middle">F</text>' +
+
+      '<!-- Auditorium Background geometry in Zone D -->' +
+      '<path d="M 275 175 L 470 175 L 470 245 L 440 245 L 440 220 L 275 220 Z" fill="#cbd5e1" fill-opacity="0.35" stroke="#94a3b8" stroke-width="1.2" />' +
+      '<text x="350" y="160" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">1 Entrance</text>' +
+
+      '<!-- Central Corridor & Walkway geometry -->' +
+      '<path d="M 275 260 L 530 260 L 530 350 L 275 350 Z" fill="#e2e8f0" fill-opacity="0.4" stroke="#cbd5e1" stroke-width="1.5" />' +
+      '<path d="M 330 270 L 485 270 L 485 295 L 330 295 Z" fill="none" stroke="#94a3b8" stroke-width="1.5" />' +
+
+      '<!-- Entrance 3 background walkway -->' +
+      '<path d="M 245 350 L 295 350 L 295 440 L 245 440 Z" fill="#e2e8f0" fill-opacity="0.3" stroke="#cbd5e1" stroke-width="1" />' +
+      '<text x="270" y="325" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">3 Entrance</text>' +
+
+      '<!-- Hall B corridor connection & Entrance 4 text -->' +
+      '<path d="M 530 280 L 590 280 L 590 340 L 530 340" fill="none" stroke="#cbd5e1" stroke-width="4" />' +
+      '<text x="610" y="275" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">4 Entrance</text>' +
+
+      '<!-- Seats matrix column in corridor -->' +
+      '<g transform="translate(508, 320)">' +
+        '<text x="14" y="-8" fill="#94a3b8" font-size="9" font-weight="bold" text-anchor="middle">Seats</text>' +
+        '<rect x="0" y="0" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="0" width="8" height="8" rx="2" fill="#cbd5e1" />' +
+        '<rect x="0" y="12" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="12" width="8" height="8" rx="2" fill="#cbd5e1" />' +
+        '<rect x="0" y="24" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="24" width="8" height="8" rx="2" fill="#cbd5e1" />' +
+        '<rect x="0" y="36" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="36" width="8" height="8" rx="2" fill="#cbd5e1" />' +
+        '<rect x="0" y="48" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="48" width="8" height="8" rx="2" fill="#cbd5e1" />' +
+        '<rect x="0" y="60" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="60" width="8" height="8" rx="2" fill="#cbd5e1" />' +
+      '</g>' +
+
+      '<!-- Stands / Zone A background room A -->' +
+      '<rect x="250" y="375" width="220" height="135" fill="#cbd5e1" fill-opacity="0.25" stroke="#94a3b8" stroke-width="1" rx="4" />' +
+      '<rect x="290" y="405" width="80" height="45" fill="none" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="3 3" />' +
+      '<text x="445" y="490" fill="#94a3b8" font-size="14" font-weight="bold" text-anchor="middle">A</text>' +
+
+      '<!-- Hall B background room & curved auditorium fan seating -->' +
+      '<rect x="545" y="340" width="175" height="165" fill="#cbd5e1" fill-opacity="0.2" stroke="#94a3b8" stroke-width="1" rx="4" />' +
+      '<text x="565" y="370" fill="#94a3b8" font-size="12" font-weight="bold" text-anchor="middle">B</text>' +
+      '<text x="565" y="388" fill="#94a3b8" font-size="10" font-weight="bold" text-anchor="middle">Hall</text>' +
+
+      '<!-- Fan-shaped seating clusters in Hall B -->' +
+      '<g transform="translate(630, 445)">' +
+        '<path d="M -35 -20 A 40 40 0 0 1 35 -20" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-dasharray="6 4" />' +
+        '<path d="M -50 -5 A 55 55 0 0 1 50 -5" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-dasharray="8 5" />' +
+        '<path d="M -65 10 A 70 70 0 0 1 65 10" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-dasharray="10 6" />' +
+        '<rect x="-30" y="-35" width="10" height="8" rx="2" fill="#cbd5e1" />' +
+        '<rect x="-5" y="-35" width="10" height="8" rx="2" fill="#cbd5e1" />' +
+        '<rect x="20" y="-35" width="10" height="8" rx="2" fill="#cbd5e1" />' +
+      '</g>' +
+      '<rect x="675" y="525" width="8" height="25" fill="#cbd5e1" rx="2" />' +
+
+      '<!-- 1. ZONE D (AUDITORIUM - TOP BLUE ZONE) -->' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-d\')">' +
+        '<rect x="230" y="150" width="240" height="105" rx="16" fill="' + fillD + '" stroke="#3b82f6" stroke-width="1.8" />' +
+        '<text x="350" y="192" fill="#2563eb" font-size="18" font-weight="800" text-anchor="middle" class="font-sans">Auditorium</text>' +
+        '<text x="350" y="214" fill="#3b82f6" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone D</text>' +
+        '<text x="350" y="234" fill="#93c5fd" font-size="9" font-weight="500" text-anchor="middle">Auditorium</text>' +
+        '<!-- Entrance 1 Pill Tag -->' +
+        '<g transform="translate(300, 138)">' +
+          '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5" filter="url(#shadowFilter)" />' +
+          '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
+          '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 1</text>' +
+        '</g>' +
+        '<!-- Solid Black Badge NK -->' +
+        '<g transform="translate(350, 188)">' +
+          '<circle cx="0" cy="0" r="14" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />' +
+          '<text x="0" y="4" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle">NK</text>' +
+        '</g>' +
+      '</g>' +
+
+      '<!-- 2. ENTRANCE 2 (WEST WING / PINK-RED ZONE) -->' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'entrance-2\')">' +
+        '<rect x="90" y="215" width="140" height="60" rx="14" fill="' + fillE2 + '" stroke="#f87171" stroke-width="1.5" />' +
+        '<g transform="translate(105, 233)">' +
+          '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadowFilter)" />' +
+          '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
+          '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 2</text>' +
+        '</g>' +
+        '<text x="160" y="266" fill="#fca5a5" font-size="9" font-weight="500" text-anchor="middle">Entrance</text>' +
+      '</g>' +
+
+      '<!-- 3. SOLID BLACK BADGE HM -->' +
+      '<g transform="translate(280, 305)" class="cursor-pointer" onclick="handleZoneClick(\'hm-badge\')">' +
+        '<circle cx="0" cy="0" r="16" fill="#0f172a" stroke="#ffffff" stroke-width="2" filter="url(#shadowFilter)" />' +
+        '<text x="0" y="4.5" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle">HM</text>' +
+      '</g>' +
+
+      '<!-- 4. ZONE C (EXHIBITION - CENTER SLATE ZONE) -->' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-c\')">' +
+        '<rect x="300" y="280" width="210" height="65" rx="14" fill="' + fillC + '" stroke="#64748b" stroke-width="1.8" />' +
+        '<text x="405" y="308" fill="#334155" font-size="16" font-weight="800" text-anchor="middle" class="font-sans">Exhibition</text>' +
+        '<text x="405" y="330" fill="#64748b" font-size="13" font-weight="600" text-anchor="middle" class="font-sans">Zone C</text>' +
+      '</g>' +
+
+      '<!-- 5. ZONE A (STANDS - BOTTOM SLATE ZONE) -->' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-a\')">' +
+        '<rect x="195" y="380" width="280" height="140" rx="16" fill="' + fillA + '" stroke="#94a3b8" stroke-width="1.8" />' +
+        '<!-- Entrance 3 Pill Tag -->' +
+        '<g transform="translate(215, 368)">' +
+          '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadowFilter)" />' +
+          '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
+          '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 3</text>' +
+        '</g>' +
+        '<text x="335" y="440" fill="#1e293b" font-size="17" font-weight="800" text-anchor="middle" class="font-sans">Stands</text>' +
+        '<text x="335" y="465" fill="#64748b" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone A</text>' +
+        '<text x="335" y="485" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">Stands</text>' +
+        '<!-- Toilet Icon & Text at Bottom-Left -->' +
+        '<g transform="translate(208, 485)">' +
+          '<path d="M 6 3 A 2 2 0 1 1 6 7 A 2 2 0 1 1 6 3 Z M 4 8 L 8 8 L 8 13 L 7 13 L 7 18 L 5 18 L 5 13 L 4 13 Z" fill="#64748b" />' +
+          '<path d="M 14 3 A 2 2 0 1 1 14 7 A 2 2 0 1 1 14 3 Z M 11.5 8 L 16.5 8 L 18 13 L 15.5 13 L 15.5 18 L 12.5 18 L 12.5 13 L 10 13 Z" fill="#64748b" />' +
+          '<text x="22" y="14" fill="#64748b" font-size="14" font-weight="700" class="font-sans">Toilet</text>' +
+        '</g>' +
+      '</g>' +
+
+      '<!-- 6. ZONE B (HALL - RIGHT AMBER ZONE) -->' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-b\')">' +
+        '<rect x="545" y="340" width="175" height="165" rx="16" fill="' + fillB + '" stroke="#c29b7a" stroke-width="1.8" />' +
+        '<text x="630" y="405" fill="#9a3412" font-size="18" font-weight="800" text-anchor="middle" class="font-sans">Hall</text>' +
+        '<text x="630" y="435" fill="#b45309" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone B</text>' +
+        '<!-- TAG Badge -->' +
+        '<g transform="translate(630, 412)">' +
+          '<rect x="-19" y="-11" width="38" height="22" rx="11" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />' +
+          '<text x="0" y="4" fill="#ffffff" font-size="10" font-weight="900" text-anchor="middle">TAG</text>' +
+        '</g>' +
+        '<!-- Vertical Entrance 4 Tag -->' +
+        '<g transform="translate(672, 370)">' +
+          '<rect x="0" y="0" width="24" height="100" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadowFilter)" />' +
+          '<g transform="translate(12, 50) rotate(90)">' +
+            '<path d="M -30 0 L -24 0 M -26 -3 L -23 0 L -26 3" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
+            '<text x="-18" y="4" fill="#0f172a" font-size="11" font-weight="800" text-anchor="start">Entrance 4</text>' +
           '</g>' +
+        '</g>' +
+      '</g>';
 
-          '<!-- Central Grand Atrium -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'lux-1\\')">' +
-            '<path d="M 310 190 L 530 190 L 590 320 L 530 440 L 310 440 L 250 320 Z" fill="' + (showHeatmapOverlay ? '#dbeafe' : '#ffffff') + '" stroke="#2563eb" stroke-width="3" />' +
-            (showHeatmapOverlay ? '<circle cx="420" cy="315" r="95" fill="url(#atriumHeat)" class="thermal-ring-1" />' : '') +
-            '<circle cx="420" cy="315" r="75" fill="#f8fafc" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4 4" />' +
-            '<text x="420" y="295" fill="#0f172a" font-size="15" font-weight="900" text-anchor="middle">Central Grand Atrium</text>' +
-            '<text x="420" y="315" fill="#1d4ed8" font-size="11" font-weight="800" text-anchor="middle">⚡ 820 visitors • Peak Density Zone</text>' +
-            '<g transform="translate(420, 260)">' +
-              '<rect x="-42" y="-12" width="84" height="20" rx="10" fill="#0f172a" stroke="#10b981" stroke-width="1.5" />' +
-              '<text x="0" y="2" fill="#10b981" font-size="10" font-weight="900" text-anchor="middle">₹58.5L Synced</text>' +
-            '</g>' +
-            '<g class="interactive-pin" transform="translate(365, 375)" onclick="event.stopPropagation(); handleZoneClick(\\'lux-1\\')">' +
-              '<circle cx="0" cy="0" r="16" fill="#0f172a" stroke="#f59e0b" stroke-width="2.5" />' +
-              '<text x="0" y="4" fill="#fbbf24" font-size="9" font-weight="900" text-anchor="middle">RLX</text>' +
-              '<rect x="-26" y="18" width="52" height="15" rx="7.5" fill="#10b981" />' +
-              '<text x="0" y="29" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle">₹18.5L</text>' +
-            '</g>' +
-            '<g class="interactive-pin" transform="translate(475, 375)" onclick="event.stopPropagation(); handleZoneClick(\\'acc-1\\')">' +
-              '<circle cx="0" cy="0" r="16" fill="#0f172a" stroke="#3b82f6" stroke-width="2.5" />' +
-              '<text x="0" y="4" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle">LV</text>' +
-              '<rect x="-26" y="18" width="52" height="15" rx="7.5" fill="#10b981" />' +
-              '<text x="0" y="29" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle">₹34.0L</text>' +
-            '</g>' +
+      // Render Dynamic Store Pins for current floor
+      filteredStores.forEach(function(store) {
+        const nameLower = (store.name || '').toLowerCase();
+        let pos = storeCoords[nameLower];
+        if (!pos) {
+          const matchKey = Object.keys(storeCoords).find(function(k) { return nameLower.includes(k); });
+          if (matchKey) {
+            pos = storeCoords[matchKey];
+          } else {
+            const sZone = (store.zone || '').toLowerCase();
+            if (sZone.includes('d') || sZone.includes('north') || sZone.includes('auditorium')) {
+              pos = { x: 380, y: 190 };
+            } else if (sZone.includes('b') || sZone.includes('east') || sZone.includes('hall')) {
+              pos = { x: 630, y: 365 };
+            } else if (sZone.includes('a') || sZone.includes('south') || sZone.includes('stands')) {
+              pos = { x: 340, y: 440 };
+            } else if (sZone.includes('west') || sZone.includes('entrance 2')) {
+              pos = { x: 160, y: 245 };
+            } else {
+              pos = { x: 405, y: 312 };
+            }
+          }
+        }
+
+        const revK = Math.floor((store.revenueToday || 0) / 1000);
+        const storeInitial = (store.logo || (store.name || 'ST').slice(0, 2).toUpperCase());
+
+        html += '<g transform="translate(' + pos.x + ', ' + pos.y + ')" class="interactive-pin cursor-pointer" onclick="event.stopPropagation(); handleZoneClick(\'' + store.id + '\')">' +
+          '<circle r="18" fill="#0f172a" stroke="#3b82f6" stroke-width="2" class="shadow-lg" />' +
+          '<text y="4" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle">' + storeInitial + '</text>' +
+          '<g transform="translate(0, 24)">' +
+            '<rect x="-24" y="-8" width="48" height="15" rx="7.5" fill="#10b981" />' +
+            '<text x="0" y="2.5" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle">₹' + revK + 'k</text>' +
           '</g>' +
-
-          '<!-- East Wing: High Jewelry Salon -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'acc-8\\')">' +
-            '<path d="M 610 200 L 790 200 L 790 430 L 610 430 Z" fill="' + (showHeatmapOverlay ? '#fef3c7' : '#f8fafc') + '" stroke="#f59e0b" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="700" cy="315" rx="70" ry="90" fill="url(#jewelryHeat)" />' : '') +
-            '<text x="700" y="295" fill="#0f172a" font-size="13" font-weight="900" text-anchor="middle">High Jewelry Salon</text>' +
-            '<text x="700" y="315" fill="#b45309" font-size="10" font-weight="800" text-anchor="middle">⚡ 380 visitors (Medium)</text>' +
-            '<g class="interactive-pin" transform="translate(700, 260)" onclick="event.stopPropagation(); handleZoneClick(\\'acc-8\\')">' +
-              '<rect x="-38" y="-10" width="76" height="18" rx="9" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5" />' +
-              '<text x="0" y="3" fill="#10b981" font-size="9" font-weight="900" text-anchor="middle">Cartier • ₹41.2L</text>' +
-            '</g>' +
-          '</g>' +
-
-          '<!-- West Wing: Artisan Cafe Court -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'food-1\\')">' +
-            '<path d="M 50 200 L 230 200 L 230 430 L 50 430 Z" fill="' + (showHeatmapOverlay ? '#f3e8ff' : '#f8fafc') + '" stroke="#a855f7" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="140" cy="315" rx="70" ry="90" fill="url(#cafeHeat)" />' : '') +
-            '<text x="140" y="295" fill="#0f172a" font-size="13" font-weight="900" text-anchor="middle">Artisan Cafe Court</text>' +
-            '<text x="140" y="315" fill="#7e22ce" font-size="10" font-weight="800" text-anchor="middle">⚡ 950 visitors (High)</text>' +
-            '<g class="interactive-pin" transform="translate(140, 260)" onclick="event.stopPropagation(); handleZoneClick(\\'food-1\\')">' +
-              '<rect x="-42" y="-10" width="84" height="18" rx="9" fill="#0f172a" stroke="#10b981" stroke-width="1.5" />' +
-              '<text x="0" y="3" fill="#10b981" font-size="9" font-weight="900" text-anchor="middle">Starbucks • ₹4.8L</text>' +
-            '</g>' +
-          '</g>' +
-
-          '<!-- South Wing: Tech Court -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'tech-1\\')">' +
-            '<path d="M 280 460 L 560 460 L 610 535 L 230 535 Z" fill="' + (showHeatmapOverlay ? '#d1fae5' : '#f8fafc') + '" stroke="#10b981" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="420" cy="495" rx="140" ry="30" fill="url(#techHeat)" />' : '') +
-            '<text x="420" y="490" fill="#0f172a" font-size="13" font-weight="900" text-anchor="middle">Tech &amp; Experience Court (South)</text>' +
-            '<text x="420" y="510" fill="#047857" font-size="10" font-weight="800" text-anchor="middle">⚡ 480 visitors • Apple &amp; Dyson Hub</text>' +
-            '<g class="interactive-pin" transform="translate(500, 480)" onclick="event.stopPropagation(); handleZoneClick(\\'tech-1\\')">' +
-              '<circle cx="0" cy="0" r="12" fill="#0f172a" stroke="#10b981" stroke-width="2" />' +
-              '<text x="0" y="3" fill="#ffffff" font-size="7" font-weight="900" text-anchor="middle">APPLE</text>' +
-            '</g>' +
-          '</g>';
-      } else if (currentFloor === '1st Floor') {
-        html += 
-          '<!-- 1st Floor: Fashion Runway -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'fashion-1\\')">' +
-            '<path d="M 230 60 L 610 60 L 550 220 L 290 220 Z" fill="' + (showHeatmapOverlay ? '#fce7f3' : '#f8fafc') + '" stroke="#ec4899" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="420" cy="140" rx="140" ry="60" fill="url(#luxuryHeat)" />' : '') +
-            '<text x="420" y="130" fill="#0f172a" font-size="14" font-weight="900" text-anchor="middle">Fashion Runway &amp; Apparel (North)</text>' +
-            '<text x="420" y="150" fill="#be185d" font-size="10" font-weight="800" text-anchor="middle">⚡ 640 visitors • High Apparel Traffic</text>' +
-            '<g class="interactive-pin" transform="translate(420, 95)" onclick="event.stopPropagation(); handleZoneClick(\\'fashion-1\\')">' +
-              '<rect x="-40" y="-10" width="80" height="20" rx="10" fill="#0f172a" stroke="#ec4899" stroke-width="1.5" />' +
-              '<text x="0" y="3" fill="#10b981" font-size="9" font-weight="900" text-anchor="middle">Nike • ₹8.45L</text>' +
-            '</g>' +
-          '</g>' +
-
-          '<!-- 1st Floor: Horology & Eyewear -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'eye-1\\')">' +
-            '<path d="M 280 340 L 560 340 L 610 520 L 230 520 Z" fill="' + (showHeatmapOverlay ? '#e0f2fe' : '#f8fafc') + '" stroke="#3b82f6" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="420" cy="430" rx="140" ry="65" fill="url(#atriumHeat)" />' : '') +
-            '<text x="420" y="420" fill="#0f172a" font-size="14" font-weight="900" text-anchor="middle">Eyewear &amp; Horology Gallery (South)</text>' +
-            '<text x="420" y="440" fill="#1d4ed8" font-size="10" font-weight="800" text-anchor="middle">⚡ 380 visitors (TAG Heuer, Ray-Ban)</text>' +
-            '<g class="interactive-pin" transform="translate(420, 380)" onclick="event.stopPropagation(); handleZoneClick(\\'eye-1\\')">' +
-              '<rect x="-42" y="-10" width="84" height="20" rx="10" fill="#0f172a" stroke="#3b82f6" stroke-width="1.5" />' +
-              '<text x="0" y="3" fill="#10b981" font-size="9" font-weight="900" text-anchor="middle">Ray-Ban • ₹4.2L</text>' +
-            '</g>' +
-          '</g>' +
-
-          '<!-- Zara Concourse -->' +
-          '<g class="interactive-pin" transform="translate(240, 280)" onclick="handleZoneClick(\\'fashion-2\\')">' +
-            '<circle cx="0" cy="0" r="18" fill="#0f172a" stroke="#3b82f6" stroke-width="2" />' +
-            '<text x="0" y="4" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle">ZARA</text>' +
-            '<rect x="-30" y="-28" width="60" height="16" rx="8" fill="#0f172a" stroke="#10b981" stroke-width="1" />' +
-            '<text x="0" y="-17" fill="#10b981" font-size="8" font-weight="900" text-anchor="middle">₹6.2L Today</text>' +
-          '</g>';
-      } else if (currentFloor === '2nd Floor') {
-        html += 
-          '<!-- 2nd Floor: Gourmet Dining Terrace -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'food-3\\')">' +
-            '<path d="M 230 80 L 610 80 L 610 260 L 230 260 Z" fill="' + (showHeatmapOverlay ? '#fef3c7' : '#f8fafc') + '" stroke="#f59e0b" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="420" cy="170" rx="160" ry="70" fill="url(#jewelryHeat)" />' : '') +
-            '<text x="420" y="160" fill="#0f172a" font-size="15" font-weight="900" text-anchor="middle">Gourmet Dining Terrace (North)</text>' +
-            '<text x="420" y="180" fill="#b45309" font-size="11" font-weight="800" text-anchor="middle">⚡ 680 visitors • Peak Dining Density</text>' +
-            '<g class="interactive-pin" transform="translate(420, 115)" onclick="event.stopPropagation(); handleZoneClick(\\'food-3\\')">' +
-              '<rect x="-55" y="-12" width="110" height="22" rx="11" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5" />' +
-              '<text x="0" y="3" fill="#10b981" font-size="10" font-weight="900" text-anchor="middle">Din Tai Fung • ₹12.8L</text>' +
-            '</g>' +
-          '</g>' +
-
-          '<!-- 2nd Floor: Food Court South -->' +
-          '<g class="interactive-zone" onclick="handleZoneClick(\\'food-4\\')">' +
-            '<path d="M 230 300 L 610 300 L 610 480 L 230 480 Z" fill="' + (showHeatmapOverlay ? '#e0f2fe' : '#f8fafc') + '" stroke="#3b82f6" stroke-width="2.5" />' +
-            (showHeatmapOverlay ? '<ellipse cx="420" cy="390" rx="160" ry="70" fill="url(#atriumHeat)" />' : '') +
-            '<text x="420" y="380" fill="#0f172a" font-size="15" font-weight="900" text-anchor="middle">Food Court &amp; Quick Service Pavilion</text>' +
-            '<text x="420" y="400" fill="#1d4ed8" font-size="11" font-weight="800" text-anchor="middle">⚡ 610 visitors (PizzaExpress &amp; Subway)</text>' +
-            '<g class="interactive-pin" transform="translate(420, 335)" onclick="event.stopPropagation(); handleZoneClick(\\'food-4\\')">' +
-              '<rect x="-55" y="-12" width="110" height="22" rx="11" fill="#0f172a" stroke="#10b981" stroke-width="1.5" />' +
-              '<text x="0" y="3" fill="#10b981" font-size="10" font-weight="900" text-anchor="middle">PizzaExpress • ₹6.2L</text>' +
-            '</g>' +
-          '</g>';
-      } else {
-        html += 
-          '<g class="interactive-zone" onclick="switchFloor(\\'Ground Floor\\')">' +
-            '<path d="M 230 70 L 610 70 L 610 480 L 230 480 Z" fill="' + (showHeatmapOverlay ? '#f3e8ff' : '#f8fafc') + '" stroke="#a855f7" stroke-width="3" />' +
-            '<text x="420" y="240" fill="#0f172a" font-size="18" font-weight="900" text-anchor="middle">AXIONIX Flagship Mall — All 33 Stores</text>' +
-            '<text x="420" y="270" fill="#6b21a8" font-size="13" font-weight="800" text-anchor="middle">⚡ 33 Active Flagships • 3 Architectural Floors Connected</text>' +
-            '<text x="420" y="305" fill="#059669" font-size="12" font-weight="800" text-anchor="middle">Ground: 16 Stores | 1st Floor: 13 Stores | 2nd Floor: 4 Stores</text>' +
-          '</g>';
-      }
+        '</g>';
+      });
 
       svg.innerHTML = html;
     }
