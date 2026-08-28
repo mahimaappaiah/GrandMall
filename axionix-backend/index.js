@@ -1204,8 +1204,26 @@ app.get('/', (req, res) => {
       '</div>';
     }
 
-    function handleZoneClick(storeId) {
-      if (storeId) openStoreModal(storeId);
+    function handleZoneClick(targetId) {
+      if (!targetId) return;
+      const zoneMap = {
+        'zone-d': 'North Wing',
+        'entrance-2': 'West Wing',
+        'zone-c': 'Central Atrium',
+        'zone-a': 'South Wing',
+        'zone-b': 'East Wing',
+        'hm-badge': 'East Wing'
+      };
+      if (zoneMap[targetId]) {
+        const zoneName = zoneMap[targetId];
+        const searchInput = document.getElementById('table-search-input');
+        if (searchInput) {
+          searchInput.value = zoneName;
+          handleTableSearch(zoneName);
+        }
+      } else {
+        openStoreModal(targetId);
+      }
     }
 
     function renderSpatialSvgMap() {
@@ -1239,31 +1257,46 @@ app.get('/', (req, res) => {
         return 'rgba(16, 185, 129, 0.3)';
       }
 
-      const storeCoords = {
-        'nike flagship': { x: 395, y: 190 },
-        'nike': { x: 395, y: 190 },
-        'adidas': { x: 430, y: 220 },
-        'adidas originals': { x: 430, y: 220 },
-        'gucci': { x: 280, y: 190 },
-        'gucci boutique': { x: 280, y: 190 },
-        'h&m flagship': { x: 280, y: 305 },
-        'h&m': { x: 280, y: 305 },
-        'zara flagship': { x: 160, y: 245 },
-        'zara': { x: 160, y: 245 },
-        'ray-ban sunglass hut': { x: 130, y: 245 },
-        'ray-ban': { x: 130, y: 245 },
-        'starbucks reserve': { x: 360, y: 312 },
-        'starbucks': { x: 360, y: 312 },
-        'brew & bean': { x: 450, y: 312 },
-        'rolex boutique': { x: 470, y: 295 },
-        'louis vuitton': { x: 340, y: 295 },
-        'din tai fung': { x: 335, y: 440 },
-        'prada atelier': { x: 410, y: 440 },
-        'prada': { x: 410, y: 440 },
-        'pvr cinemas': { x: 335, y: 480 },
-        'sephora': { x: 420, y: 480 },
-        'apple experience store': { x: 630, y: 365 },
-        'apple store': { x: 630, y: 365 }
+      const storePositions = {
+        // Ground Floor (16 stores)
+        'gucci boutique': { x: 285, y: 195 },
+        'tiffany & co.': { x: 415, y: 195 },
+        'tanishq royal heritage': { x: 130, y: 220 },
+        'malabar gold & diamonds': { x: 185, y: 250 },
+        'louis vuitton maison': { x: 310, y: 285 },
+        'hermès leather lounge': { x: 390, y: 285 },
+        'rolex boutique': { x: 470, y: 285 },
+        'omega watch atelier': { x: 330, y: 340 },
+        'bvlgari haute joaillerie': { x: 410, y: 340 },
+        'häagen-dazs': { x: 480, y: 340 },
+        'haagen-dazs': { x: 480, y: 340 },
+        'cartier high jewelry': { x: 275, y: 430 },
+        'prada atelier': { x: 355, y: 430 },
+        'tom ford eyewear': { x: 435, y: 430 },
+        'apple experience store': { x: 600, y: 380 },
+        'bottega veneta': { x: 670, y: 380 },
+        'starbucks reserve': { x: 635, y: 455 },
+
+        // 1st Floor (13 stores)
+        'nike flagship': { x: 280, y: 195 },
+        'tag heuer flagship': { x: 350, y: 195 },
+        'oakley performance vision': { x: 420, y: 195 },
+        'ray-ban sunglass hut': { x: 130, y: 220 },
+        'tissot swiss watches': { x: 185, y: 250 },
+        'coach new york': { x: 320, y: 295 },
+        'u.s. polo assn.': { x: 400, y: 295 },
+        'sunglass hut premier': { x: 480, y: 295 },
+        'titan nebula gold watches': { x: 400, y: 345 },
+        'zara flagship': { x: 355, y: 430 },
+        'h&m flagship': { x: 600, y: 380 },
+        'swarovski crystal pavilion': { x: 670, y: 380 },
+        'lenskart gold lounge': { x: 635, y: 455 },
+
+        // 2nd Floor (4 stores)
+        'din tai fung': { x: 310, y: 200 },
+        'coffee drama cafe': { x: 410, y: 200 },
+        'pizzaexpress gourmet': { x: 310, y: 430 },
+        'subway fresh gourmet': { x: 410, y: 430 }
       };
 
       const zoneDDensity = getZoneDensity('auditorium');
@@ -1349,11 +1382,11 @@ app.get('/', (req, res) => {
       '<rect x="675" y="525" width="8" height="25" fill="#cbd5e1" rx="2" />' +
 
       '<!-- 1. ZONE D (AUDITORIUM - TOP BLUE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-d' + SQ + ')">' +
+      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-d' + SQ + ')">' +
         '<rect x="230" y="150" width="240" height="105" rx="16" fill="' + fillD + '" stroke="#3b82f6" stroke-width="1.8" />' +
-        '<text x="350" y="192" fill="#2563eb" font-size="18" font-weight="800" text-anchor="middle" class="font-sans">Auditorium</text>' +
-        '<text x="350" y="214" fill="#3b82f6" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone D</text>' +
-        '<text x="350" y="234" fill="#93c5fd" font-size="9" font-weight="500" text-anchor="middle">Auditorium</text>' +
+        '<text x="350" y="192" fill="#2563eb" font-size="18" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Auditorium</text>' +
+        '<text x="350" y="214" fill="#3b82f6" font-size="14" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone D</text>' +
+        '<text x="350" y="234" fill="#93c5fd" font-size="9" font-weight="500" text-anchor="middle" style="pointer-events: none;">Auditorium</text>' +
         '<!-- Entrance 1 Pill Tag -->' +
         '<g transform="translate(300, 138)">' +
           '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5" filter="url(#shadowFilter)" />' +
@@ -1368,31 +1401,31 @@ app.get('/', (req, res) => {
       '</g>' +
 
       '<!-- 2. ENTRANCE 2 (WEST WING / PINK-RED ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'entrance-2' + SQ + ')">' +
+      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'entrance-2' + SQ + ')">' +
         '<rect x="90" y="215" width="140" height="60" rx="14" fill="' + fillE2 + '" stroke="#f87171" stroke-width="1.5" />' +
         '<g transform="translate(105, 233)">' +
           '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadowFilter)" />' +
           '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
           '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 2</text>' +
         '</g>' +
-        '<text x="160" y="266" fill="#fca5a5" font-size="9" font-weight="500" text-anchor="middle">Entrance</text>' +
+        '<text x="160" y="266" fill="#fca5a5" font-size="9" font-weight="500" text-anchor="middle" style="pointer-events: none;">Entrance</text>' +
       '</g>' +
 
       '<!-- 3. SOLID BLACK BADGE HM -->' +
-      '<g transform="translate(280, 305)" class="cursor-pointer" onclick="handleZoneClick(' + SQ + 'hm-badge' + SQ + ')">' +
+      '<g transform="translate(280, 305)" class="cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'hm-badge' + SQ + ')">' +
         '<circle cx="0" cy="0" r="16" fill="#0f172a" stroke="#ffffff" stroke-width="2" filter="url(#shadowFilter)" />' +
-        '<text x="0" y="4.5" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle">HM</text>' +
+        '<text x="0" y="4.5" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle" style="pointer-events: none;">HM</text>' +
       '</g>' +
 
       '<!-- 4. ZONE C (EXHIBITION - CENTER SLATE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-c' + SQ + ')">' +
+      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-c' + SQ + ')">' +
         '<rect x="300" y="280" width="210" height="65" rx="14" fill="' + fillC + '" stroke="#64748b" stroke-width="1.8" />' +
-        '<text x="405" y="308" fill="#334155" font-size="16" font-weight="800" text-anchor="middle" class="font-sans">Exhibition</text>' +
-        '<text x="405" y="330" fill="#64748b" font-size="13" font-weight="600" text-anchor="middle" class="font-sans">Zone C</text>' +
+        '<text x="405" y="308" fill="#334155" font-size="16" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Exhibition</text>' +
+        '<text x="405" y="330" fill="#64748b" font-size="13" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone C</text>' +
       '</g>' +
 
       '<!-- 5. ZONE A (STANDS - BOTTOM SLATE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-a' + SQ + ')">' +
+      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-a' + SQ + ')">' +
         '<rect x="195" y="380" width="280" height="140" rx="16" fill="' + fillA + '" stroke="#94a3b8" stroke-width="1.8" />' +
         '<!-- Entrance 3 Pill Tag -->' +
         '<g transform="translate(215, 368)">' +
@@ -1400,11 +1433,11 @@ app.get('/', (req, res) => {
           '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
           '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 3</text>' +
         '</g>' +
-        '<text x="335" y="440" fill="#1e293b" font-size="17" font-weight="800" text-anchor="middle" class="font-sans">Stands</text>' +
-        '<text x="335" y="465" fill="#64748b" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone A</text>' +
-        '<text x="335" y="485" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">Stands</text>' +
+        '<text x="335" y="440" fill="#1e293b" font-size="17" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Stands</text>' +
+        '<text x="335" y="465" fill="#64748b" font-size="14" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone A</text>' +
+        '<text x="335" y="485" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle" style="pointer-events: none;">Stands</text>' +
         '<!-- Toilet Icon & Text at Bottom-Left -->' +
-        '<g transform="translate(208, 485)">' +
+        '<g transform="translate(208, 485)" style="pointer-events: none;">' +
           '<path d="M 6 3 A 2 2 0 1 1 6 7 A 2 2 0 1 1 6 3 Z M 4 8 L 8 8 L 8 13 L 7 13 L 7 18 L 5 18 L 5 13 L 4 13 Z" fill="#64748b" />' +
           '<path d="M 14 3 A 2 2 0 1 1 14 7 A 2 2 0 1 1 14 3 Z M 11.5 8 L 16.5 8 L 18 13 L 15.5 13 L 15.5 18 L 12.5 18 L 12.5 13 L 10 13 Z" fill="#64748b" />' +
           '<text x="22" y="14" fill="#64748b" font-size="14" font-weight="700" class="font-sans">Toilet</text>' +
@@ -1412,10 +1445,10 @@ app.get('/', (req, res) => {
       '</g>' +
 
       '<!-- 6. ZONE B (HALL - RIGHT AMBER ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-b' + SQ + ')">' +
+      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-b' + SQ + ')">' +
         '<rect x="545" y="340" width="175" height="165" rx="16" fill="' + fillB + '" stroke="#c29b7a" stroke-width="1.8" />' +
-        '<text x="630" y="405" fill="#9a3412" font-size="18" font-weight="800" text-anchor="middle" class="font-sans">Hall</text>' +
-        '<text x="630" y="435" fill="#b45309" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone B</text>' +
+        '<text x="630" y="405" fill="#9a3412" font-size="18" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Hall</text>' +
+        '<text x="630" y="435" fill="#b45309" font-size="14" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone B</text>' +
         '<!-- TAG Badge -->' +
         '<g transform="translate(630, 412)">' +
           '<rect x="-19" y="-11" width="38" height="22" rx="11" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />' +
@@ -1432,39 +1465,41 @@ app.get('/', (req, res) => {
       '</g>';
 
       // Render Dynamic Store Pins for current floor
-      filteredStores.forEach(function(store) {
-        const nameLower = (store.name || '').toLowerCase();
-        let pos = storeCoords[nameLower];
+      filteredStores.forEach(function(store, idx) {
+        const nameLower = (store.name || '').toLowerCase().trim();
+        let pos = storePositions[nameLower];
         if (!pos) {
-          const matchKey = Object.keys(storeCoords).find(function(k) { return nameLower.includes(k); });
-          if (matchKey) {
-            pos = storeCoords[matchKey];
-          } else {
-            const sZone = (store.zone || '').toLowerCase();
-            if (sZone.includes('d') || sZone.includes('north') || sZone.includes('auditorium')) {
-              pos = { x: 380, y: 190 };
-            } else if (sZone.includes('b') || sZone.includes('east') || sZone.includes('hall')) {
-              pos = { x: 630, y: 365 };
-            } else if (sZone.includes('a') || sZone.includes('south') || sZone.includes('stands')) {
-              pos = { x: 340, y: 440 };
-            } else if (sZone.includes('west') || sZone.includes('entrance 2')) {
-              pos = { x: 160, y: 245 };
-            } else {
-              pos = { x: 405, y: 312 };
-            }
+          const matchKey = Object.keys(storePositions).find(function(k) { return nameLower.includes(k) || k.includes(nameLower); });
+          if (matchKey) pos = storePositions[matchKey];
+        }
+        if (!pos) {
+          pos = { x: 300 + (idx % 4) * 65, y: 200 + Math.floor(idx / 4) * 65 };
+        }
+
+        let posX = pos.x;
+        let posY = pos.y;
+        if (currentFloor === 'All Stores') {
+          if (store.floor === '1st Floor') {
+            posX += 14;
+            posY += 14;
+          } else if (store.floor === '2nd Floor') {
+            posX -= 14;
+            posY += 14;
           }
         }
 
-        const revK = Math.floor((store.revenueToday || 0) / 1000);
+        const revK = Math.floor((store.revenueToday || store.revenue_today || 0) / 1000);
         const storeInitial = (store.logo || (store.name || 'ST').slice(0, 2).toUpperCase());
+        const storeNameShort = (store.name || '').split(' ')[0];
 
-        html += '<g transform="translate(' + pos.x + ', ' + pos.y + ')" class="interactive-pin cursor-pointer" onclick="event.stopPropagation(); handleZoneClick(' + SQ + store.id + SQ + ')">' +
-          '<circle r="18" fill="#0f172a" stroke="#3b82f6" stroke-width="2" class="shadow-lg" />' +
-          '<text y="4" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle">' + storeInitial + '</text>' +
-          '<g transform="translate(0, 24)">' +
-            '<rect x="-24" y="-8" width="48" height="15" rx="7.5" fill="#10b981" />' +
-            '<text x="0" y="2.5" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle">₹' + revK + 'k</text>' +
+        html += '<g transform="translate(' + posX + ', ' + posY + ')" class="interactive-pin" style="cursor: pointer; pointer-events: all;" onclick="event.stopPropagation(); openStoreModal(' + SQ + store.id + SQ + ')">' +
+          '<circle r="17" fill="#0f172a" stroke="#3b82f6" stroke-width="2.5" filter="url(#shadowFilter)" style="cursor: pointer;" />' +
+          '<text y="4" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeInitial + '</text>' +
+          '<g transform="translate(0, 23)" style="cursor: pointer;">' +
+            '<rect x="-26" y="-8" width="52" height="16" rx="8" fill="#10b981" filter="url(#shadowFilter)" />' +
+            '<text x="0" y="3.5" fill="#ffffff" font-size="8.5" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">₹' + revK + 'k</text>' +
           '</g>' +
+          '<text y="-21" fill="#0f172a" font-size="9" font-weight="800" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeNameShort + '</text>' +
         '</g>';
       });
 
