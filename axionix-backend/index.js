@@ -870,17 +870,10 @@ app.get('/', (req, res) => {
     .card-light { background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05); }
     .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    @keyframes thermalPulse {
-      0% { r: 60px; opacity: 0.8; }
-      50% { r: 95px; opacity: 0.35; }
-      100% { r: 60px; opacity: 0.8; }
-    }
-    .thermal-ring-1 { animation: thermalPulse 3s ease-in-out infinite; transform-origin: center; }
-    .thermal-ring-2 { animation: thermalPulse 4s ease-in-out infinite 1s; transform-origin: center; }
-    .interactive-zone { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-    .interactive-zone:hover { filter: drop-shadow(0 0 16px rgba(59, 130, 246, 0.6)); transform: scale(1.012); transform-origin: center; }
-    .interactive-pin { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-    .interactive-pin:hover { transform: translateY(-3px) scale(1.1); filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.25)); }
+    .interactive-zone { transition: filter 0.2s ease, opacity 0.2s ease; cursor: pointer; }
+    .interactive-zone:hover { filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.35)); opacity: 0.95; }
+    .interactive-pin { transition: filter 0.15s ease, opacity 0.15s ease; cursor: pointer; }
+    .interactive-pin:hover { filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.9)); }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col selection:bg-blue-600 selection:text-white">
@@ -1543,10 +1536,11 @@ app.get('/', (req, res) => {
         const storeInitial = (store.logo || (store.name || 'ST').slice(0, 2).toUpperCase());
         const storeNameShort = (store.name || '').split(' ')[0];
 
-        html += '<g transform="translate(' + posX + ', ' + posY + ')" class="interactive-pin" style="cursor: pointer; pointer-events: all;" onclick="event.stopPropagation(); openStoreModal(' + SQ + store.id + SQ + ')">' +
-          '<circle r="14" fill="#0f172a" stroke="#3b82f6" stroke-width="2" filter="url(#shadowFilter)" style="cursor: pointer;" />' +
+        html += '<g transform="translate(' + posX + ', ' + posY + ')" class="interactive-pin" style="cursor: pointer;" onclick="event.stopPropagation(); openStoreModal(' + SQ + store.id + SQ + ')">' +
+          '<circle r="22" fill="transparent" style="cursor: pointer;" />' +
+          '<circle r="14" fill="#0f172a" stroke="#3b82f6" stroke-width="2" filter="url(#shadowFilter)" style="pointer-events: none;" />' +
           '<text y="3.5" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeInitial + '</text>' +
-          '<g transform="translate(0, 18)" style="cursor: pointer;">' +
+          '<g transform="translate(0, 18)" style="pointer-events: none;">' +
             '<rect x="-20" y="-6" width="40" height="12" rx="6" fill="#10b981" filter="url(#shadowFilter)" />' +
             '<text x="0" y="2.5" fill="#ffffff" font-size="7.5" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">₹' + revK + 'k</text>' +
           '</g>' +
