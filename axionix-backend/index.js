@@ -989,7 +989,7 @@ app.get('/', (req, res) => {
 
       <!-- SVG SPATIAL MAP CONTAINER -->
       <div class="relative w-full overflow-hidden bg-slate-50 rounded-3xl border border-slate-200/90 p-4 flex items-center justify-center min-h-[520px]">
-        <svg id="spatial-svg-map" viewBox="0 0 800 560" class="w-full h-auto select-none">
+        <svg id="spatial-svg-map" viewBox="0 0 960 620" class="w-full h-auto select-none">
           <!-- Dynamically Injected SVG Polygon Zones, Heat Contours & Pins -->
         </svg>
       </div>
@@ -1254,299 +1254,349 @@ app.get('/', (req, res) => {
         countEl.innerText = (currentFloor === 'All Stores' ? 'Showing all ' + storesData.length + ' flagships on All Stores' : 'Showing ' + filteredStores.length + ' of ' + storesData.length + ' flagships on ' + currentFloor) + ' • Everything is Clickable';
       }
 
-      function getZoneDensity(zoneKey) {
-        const zk = (zoneKey || '').toLowerCase();
-        const matches = filteredStores.filter(function(s) {
-          const sz = (s.zone || '').toLowerCase();
-          return sz.includes(zk) || (zk.includes('auditorium') && (sz.includes('north') || sz.includes('zone d')))
-            || (zk.includes('stands') && (sz.includes('south') || sz.includes('zone a')))
-            || (zk.includes('hall') && (sz.includes('east') || sz.includes('zone b')))
-            || (zk.includes('entrance 2') && (sz.includes('west') || sz.includes('entrance 2')))
-            || (zk.includes('exhibition') && (sz.includes('central') || sz.includes('zone c')));
+      function getStore(query) {
+        const q = (query || '').toLowerCase().trim();
+        return storesData.find(function(s) {
+          const sName = (s.name || '').toLowerCase().trim();
+          return sName === q || sName.includes(q) || q.includes(sName);
         });
-        if (!matches.length) return 42;
-        const totalVisits = matches.reduce(function(acc, s) { return acc + (s.visitorsToday || 0); }, 0);
-        return Math.min(98, Math.max(30, Math.floor(totalVisits / 10)));
       }
 
-      function getHeatColor(density) {
-        if (density >= 75) return 'rgba(239, 68, 68, 0.45)';
-        if (density >= 50) return 'rgba(245, 158, 11, 0.35)';
-        return 'rgba(16, 185, 129, 0.3)';
+      function getHeatGrad(visitors) {
+        if (visitors >= 600) return 'url(#heat-high)';
+        if (visitors >= 300) return 'url(#heat-med)';
+        return 'url(#heat-low)';
       }
 
-      const storePositions = {
-        // North Wing / Zone D (7 stores)
-        'gucci boutique': { x: 275, y: 175 },
-        'gucci': { x: 275, y: 175 },
-        'nike flagship': { x: 345, y: 175 },
-        'nike': { x: 345, y: 175 },
-        'tiffany & co.': { x: 420, y: 175 },
-        'tiffany': { x: 420, y: 175 },
-        'tag heuer flagship': { x: 275, y: 220 },
-        'tag heuer': { x: 275, y: 220 },
-        'oakley performance vision': { x: 345, y: 220 },
-        'oakley': { x: 345, y: 220 },
-        'din tai fung': { x: 420, y: 220 },
-        'coffee drama cafe': { x: 455, y: 185 },
-        'coffee drama': { x: 455, y: 185 },
+      function renderUnit(opt) {
+        const s = getStore(opt.storeName);
+        const sId = s ? s.id : opt.storeName;
+        const rev = s ? Number(s.revenueToday || s.revenue_today || 0) : 0;
+        const revK = Math.floor(rev / 1000);
+        const vis = s ? Number(s.visitorsToday || s.visitors_today || 0) : 0;
+        const initial = opt.initial || (s ? (s.logo || (s.name || 'ST').slice(0, 2).toUpperCase()) : 'ST');
+        const nameShort = opt.title || (s ? s.name.split(' ')[0] : opt.storeName);
+        const code = opt.code || 'UNIT';
 
-        // West Wing / Entrance 2 (4 stores)
-        'tanishq royal heritage': { x: 115, y: 200 },
-        'tanishq': { x: 115, y: 200 },
-        'malabar gold & diamonds': { x: 175, y: 200 },
-        'malabar': { x: 175, y: 200 },
-        'ray-ban sunglass hut': { x: 115, y: 250 },
-        'ray-ban': { x: 115, y: 250 },
-        'tissot swiss watches': { x: 175, y: 250 },
-        'tissot': { x: 175, y: 250 },
+        let uHtml = '';
 
-        // Central Atrium / Zone C (10 stores)
-        'louis vuitton maison': { x: 295, y: 280 },
-        'louis vuitton': { x: 295, y: 280 },
-        'hermès leather lounge': { x: 365, y: 280 },
-        'hermès': { x: 365, y: 280 },
-        'hermes': { x: 365, y: 280 },
-        'rolex boutique': { x: 435, y: 280 },
-        'rolex': { x: 435, y: 280 },
-        'coach new york': { x: 505, y: 280 },
-        'coach': { x: 505, y: 280 },
-        'omega watch atelier': { x: 295, y: 335 },
-        'omega': { x: 295, y: 335 },
-        'bvlgari haute joaillerie': { x: 365, y: 335 },
-        'bvlgari': { x: 365, y: 335 },
-        'häagen-dazs': { x: 435, y: 335 },
-        'haagen-dazs': { x: 435, y: 335 },
-        'u.s. polo assn.': { x: 505, y: 335 },
-        'u.s. polo': { x: 505, y: 335 },
-        'sunglass hut premier': { x: 330, y: 365 },
-        'sunglass hut': { x: 330, y: 365 },
-        'titan nebula gold watches': { x: 470, y: 365 },
-        'titan nebula': { x: 470, y: 365 },
+        // Heat bloom if heatmap overlay enabled
+        if (showHeatmapOverlay && vis > 0) {
+          const heatRadius = Math.min(opt.w, opt.h) * 0.95;
+          uHtml += '<circle cx="' + opt.pinX + '" cy="' + opt.pinY + '" r="' + heatRadius + '" fill="' + getHeatGrad(vis) + '" style="pointer-events: none;" />';
+        }
 
-        // South Wing / Zone A (6 stores)
-        'cartier high jewelry': { x: 245, y: 415 },
-        'cartier': { x: 245, y: 415 },
-        'prada atelier': { x: 315, y: 415 },
-        'prada': { x: 315, y: 415 },
-        'tom ford eyewear': { x: 385, y: 415 },
-        'tom ford': { x: 385, y: 415 },
-        'zara flagship': { x: 455, y: 415 },
-        'zara': { x: 455, y: 415 },
-        'pizzaexpress gourmet': { x: 280, y: 475 },
-        'pizzaexpress': { x: 280, y: 475 },
-        'subway fresh gourmet': { x: 360, y: 475 },
-        'subway': { x: 360, y: 475 },
+        // Architectural Suite Unit
+        const bgFill = opt.bg || '#ffffff';
+        uHtml += '<g class="interactive-zone" onclick="openStoreModal(' + SQ + sId + SQ + ')" style="cursor: pointer;">' +
+          '<rect x="' + opt.x + '" y="' + opt.y + '" width="' + opt.w + '" height="' + opt.h + '" rx="10" fill="' + bgFill + '" stroke="#94a3b8" stroke-width="1.8" filter="url(#soft-shadow)" />' +
+          '<rect x="' + opt.x + '" y="' + opt.y + '" width="' + opt.w + '" height="18" rx="8" fill="#f1f5f9" />' +
+          '<text x="' + (opt.x + 8) + '" y="' + (opt.y + 13) + '" fill="#64748b" font-size="8.5" font-weight="800" letter-spacing="0.5">' + code + '</text>' +
+          (opt.category ? '<text x="' + (opt.x + opt.w - 8) + '" y="' + (opt.y + 13) + '" fill="#94a3b8" font-size="7.5" font-weight="700" text-anchor="end">' + opt.category + '</text>' : '') +
+        '</g>';
 
-        // East Wing / Zone B (6 stores)
-        'apple experience store': { x: 585, y: 365 },
-        'apple': { x: 585, y: 365 },
-        'bottega veneta': { x: 655, y: 365 },
-        'bottega': { x: 655, y: 365 },
-        'h&m flagship': { x: 585, y: 420 },
-        'h&m': { x: 585, y: 420 },
-        'swarovski crystal pavilion': { x: 655, y: 420 },
-        'swarovski': { x: 655, y: 420 },
-        'starbucks reserve': { x: 585, y: 475 },
-        'starbucks': { x: 585, y: 475 },
-        'lenskart gold lounge': { x: 655, y: 475 },
-        'lenskart': { x: 655, y: 475 }
-      };
+        // Store Pin
+        uHtml += '<g transform="translate(' + opt.pinX + ', ' + opt.pinY + ')" class="interactive-pin" style="cursor: pointer;" onclick="event.stopPropagation(); openStoreModal(' + SQ + sId + SQ + ')">' +
+          '<circle r="22" fill="transparent" style="cursor: pointer;" />' +
+          '<circle r="14" fill="#0f172a" stroke="#3b82f6" stroke-width="2" filter="url(#soft-shadow)" style="pointer-events: none;" />' +
+          '<text y="3.5" fill="#ffffff" font-size="8.5" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">' + initial + '</text>' +
+          '<g transform="translate(0, 18)" style="pointer-events: none;">' +
+            '<rect x="-22" y="-6" width="44" height="13" rx="6" fill="#10b981" filter="url(#soft-shadow)" />' +
+            '<text x="0" y="3" fill="#ffffff" font-size="7.5" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">₹' + revK + 'k</text>' +
+          '</g>' +
+          '<text y="-16" fill="#0f172a" font-size="8.5" font-weight="800" text-anchor="middle" style="pointer-events: none; user-select: none;">' + nameShort + '</text>' +
+        '</g>';
 
-      const zoneDDensity = getZoneDensity('auditorium');
-      const entrance2Density = getZoneDensity('entrance 2');
-      const zoneCDensity = getZoneDensity('exhibition');
-      const zoneADensity = getZoneDensity('stands');
-      const zoneBDensity = getZoneDensity('hall');
-
-      const fillD = showHeatmapOverlay ? getHeatColor(zoneDDensity) : 'rgba(59, 130, 246, 0.12)';
-      const fillE2 = showHeatmapOverlay ? getHeatColor(entrance2Density) : 'rgba(239, 68, 68, 0.08)';
-      const fillC = showHeatmapOverlay ? getHeatColor(zoneCDensity) : 'rgba(100, 116, 139, 0.12)';
-      const fillA = showHeatmapOverlay ? getHeatColor(zoneADensity) : 'rgba(148, 163, 184, 0.12)';
-      const fillB = showHeatmapOverlay ? getHeatColor(zoneBDensity) : 'rgba(217, 119, 6, 0.12)';
+        return uHtml;
+      }
 
       let html = '<defs>' +
-        '<pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">' +
-          '<path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f8fafc" stroke-width="0.8" />' +
+        '<pattern id="tile-pattern" width="24" height="24" patternUnits="userSpaceOnUse">' +
+          '<rect width="24" height="24" fill="#f8fafc" />' +
+          '<path d="M 24 0 L 0 0 0 24" fill="none" stroke="#e2e8f0" stroke-width="0.8" />' +
         '</pattern>' +
-        '<filter id="shadowFilter" x="-10%" y="-10%" width="120%" height="120%">' +
-          '<feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08" />' +
+        '<pattern id="terrace-wood" width="20" height="8" patternUnits="userSpaceOnUse">' +
+          '<rect width="20" height="8" fill="#fef3c7" />' +
+          '<line x1="0" y1="8" x2="20" y2="8" stroke="#d97706" stroke-width="0.7" stroke-opacity="0.35" />' +
+        '</pattern>' +
+        '<filter id="soft-shadow" x="-8%" y="-8%" width="116%" height="116%">' +
+          '<feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.06" />' +
         '</filter>' +
+        '<radialGradient id="heat-high" cx="50%" cy="50%" r="50%">' +
+          '<stop offset="0%" stop-color="#ef4444" stop-opacity="0.48" />' +
+          '<stop offset="60%" stop-color="#f97316" stop-opacity="0.25" />' +
+          '<stop offset="100%" stop-color="#f97316" stop-opacity="0" />' +
+        '</radialGradient>' +
+        '<radialGradient id="heat-med" cx="50%" cy="50%" r="50%">' +
+          '<stop offset="0%" stop-color="#f59e0b" stop-opacity="0.42" />' +
+          '<stop offset="65%" stop-color="#fbbf24" stop-opacity="0.18" />' +
+          '<stop offset="100%" stop-color="#fbbf24" stop-opacity="0" />' +
+        '</radialGradient>' +
+        '<radialGradient id="heat-low" cx="50%" cy="50%" r="50%">' +
+          '<stop offset="0%" stop-color="#10b981" stop-opacity="0.32" />' +
+          '<stop offset="70%" stop-color="#34d399" stop-opacity="0.12" />' +
+          '<stop offset="100%" stop-color="#34d399" stop-opacity="0" />' +
+        '</radialGradient>' +
       '</defs>' +
-      '<rect width="800" height="560" fill="#ffffff" />' +
-      '<rect width="800" height="560" fill="url(#grid)" />' +
 
-      '<!-- Left vertical guideline -->' +
-      '<line x1="130" y1="90" x2="130" y2="480" stroke="#cbd5e1" stroke-width="1.5" />' +
-      '<path d="M 130 430 A 25 25 0 0 0 130 480" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5" />' +
+      '<!-- Base Background Canvas -->' +
+      '<rect width="960" height="620" fill="#f8fafc" />' +
+      '<rect x="25" y="25" width="910" height="570" rx="24" fill="url(#tile-pattern)" stroke="#cbd5e1" stroke-width="1.8" />';
 
-      '<!-- Room E & Room F under Entrance 2 on left -->' +
-      '<rect x="230" y="175" width="45" height="42" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1" rx="2" />' +
-      '<text x="252" y="200" fill="#94a3b8" font-size="13" font-weight="bold" text-anchor="middle">E</text>' +
+      // GROUND FLOOR (16 Stores - Level 0: Luxury Boulevard & Grand Rotunda)
+      if (currentFloor === 'Ground Floor') {
+        html += '<!-- Main Architectural Concourse Paths -->' +
+          '<path d="M 440 25 L 520 25 L 520 595 L 440 595 Z" fill="#ffffff" fill-opacity="0.75" />' +
+          '<path d="M 25 270 L 935 270 L 935 350 L 25 350 Z" fill="#ffffff" fill-opacity="0.75" />' +
 
-      '<rect x="230" y="225" width="45" height="42" fill="#fee2e2" stroke="#fca5a5" stroke-width="1" rx="2" />' +
-      '<text x="252" y="250" fill="#f87171" font-size="13" font-weight="bold" text-anchor="middle">F</text>' +
-
-      '<!-- Auditorium Background geometry in Zone D -->' +
-      '<path d="M 275 175 L 470 175 L 470 245 L 440 245 L 440 220 L 275 220 Z" fill="#cbd5e1" fill-opacity="0.35" stroke="#94a3b8" stroke-width="1.2" />' +
-      '<text x="350" y="160" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">1 Entrance</text>' +
-
-      '<!-- Central Corridor & Walkway geometry -->' +
-      '<path d="M 275 260 L 530 260 L 530 350 L 275 350 Z" fill="#e2e8f0" fill-opacity="0.4" stroke="#cbd5e1" stroke-width="1.5" />' +
-      '<path d="M 330 270 L 485 270 L 485 295 L 330 295 Z" fill="none" stroke="#94a3b8" stroke-width="1.5" />' +
-
-      '<!-- Entrance 3 background walkway -->' +
-      '<path d="M 245 350 L 295 350 L 295 440 L 245 440 Z" fill="#e2e8f0" fill-opacity="0.3" stroke="#cbd5e1" stroke-width="1" />' +
-      '<text x="270" y="325" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">3 Entrance</text>' +
-
-      '<!-- Hall B corridor connection & Entrance 4 text -->' +
-      '<path d="M 530 280 L 590 280 L 590 340 L 530 340" fill="none" stroke="#cbd5e1" stroke-width="4" />' +
-      '<text x="610" y="275" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">4 Entrance</text>' +
-
-      '<!-- Seats matrix column in corridor -->' +
-      '<g transform="translate(508, 320)">' +
-        '<text x="14" y="-8" fill="#94a3b8" font-size="9" font-weight="bold" text-anchor="middle">Seats</text>' +
-        '<rect x="0" y="0" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="0" width="8" height="8" rx="2" fill="#cbd5e1" />' +
-        '<rect x="0" y="12" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="12" width="8" height="8" rx="2" fill="#cbd5e1" />' +
-        '<rect x="0" y="24" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="24" width="8" height="8" rx="2" fill="#cbd5e1" />' +
-        '<rect x="0" y="36" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="36" width="8" height="8" rx="2" fill="#cbd5e1" />' +
-        '<rect x="0" y="48" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="48" width="8" height="8" rx="2" fill="#cbd5e1" />' +
-        '<rect x="0" y="60" width="8" height="8" rx="2" fill="#cbd5e1" /><rect x="14" y="60" width="8" height="8" rx="2" fill="#cbd5e1" />' +
-      '</g>' +
-
-      '<!-- Stands / Zone A background room A -->' +
-      '<rect x="250" y="375" width="220" height="135" fill="#cbd5e1" fill-opacity="0.25" stroke="#94a3b8" stroke-width="1" rx="4" />' +
-      '<rect x="290" y="405" width="80" height="45" fill="none" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="3 3" />' +
-      '<text x="445" y="490" fill="#94a3b8" font-size="14" font-weight="bold" text-anchor="middle">A</text>' +
-
-      '<!-- Hall B background room & curved auditorium fan seating -->' +
-      '<rect x="545" y="340" width="175" height="165" fill="#cbd5e1" fill-opacity="0.2" stroke="#94a3b8" stroke-width="1" rx="4" />' +
-      '<text x="565" y="370" fill="#94a3b8" font-size="12" font-weight="bold" text-anchor="middle">B</text>' +
-      '<text x="565" y="388" fill="#94a3b8" font-size="10" font-weight="bold" text-anchor="middle">Hall</text>' +
-
-      '<!-- Fan-shaped seating clusters in Hall B -->' +
-      '<g transform="translate(630, 445)">' +
-        '<path d="M -35 -20 A 40 40 0 0 1 35 -20" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-dasharray="6 4" />' +
-        '<path d="M -50 -5 A 55 55 0 0 1 50 -5" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-dasharray="8 5" />' +
-        '<path d="M -65 10 A 70 70 0 0 1 65 10" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-dasharray="10 6" />' +
-        '<rect x="-30" y="-35" width="10" height="8" rx="2" fill="#cbd5e1" />' +
-        '<rect x="-5" y="-35" width="10" height="8" rx="2" fill="#cbd5e1" />' +
-        '<rect x="20" y="-35" width="10" height="8" rx="2" fill="#cbd5e1" />' +
-      '</g>' +
-      '<rect x="675" y="525" width="8" height="25" fill="#cbd5e1" rx="2" />' +
-
-      '<!-- 1. ZONE D (AUDITORIUM - TOP BLUE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-d' + SQ + ')">' +
-        '<rect x="230" y="150" width="240" height="105" rx="16" fill="' + fillD + '" stroke="#3b82f6" stroke-width="1.8" />' +
-        '<text x="350" y="192" fill="#2563eb" font-size="18" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Auditorium</text>' +
-        '<text x="350" y="214" fill="#3b82f6" font-size="14" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone D</text>' +
-        '<text x="350" y="234" fill="#93c5fd" font-size="9" font-weight="500" text-anchor="middle" style="pointer-events: none;">Auditorium</text>' +
-        '<!-- Entrance 1 Pill Tag -->' +
-        '<g transform="translate(300, 138)">' +
-          '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5" filter="url(#shadowFilter)" />' +
-          '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
-          '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 1</text>' +
-        '</g>' +
-        '<!-- Solid Black Badge NK -->' +
-        '<g transform="translate(350, 188)">' +
-          '<circle cx="0" cy="0" r="14" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />' +
-          '<text x="0" y="4" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle">NK</text>' +
-        '</g>' +
-      '</g>' +
-
-      '<!-- 2. ENTRANCE 2 (WEST WING / PINK-RED ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'entrance-2' + SQ + ')">' +
-        '<rect x="90" y="215" width="140" height="60" rx="14" fill="' + fillE2 + '" stroke="#f87171" stroke-width="1.5" />' +
-        '<g transform="translate(105, 233)">' +
-          '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadowFilter)" />' +
-          '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
-          '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 2</text>' +
-        '</g>' +
-        '<text x="160" y="266" fill="#fca5a5" font-size="9" font-weight="500" text-anchor="middle" style="pointer-events: none;">Entrance</text>' +
-      '</g>' +
-
-      '<!-- 3. SOLID BLACK BADGE HM -->' +
-      '<g transform="translate(280, 305)" class="cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'hm-badge' + SQ + ')">' +
-        '<circle cx="0" cy="0" r="16" fill="#0f172a" stroke="#ffffff" stroke-width="2" filter="url(#shadowFilter)" />' +
-        '<text x="0" y="4.5" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle" style="pointer-events: none;">HM</text>' +
-      '</g>' +
-
-      '<!-- 4. ZONE C (EXHIBITION - CENTER SLATE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-c' + SQ + ')">' +
-        '<rect x="300" y="280" width="210" height="65" rx="14" fill="' + fillC + '" stroke="#64748b" stroke-width="1.8" />' +
-        '<text x="405" y="308" fill="#334155" font-size="16" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Exhibition</text>' +
-        '<text x="405" y="330" fill="#64748b" font-size="13" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone C</text>' +
-      '</g>' +
-
-      '<!-- 5. ZONE A (STANDS - BOTTOM SLATE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-a' + SQ + ')">' +
-        '<rect x="195" y="380" width="280" height="140" rx="16" fill="' + fillA + '" stroke="#94a3b8" stroke-width="1.8" />' +
-        '<!-- Entrance 3 Pill Tag -->' +
-        '<g transform="translate(215, 368)">' +
-          '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadowFilter)" />' +
-          '<path d="M 12 12 L 18 12 M 16 9 L 19 12 L 16 15" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
-          '<text x="24" y="16" fill="#0f172a" font-size="11" font-weight="800">Entrance 3</text>' +
-        '</g>' +
-        '<text x="335" y="440" fill="#1e293b" font-size="17" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Stands</text>' +
-        '<text x="335" y="465" fill="#64748b" font-size="14" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone A</text>' +
-        '<text x="335" y="485" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle" style="pointer-events: none;">Stands</text>' +
-        '<!-- Toilet Icon & Text at Bottom-Left -->' +
-        '<g transform="translate(208, 485)" style="pointer-events: none;">' +
-          '<path d="M 6 3 A 2 2 0 1 1 6 7 A 2 2 0 1 1 6 3 Z M 4 8 L 8 8 L 8 13 L 7 13 L 7 18 L 5 18 L 5 13 L 4 13 Z" fill="#64748b" />' +
-          '<path d="M 14 3 A 2 2 0 1 1 14 7 A 2 2 0 1 1 14 3 Z M 11.5 8 L 16.5 8 L 18 13 L 15.5 13 L 15.5 18 L 12.5 18 L 12.5 13 L 10 13 Z" fill="#64748b" />' +
-          '<text x="22" y="14" fill="#64748b" font-size="14" font-weight="700" class="font-sans">Toilet</text>' +
-        '</g>' +
-      '</g>' +
-
-      '<!-- 6. ZONE B (HALL - RIGHT AMBER ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" style="cursor: pointer;" onclick="handleZoneClick(' + SQ + 'zone-b' + SQ + ')">' +
-        '<rect x="545" y="340" width="175" height="165" rx="16" fill="' + fillB + '" stroke="#c29b7a" stroke-width="1.8" />' +
-        '<text x="630" y="405" fill="#9a3412" font-size="18" font-weight="800" text-anchor="middle" class="font-sans" style="pointer-events: none;">Hall</text>' +
-        '<text x="630" y="435" fill="#b45309" font-size="14" font-weight="600" text-anchor="middle" class="font-sans" style="pointer-events: none;">Zone B</text>' +
-        '<!-- TAG Badge -->' +
-        '<g transform="translate(630, 412)">' +
-          '<rect x="-19" y="-11" width="38" height="22" rx="11" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />' +
-          '<text x="0" y="4" fill="#ffffff" font-size="10" font-weight="900" text-anchor="middle">TAG</text>' +
-        '</g>' +
-        '<!-- Vertical Entrance 4 Tag -->' +
-        '<g transform="translate(672, 370)">' +
-          '<rect x="0" y="0" width="24" height="100" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadowFilter)" />' +
-          '<g transform="translate(12, 50) rotate(90)">' +
-            '<path d="M -30 0 L -24 0 M -26 -3 L -23 0 L -26 3" fill="none" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />' +
-            '<text x="-18" y="4" fill="#0f172a" font-size="11" font-weight="800" text-anchor="start">Entrance 4</text>' +
+          '<!-- Level Badge Top-Left -->' +
+          '<g transform="translate(45, 45)">' +
+            '<rect x="0" y="0" width="220" height="24" rx="6" fill="#1e293b" />' +
+            '<text x="12" y="16" fill="#38bdf8" font-size="9" font-weight="900" letter-spacing="0.5">LEVEL 0 • LUXURY & ROTUNDA</text>' +
           '</g>' +
-        '</g>' +
-      '</g>';
 
-      // Render Dynamic Store Pins for current floor
-      filteredStores.forEach(function(store, idx) {
-        const nameLower = (store.name || '').toLowerCase().trim();
-        let pos = storePositions[nameLower];
-        if (!pos) {
-          const matchKey = Object.keys(storePositions).find(function(k) { return nameLower.includes(k) || k.includes(nameLower); });
-          if (matchKey) pos = storePositions[matchKey];
-        }
-        if (!pos) {
-          pos = { x: 300 + (idx % 6) * 55, y: 200 + Math.floor(idx / 6) * 55 };
-        }
+          '<!-- Central Grand Rotunda Atrium -->' +
+          '<circle cx="480" cy="310" r="115" fill="#f8fafc" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="8 6" />' +
+          '<circle cx="480" cy="310" r="85" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5" />' +
+          '<circle cx="480" cy="310" r="50" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />' +
+          '<text x="480" y="306" fill="#1e3a8a" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">GRAND ROTUNDA</text>' +
+          '<text x="480" y="322" fill="#60a5fa" font-size="8" font-weight="700" text-anchor="middle">LEVEL 0 CENTRAL ATRIUM</text>' +
 
-        const posX = pos.x;
-        const posY = pos.y;
-        const revK = Math.floor((store.revenueToday || store.revenue_today || 0) / 1000);
-        const storeInitial = (store.logo || (store.name || 'ST').slice(0, 2).toUpperCase());
-        const storeNameShort = (store.name || '').split(' ')[0];
-
-        html += '<g transform="translate(' + posX + ', ' + posY + ')" class="interactive-pin" style="cursor: pointer;" onclick="event.stopPropagation(); openStoreModal(' + SQ + store.id + SQ + ')">' +
-          '<circle r="22" fill="transparent" style="cursor: pointer;" />' +
-          '<circle r="14" fill="#0f172a" stroke="#3b82f6" stroke-width="2" filter="url(#shadowFilter)" style="pointer-events: none;" />' +
-          '<text y="3.5" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeInitial + '</text>' +
-          '<g transform="translate(0, 18)" style="pointer-events: none;">' +
-            '<rect x="-20" y="-6" width="40" height="12" rx="6" fill="#10b981" filter="url(#shadowFilter)" />' +
-            '<text x="0" y="2.5" fill="#ffffff" font-size="7.5" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">₹' + revK + 'k</text>' +
+          '<!-- Grand Concierge & Info Desk in Center -->' +
+          '<g transform="translate(480, 265)">' +
+            '<rect x="-35" y="-10" width="70" height="20" rx="10" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5" />' +
+            '<text x="0" y="3.5" fill="#ffffff" font-size="8" font-weight="800" text-anchor="middle">ℹ️ Concierge Desk</text>' +
           '</g>' +
-          '<text y="-16" fill="#0f172a" font-size="8" font-weight="800" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeNameShort + '</text>' +
-        '</g>';
-      });
+
+          '<!-- Spiral Escalator Bank & Panoramic Elevators -->' +
+          '<g transform="translate(480, 360)">' +
+            '<rect x="-42" y="-12" width="84" height="24" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" filter="url(#soft-shadow)" />' +
+            '<text x="0" y="4" fill="#334155" font-size="8" font-weight="800" text-anchor="middle">⚡ Escalators L0↔L1 🛗</text>' +
+          '</g>' +
+
+          '<!-- South Main Entrance Plaza -->' +
+          '<g transform="translate(480, 570)">' +
+            '<rect x="-65" y="-16" width="130" height="26" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="2" filter="url(#soft-shadow)" />' +
+            '<text x="0" y="1" fill="#38bdf8" font-size="9" font-weight="900" text-anchor="middle">🚪 MAIN SOUTH ENTRANCE</text>' +
+            '<text x="0" y="7" fill="#94a3b8" font-size="6" font-weight="700" text-anchor="middle">Grand Plaza • Valet Parking</text>' +
+          '</g>' +
+
+          '<!-- North Promenade Entrance -->' +
+          '<g transform="translate(480, 45)">' +
+            '<rect x="-55" y="-14" width="110" height="24" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" filter="url(#soft-shadow)" />' +
+            '<text x="0" y="2" fill="#0f172a" font-size="8" font-weight="800" text-anchor="middle">🚪 North Garden Entrance</text>' +
+          '</g>' +
+
+          '<!-- West Gold Arcade Entrance -->' +
+          '<g transform="translate(50, 310) rotate(-90)">' +
+            '<rect x="-50" y="-12" width="100" height="24" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" filter="url(#soft-shadow)" />' +
+            '<text x="0" y="3" fill="#0f172a" font-size="8" font-weight="800" text-anchor="middle">🚪 West Arcade Entrance</text>' +
+          '</g>' +
+
+          '<!-- East Boulevard Entrance -->' +
+          '<g transform="translate(910, 310) rotate(90)">' +
+            '<rect x="-50" y="-12" width="100" height="24" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" filter="url(#soft-shadow)" />' +
+            '<text x="0" y="3" fill="#0f172a" font-size="8" font-weight="800" text-anchor="middle">🚪 East Boulevard Entrance</text>' +
+          '</g>' +
+
+          '<!-- Amenities: Restrooms & Emergency Exits -->' +
+          '<g transform="translate(80, 60)">' +
+            '<rect x="0" y="0" width="50" height="30" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" />' +
+            '<text x="25" y="19" fill="#475569" font-size="11" font-weight="bold" text-anchor="middle">🚻</text>' +
+          '</g>' +
+          '<g transform="translate(830, 520)">' +
+            '<rect x="0" y="0" width="50" height="30" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" />' +
+            '<text x="25" y="19" fill="#475569" font-size="11" font-weight="bold" text-anchor="middle">🚻</text>' +
+          '</g>';
+
+        // Render 16 Ground Floor Stores
+        html += renderUnit({ storeName: 'Gucci Boutique', code: 'G-01', category: 'Luxury', x: 140, y: 55, w: 160, h: 110, pinX: 220, pinY: 110, initial: 'GUCCI', title: 'Gucci' });
+        html += renderUnit({ storeName: 'Tiffany & Co.', code: 'G-02', category: 'Jewelry', x: 660, y: 55, w: 160, h: 110, pinX: 740, pinY: 110, initial: '💍', title: 'Tiffany' });
+        html += renderUnit({ storeName: 'Prada Atelier', code: 'G-03', category: 'Fashion', x: 140, y: 450, w: 150, h: 110, pinX: 215, pinY: 505, initial: 'PRADA', title: 'Prada' });
+        html += renderUnit({ storeName: 'Cartier High Jewelry', code: 'G-04', category: 'Prestige', x: 305, y: 460, w: 140, h: 100, pinX: 375, pinY: 510, initial: '💎', title: 'Cartier' });
+        html += renderUnit({ storeName: 'Tom Ford Eyewear', code: 'G-05', category: 'Eyewear', x: 515, y: 460, w: 140, h: 100, pinX: 585, pinY: 510, initial: '🕶️', title: 'Tom Ford' });
+        html += renderUnit({ storeName: 'Bottega Veneta', code: 'G-06', category: 'Leather', x: 670, y: 450, w: 150, h: 110, pinX: 745, pinY: 505, initial: '🌿', title: 'Bottega' });
+
+        html += renderUnit({ storeName: 'Louis Vuitton Maison', code: 'G-07', category: 'Grand Anchor', x: 190, y: 225, w: 150, h: 125, pinX: 265, pinY: 288, initial: 'LV', title: 'Louis Vuitton' });
+        html += renderUnit({ storeName: 'Hermès Leather Lounge', code: 'G-08', category: 'Luxury', x: 315, y: 85, w: 135, h: 95, pinX: 382, pinY: 132, initial: '🐎', title: 'Hermès' });
+        html += renderUnit({ storeName: 'Rolex Boutique', code: 'G-09', category: 'Timepieces', x: 510, y: 85, w: 135, h: 95, pinX: 577, pinY: 132, initial: '👑', title: 'Rolex' });
+        html += renderUnit({ storeName: 'Omega Watch Atelier', code: 'G-10', category: 'Watches', x: 335, y: 340, w: 120, h: 90, pinX: 395, pinY: 385, initial: 'Ω', title: 'Omega' });
+        html += renderUnit({ storeName: 'Bvlgari Haute Joaillerie', code: 'G-11', category: 'Fine Jewels', x: 505, y: 340, w: 120, h: 90, pinX: 565, pinY: 385, initial: '🐍', title: 'Bvlgari' });
+        html += renderUnit({ storeName: 'Häagen-Dazs', code: 'G-12', category: 'Dessert Cafe', x: 420, y: 200, w: 120, h: 60, pinX: 480, pinY: 230, initial: '🍨', title: 'Häagen-Dazs' });
+
+        html += renderUnit({ storeName: 'Tanishq Royal Heritage', code: 'G-13', category: 'Royal Gold', x: 60, y: 175, w: 115, h: 105, pinX: 117, pinY: 227, initial: '👑', title: 'Tanishq' });
+        html += renderUnit({ storeName: 'Malabar Gold & Diamonds', code: 'G-14', category: 'Diamonds', x: 60, y: 320, w: 115, h: 105, pinX: 117, pinY: 372, initial: '💎', title: 'Malabar' });
+        html += renderUnit({ storeName: 'Apple Experience Store', code: 'G-15', category: 'Innovation', x: 785, y: 175, w: 140, h: 130, pinX: 855, pinY: 240, initial: 'APPLE', title: 'Apple Store' });
+        html += renderUnit({ storeName: 'Starbucks Reserve', code: 'G-16', category: 'Artisan Cafe', x: 785, y: 325, w: 140, h: 120, pinX: 855, pinY: 385, initial: '★', title: 'Starbucks' });
+      }
+
+      // 1ST FLOOR (13 Stores - Level 1: Fashion Promenade & Haute Horlogerie)
+      else if (currentFloor === '1st Floor') {
+        html += '<!-- Open Atrium Void Balcony Cutout -->' +
+          '<ellipse cx="480" cy="310" rx="140" ry="85" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="6 4" stroke-width="2" />' +
+          '<ellipse cx="480" cy="310" rx="110" ry="60" fill="#e2e8f0" fill-opacity="0.4" stroke="#cbd5e1" stroke-width="1.2" />' +
+          '<text x="480" y="306" fill="#475569" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">ATRIUM MEZZANINE VOID</text>' +
+          '<text x="480" y="322" fill="#94a3b8" font-size="8" font-weight="700" text-anchor="middle">OVERLOOKING LEVEL 0 GRAND ROTUNDA</text>' +
+
+          '<!-- Level Badge Top-Left -->' +
+          '<g transform="translate(45, 45)">' +
+            '<rect x="0" y="0" width="220" height="24" rx="6" fill="#1e293b" />' +
+            '<text x="12" y="16" fill="#38bdf8" font-size="9" font-weight="900" letter-spacing="0.5">LEVEL 1 • FASHION PROMENADE</text>' +
+          '</g>' +
+
+          '<!-- Escalators & Elevator Core -->' +
+          '<g transform="translate(480, 240)">' +
+            '<rect x="-45" y="-12" width="90" height="24" rx="6" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" filter="url(#soft-shadow)" />' +
+            '<text x="0" y="4" fill="#334155" font-size="8" font-weight="800" text-anchor="middle">⚡ Escalator L1↔L0 / L2 🛗</text>' +
+          '</g>' +
+
+          '<!-- Restroom Facilities on Level 1 -->' +
+          '<g transform="translate(80, 60)">' +
+            '<rect x="0" y="0" width="50" height="30" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" />' +
+            '<text x="25" y="19" fill="#475569" font-size="11" font-weight="bold" text-anchor="middle">🚻</text>' +
+          '</g>' +
+          '<g transform="translate(830, 520)">' +
+            '<rect x="0" y="0" width="50" height="30" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" />' +
+            '<text x="25" y="19" fill="#475569" font-size="11" font-weight="bold" text-anchor="middle">🚻</text>' +
+          '</g>';
+
+        // Render 13 1st Floor Stores
+        html += renderUnit({ storeName: 'Nike Flagship', code: 'L1-01', category: 'Sports Anchor', x: 140, y: 55, w: 180, h: 115, pinX: 230, pinY: 112, initial: 'NIKE', title: 'Nike Flagship' });
+        html += renderUnit({ storeName: 'TAG Heuer Flagship', code: 'L1-02', category: 'Precision', x: 340, y: 55, w: 135, h: 105, pinX: 407, pinY: 107, initial: 'TAG', title: 'TAG Heuer' });
+        html += renderUnit({ storeName: 'Oakley Performance Vision', code: 'L1-03', category: 'Optics', x: 495, y: 55, w: 135, h: 105, pinX: 562, pinY: 107, initial: '🔴', title: 'Oakley' });
+        html += renderUnit({ storeName: 'Swarovski Crystal Pavilion', code: 'L1-04', category: 'Crystal Jewels', x: 650, y: 55, w: 145, h: 115, pinX: 722, pinY: 112, initial: '🦢', title: 'Swarovski' });
+
+        html += renderUnit({ storeName: 'Tissot Swiss Watches', code: 'L1-05', category: 'Swiss Watch', x: 60, y: 190, w: 130, h: 105, pinX: 125, pinY: 242, initial: '🇨🇭', title: 'Tissot' });
+        html += renderUnit({ storeName: 'Ray-Ban Sunglass Hut', code: 'L1-06', category: 'Eyewear', x: 60, y: 320, w: 130, h: 105, pinX: 125, pinY: 372, initial: '🕶️', title: 'Ray-Ban' });
+
+        html += renderUnit({ storeName: 'H&M Flagship', code: 'L1-07', category: 'Fashion Anchor', x: 760, y: 180, w: 160, h: 145, pinX: 840, pinY: 252, initial: 'HM', title: 'H&M Flagship' });
+        html += renderUnit({ storeName: 'Lenskart Gold Lounge', code: 'L1-08', category: 'Eyewear Lounge', x: 760, y: 345, w: 160, h: 115, pinX: 840, pinY: 402, initial: '👓', title: 'Lenskart' });
+
+        html += renderUnit({ storeName: 'Coach New York', code: 'L1-09', category: 'Leather', x: 210, y: 220, w: 130, h: 95, pinX: 275, pinY: 267, initial: '👜', title: 'Coach' });
+        html += renderUnit({ storeName: 'U.S. Polo Assn.', code: 'L1-10', category: 'Casual Luxury', x: 210, y: 335, w: 130, h: 95, pinX: 275, pinY: 382, initial: '🏇', title: 'U.S. Polo' });
+        html += renderUnit({ storeName: 'Titan Nebula Gold Watches', code: 'L1-11', category: 'Gold Watches', x: 620, y: 220, w: 130, h: 95, pinX: 685, pinY: 267, initial: '👑', title: 'Titan Nebula' });
+        html += renderUnit({ storeName: 'Sunglass Hut Premier', code: 'L1-12', category: 'Sunglasses', x: 620, y: 335, w: 130, h: 95, pinX: 685, pinY: 382, initial: '🕶️', title: 'Sunglass Hut' });
+
+        html += renderUnit({ storeName: 'Zara Flagship', code: 'L1-13', category: 'Global Runway Anchor', x: 310, y: 445, w: 240, h: 115, pinX: 430, pinY: 502, initial: 'ZARA', title: 'Zara Flagship' });
+      }
+
+      // 2ND FLOOR (4 Dining Stores + Food Court Plaza - Level 2)
+      else if (currentFloor === '2nd Floor') {
+        html += '<!-- Grand Food Court Seating Plaza -->' +
+          '<rect x="320" y="160" width="320" height="280" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.8" filter="url(#soft-shadow)" />' +
+          '<rect x="320" y="160" width="320" height="25" rx="10" fill="#eff6ff" />' +
+          '<text x="480" y="177" fill="#1e40af" font-size="10" font-weight="900" text-anchor="middle" letter-spacing="1">🍽️ GOURMET FOOD COURT PLAZA</text>' +
+
+          '<!-- Level Badge Top-Left -->' +
+          '<g transform="translate(45, 45)">' +
+            '<rect x="0" y="0" width="220" height="24" rx="6" fill="#1e293b" />' +
+            '<text x="12" y="16" fill="#38bdf8" font-size="9" font-weight="900" letter-spacing="0.5">LEVEL 2 • DINING & TERRACE</text>' +
+          '</g>' +
+
+          '<!-- Architectural Dining Tables Clusters (40+ Tables) -->' +
+          '<g fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1">';
+
+        for (let r = 0; r < 4; r++) {
+          for (let c = 0; c < 5; c++) {
+            const tx = 365 + c * 55;
+            const ty = 210 + r * 55;
+            html += '<circle cx="' + tx + '" cy="' + ty + '" r="12" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2" />' +
+              '<circle cx="' + (tx - 16) + '" cy="' + ty + '" r="3" fill="#cbd5e1" />' +
+              '<circle cx="' + (tx + 16) + '" cy="' + ty + '" r="3" fill="#cbd5e1" />' +
+              '<circle cx="' + tx + '" cy="' + (ty - 16) + '" r="3" fill="#cbd5e1" />' +
+              '<circle cx="' + tx + '" cy="' + (ty + 16) + '" r="3" fill="#cbd5e1" />';
+          }
+        }
+
+        html += '</g>' +
+
+          '<!-- Central Beverage Island & Order Dispatch -->' +
+          '<g transform="translate(480, 415)">' +
+            '<rect x="-55" y="-12" width="110" height="24" rx="6" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5" />' +
+            '<text x="0" y="4" fill="#ffffff" font-size="8" font-weight="800" text-anchor="middle">🍹 Beverage & Dispatch Bar</text>' +
+          '</g>' +
+
+          '<!-- Outdoor Panoramic Sky Terrace -->' +
+          '<rect x="60" y="465" width="840" height="95" rx="14" fill="url(#terrace-wood)" stroke="#d97706" stroke-width="1.5" />' +
+          '<text x="480" y="520" fill="#92400e" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">🌿 OUTDOOR PANORAMIC SKY TERRACE & GARDEN</text>' +
+          '<text x="480" y="538" fill="#b45309" font-size="8" font-weight="700" text-anchor="middle">Open-Air Dining • City Skyline View</text>' +
+
+          '<!-- Restroom Facilities on Level 2 -->' +
+          '<g transform="translate(80, 220)">' +
+            '<rect x="0" y="0" width="50" height="35" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" />' +
+            '<text x="25" y="22" fill="#475569" font-size="12" font-weight="bold" text-anchor="middle">🚻</text>' +
+          '</g>';
+
+        // Render 4 Dining Flagships
+        html += renderUnit({ storeName: 'Din Tai Fung', code: 'L2-01', category: 'Dim Sum Anchor', x: 80, y: 55, w: 250, h: 145, pinX: 205, pinY: 127, initial: '🥟', title: 'Din Tai Fung' });
+        html += renderUnit({ storeName: 'Coffee Drama Cafe', code: 'L2-02', category: 'Roastery & Bakery', x: 630, y: 55, w: 250, h: 145, pinX: 755, pinY: 127, initial: '☕', title: 'Coffee Drama' });
+        html += renderUnit({ storeName: 'PizzaExpress Gourmet', code: 'L2-03', category: 'Italian Kitchen', x: 80, y: 280, w: 215, h: 155, pinX: 187, pinY: 357, initial: '🍕', title: 'PizzaExpress' });
+        html += renderUnit({ storeName: 'Subway Fresh Gourmet', code: 'L2-04', category: 'Fresh Bistro', x: 665, y: 280, w: 215, h: 155, pinX: 772, pinY: 357, initial: '🥪', title: 'Subway' });
+      }
+
+      // ALL STORES (33 Stores - Master Digital Twin Complex)
+      else {
+        html += '<!-- Master Complex Concourse Paths -->' +
+          '<path d="M 440 25 L 520 25 L 520 595 L 440 595 Z" fill="#ffffff" fill-opacity="0.75" />' +
+          '<path d="M 25 270 L 935 270 L 935 350 L 25 350 Z" fill="#ffffff" fill-opacity="0.75" />' +
+
+          '<!-- Level Badge Top-Left -->' +
+          '<g transform="translate(45, 45)">' +
+            '<rect x="0" y="0" width="220" height="24" rx="6" fill="#1e293b" />' +
+            '<text x="12" y="16" fill="#38bdf8" font-size="9" font-weight="900" letter-spacing="0.5">MASTER COMPLEX • 33 STORES</text>' +
+          '</g>' +
+
+          '<!-- Central Grand Rotunda Atrium -->' +
+          '<circle cx="480" cy="310" r="105" fill="#f8fafc" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="8 6" />' +
+          '<circle cx="480" cy="310" r="75" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5" />' +
+          '<text x="480" y="306" fill="#1e3a8a" font-size="10" font-weight="900" text-anchor="middle" letter-spacing="1">GRAND ROTUNDA</text>' +
+          '<text x="480" y="320" fill="#60a5fa" font-size="7.5" font-weight="700" text-anchor="middle">MASTER 3-LEVEL MALL TWIN</text>';
+
+        // Render all 33 flagship stores neatly into distinct non-overlapping suites
+        // North Promenade (7 stores)
+        html += renderUnit({ storeName: 'Gucci Boutique', code: 'G-01', category: 'Luxury', x: 50, y: 40, w: 110, h: 80, pinX: 105, pinY: 80, initial: 'GUCCI', title: 'Gucci' });
+        html += renderUnit({ storeName: 'Nike Flagship', code: 'L1-01', category: 'Sports', x: 170, y: 40, w: 110, h: 80, pinX: 225, pinY: 80, initial: 'NIKE', title: 'Nike' });
+        html += renderUnit({ storeName: 'TAG Heuer Flagship', code: 'L1-02', category: 'Watches', x: 290, y: 40, w: 110, h: 80, pinX: 345, pinY: 80, initial: 'TAG', title: 'TAG Heuer' });
+        html += renderUnit({ storeName: 'Oakley Performance Vision', code: 'L1-03', category: 'Optics', x: 410, y: 40, w: 110, h: 80, pinX: 465, pinY: 80, initial: '🔴', title: 'Oakley' });
+        html += renderUnit({ storeName: 'Din Tai Fung', code: 'L2-01', category: 'Dining', x: 530, y: 40, w: 110, h: 80, pinX: 585, pinY: 80, initial: '🥟', title: 'Din Tai Fung' });
+        html += renderUnit({ storeName: 'Tiffany & Co.', code: 'G-02', category: 'Jewelry', x: 650, y: 40, w: 110, h: 80, pinX: 705, pinY: 80, initial: '💍', title: 'Tiffany' });
+        html += renderUnit({ storeName: 'Coffee Drama Cafe', code: 'L2-02', category: 'Cafe', x: 770, y: 40, w: 140, h: 80, pinX: 840, pinY: 80, initial: '☕', title: 'Coffee Drama' });
+
+        // West Arcade (6 stores)
+        html += renderUnit({ storeName: 'Tanishq Royal Heritage', code: 'G-13', category: 'Gold', x: 50, y: 130, w: 110, h: 75, pinX: 105, pinY: 167, initial: '👑', title: 'Tanishq' });
+        html += renderUnit({ storeName: 'Malabar Gold & Diamonds', code: 'G-14', category: 'Diamonds', x: 50, y: 215, w: 110, h: 75, pinX: 105, pinY: 252, initial: '💎', title: 'Malabar' });
+        html += renderUnit({ storeName: 'Ray-Ban Sunglass Hut', code: 'L1-06', category: 'Eyewear', x: 50, y: 300, w: 110, h: 75, pinX: 105, pinY: 337, initial: '🕶️', title: 'Ray-Ban' });
+        html += renderUnit({ storeName: 'Tissot Swiss Watches', code: 'L1-05', category: 'Watches', x: 50, y: 385, w: 110, h: 75, pinX: 105, pinY: 422, initial: '🇨🇭', title: 'Tissot' });
+        html += renderUnit({ storeName: 'PizzaExpress Gourmet', code: 'L2-03', category: 'Italian', x: 50, y: 470, w: 110, h: 75, pinX: 105, pinY: 507, initial: '🍕', title: 'PizzaExpress' });
+        html += renderUnit({ storeName: 'Subway Fresh Gourmet', code: 'L2-04', category: 'Bistro', x: 170, y: 470, w: 110, h: 75, pinX: 225, pinY: 507, initial: '🥪', title: 'Subway' });
+
+        // Central Grand Rotunda (10 stores)
+        html += renderUnit({ storeName: 'Louis Vuitton Maison', code: 'G-07', category: 'Luxury', x: 170, y: 130, w: 110, h: 80, pinX: 225, pinY: 170, initial: 'LV', title: 'Louis Vuitton' });
+        html += renderUnit({ storeName: 'Hermès Leather Lounge', code: 'G-08', category: 'Leather', x: 290, y: 130, w: 110, h: 80, pinX: 345, pinY: 170, initial: '🐎', title: 'Hermès' });
+        html += renderUnit({ storeName: 'Rolex Boutique', code: 'G-09', category: 'Watches', x: 410, y: 130, w: 110, h: 80, pinX: 465, pinY: 170, initial: '👑', title: 'Rolex' });
+        html += renderUnit({ storeName: 'Coach New York', code: 'L1-09', category: 'Bags', x: 530, y: 130, w: 110, h: 80, pinX: 585, pinY: 170, initial: '👜', title: 'Coach' });
+        html += renderUnit({ storeName: 'Häagen-Dazs', code: 'G-12', category: 'Dessert', x: 650, y: 130, w: 110, h: 80, pinX: 705, pinY: 170, initial: '🍨', title: 'Häagen-Dazs' });
+
+        html += renderUnit({ storeName: 'Omega Watch Atelier', code: 'G-10', category: 'Watches', x: 170, y: 220, w: 110, h: 75, pinX: 225, pinY: 257, initial: 'Ω', title: 'Omega' });
+        html += renderUnit({ storeName: 'Bvlgari Haute Joaillerie', code: 'G-11', category: 'Jewels', x: 170, y: 305, w: 110, h: 75, pinX: 225, pinY: 342, initial: '🐍', title: 'Bvlgari' });
+        html += renderUnit({ storeName: 'U.S. Polo Assn.', code: 'L1-10', category: 'Apparel', x: 170, y: 390, w: 110, h: 75, pinX: 225, pinY: 427, initial: '🏇', title: 'U.S. Polo' });
+        html += renderUnit({ storeName: 'Titan Nebula Gold Watches', code: 'L1-11', category: 'Gold Watch', x: 290, y: 390, w: 110, h: 75, pinX: 345, pinY: 427, initial: '👑', title: 'Titan Nebula' });
+        html += renderUnit({ storeName: 'Sunglass Hut Premier', code: 'L1-12', category: 'Optics', x: 410, y: 390, w: 110, h: 75, pinX: 465, pinY: 427, initial: '🕶️', title: 'Sunglass Hut' });
+
+        // East Galleria (5 stores)
+        html += renderUnit({ storeName: 'Apple Experience Store', code: 'G-15', category: 'Tech Anchor', x: 770, y: 130, w: 140, h: 90, pinX: 840, pinY: 175, initial: 'APPLE', title: 'Apple Store' });
+        html += renderUnit({ storeName: 'Starbucks Reserve', code: 'G-16', category: 'Coffee', x: 770, y: 230, w: 140, h: 90, pinX: 840, pinY: 275, initial: '★', title: 'Starbucks' });
+        html += renderUnit({ storeName: 'H&M Flagship', code: 'L1-07', category: 'Fashion Anchor', x: 770, y: 330, w: 140, h: 90, pinX: 840, pinY: 375, initial: 'HM', title: 'H&M Flagship' });
+        html += renderUnit({ storeName: 'Lenskart Gold Lounge', code: 'L1-08', category: 'Eyewear', x: 770, y: 430, w: 140, h: 80, pinX: 840, pinY: 470, initial: '👓', title: 'Lenskart' });
+        html += renderUnit({ storeName: 'Swarovski Crystal Pavilion', code: 'L1-04', category: 'Crystal', x: 650, y: 390, w: 110, h: 75, pinX: 705, pinY: 427, initial: '🦢', title: 'Swarovski' });
+
+        // South Avenue (5 stores)
+        html += renderUnit({ storeName: 'Zara Flagship', code: 'L1-13', category: 'Runway Anchor', x: 290, y: 475, w: 130, h: 80, pinX: 355, pinY: 515, initial: 'ZARA', title: 'Zara Flagship' });
+        html += renderUnit({ storeName: 'Prada Atelier', code: 'G-03', category: 'Haute Couture', x: 430, y: 475, w: 110, h: 80, pinX: 485, pinY: 515, initial: 'PRADA', title: 'Prada' });
+        html += renderUnit({ storeName: 'Cartier High Jewelry', code: 'G-04', category: 'Prestige', x: 550, y: 475, w: 110, h: 80, pinX: 605, pinY: 515, initial: '💎', title: 'Cartier' });
+        html += renderUnit({ storeName: 'Tom Ford Eyewear', code: 'G-05', category: 'Eyewear', x: 670, y: 475, w: 110, h: 80, pinX: 725, pinY: 515, initial: '🕶️', title: 'Tom Ford' });
+        html += renderUnit({ storeName: 'Bottega Veneta', code: 'G-06', category: 'Leather', x: 790, y: 520, w: 120, h: 65, pinX: 850, pinY: 552, initial: '🌿', title: 'Bottega' });
+      }
 
       svg.innerHTML = html;
     }
