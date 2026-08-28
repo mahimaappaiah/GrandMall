@@ -110,30 +110,45 @@ const FLOOR_ZONES_CONFIG: ZoneDefinition[] = [
 ];
 
 const STORE_COORDINATES: Record<string, { x: number; y: number }> = {
-  'nike flagship': { x: 395, y: 190 },
-  'nike': { x: 395, y: 190 },
-  'adidas': { x: 430, y: 220 },
-  'adidas originals': { x: 430, y: 220 },
-  'gucci': { x: 280, y: 190 },
-  'gucci boutique': { x: 280, y: 190 },
-  'h&m flagship': { x: 280, y: 305 },
-  'h&m': { x: 280, y: 305 },
-  'zara flagship': { x: 160, y: 245 },
-  'zara': { x: 160, y: 245 },
-  'ray-ban sunglass hut': { x: 130, y: 245 },
-  'ray-ban': { x: 130, y: 245 },
-  'starbucks reserve': { x: 360, y: 312 },
-  'starbucks': { x: 360, y: 312 },
-  'brew & bean': { x: 450, y: 312 },
-  'rolex boutique': { x: 470, y: 295 },
-  'louis vuitton': { x: 340, y: 295 },
-  'din tai fung': { x: 335, y: 440 },
-  'prada atelier': { x: 410, y: 440 },
-  'prada': { x: 410, y: 440 },
-  'pvr cinemas': { x: 335, y: 480 },
-  'sephora': { x: 420, y: 480 },
-  'apple experience store': { x: 630, y: 365 },
-  'apple store': { x: 630, y: 365 }
+  // Ground Floor (16 stores)
+  'gucci boutique': { x: 285, y: 195 },
+  'tiffany & co.': { x: 415, y: 195 },
+  'tanishq royal heritage': { x: 130, y: 220 },
+  'malabar gold & diamonds': { x: 185, y: 250 },
+  'louis vuitton maison': { x: 310, y: 285 },
+  'hermès leather lounge': { x: 390, y: 285 },
+  'rolex boutique': { x: 470, y: 285 },
+  'omega watch atelier': { x: 330, y: 340 },
+  'bvlgari haute joaillerie': { x: 410, y: 340 },
+  'häagen-dazs': { x: 480, y: 340 },
+  'haagen-dazs': { x: 480, y: 340 },
+  'cartier high jewelry': { x: 275, y: 430 },
+  'prada atelier': { x: 355, y: 430 },
+  'tom ford eyewear': { x: 435, y: 430 },
+  'apple experience store': { x: 600, y: 380 },
+  'bottega veneta': { x: 670, y: 380 },
+  'starbucks reserve': { x: 635, y: 455 },
+
+  // 1st Floor (13 stores)
+  'nike flagship': { x: 280, y: 195 },
+  'tag heuer flagship': { x: 350, y: 195 },
+  'oakley performance vision': { x: 420, y: 195 },
+  'ray-ban sunglass hut': { x: 130, y: 220 },
+  'tissot swiss watches': { x: 185, y: 250 },
+  'coach new york': { x: 320, y: 295 },
+  'u.s. polo assn.': { x: 400, y: 295 },
+  'sunglass hut premier': { x: 480, y: 295 },
+  'titan nebula gold watches': { x: 400, y: 345 },
+  'zara flagship': { x: 355, y: 430 },
+  'h&m flagship': { x: 600, y: 380 },
+  'swarovski crystal pavilion': { x: 670, y: 380 },
+  'lenskart gold lounge': { x: 635, y: 455 },
+
+  // 2nd Floor (4 stores)
+  'din tai fung': { x: 310, y: 200 },
+  'coffee drama cafe': { x: 410, y: 200 },
+  'pizzaexpress gourmet': { x: 310, y: 430 },
+  'subway fresh gourmet': { x: 410, y: 430 }
 };
 
 export const MallFloorMap: React.FC<MallFloorMapProps> = ({
@@ -144,6 +159,7 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
 }) => {
   const [showHeatmap, setShowHeatmap] = useState<boolean>(true);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [selectedStorePopup, setSelectedStorePopup] = useState<StoreMapPin | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
   const zones = FLOOR_ZONES_CONFIG;
@@ -567,7 +583,10 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
                   key={store.id}
                   transform={`translate(${pos.x}, ${pos.y})`}
                   className="cursor-pointer group"
-                  onClick={() => onSelectStore && onSelectStore(store.id)}
+                  onClick={() => {
+                    setSelectedStorePopup(store);
+                    if (onSelectStore) onSelectStore(store.id);
+                  }}
                 >
                   <circle
                     r="18"
@@ -576,14 +595,14 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
                     strokeWidth="2"
                     className="shadow-lg group-hover:scale-110 transition-transform"
                   />
-                  <text y="4" fill="#ffffff" fontSize="9" fontWeight="900" textAnchor="middle">
+                  <text y="4" fill="#ffffff" fontSize="9" fontWeight="900" textAnchor="middle" style={{ pointerEvents: 'none', userSelect: 'none' }}>
                     {store.logo || store.name.slice(0, 2).toUpperCase()}
                   </text>
                   
                   {/* Revenue badge */}
                   <g transform="translate(0, 24)">
                     <rect x="-24" y="-8" width="48" height="15" rx="7.5" fill="#10b981" />
-                    <text x="0" y="2.5" fill="#ffffff" fontSize="8" fontWeight="900" textAnchor="middle">
+                    <text x="0" y="2.5" fill="#ffffff" fontSize="8" fontWeight="900" textAnchor="middle" style={{ pointerEvents: 'none', userSelect: 'none' }}>
                       ₹{revK}k
                     </text>
                   </g>
@@ -593,6 +612,61 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
           </svg>
         </div>
       </div>
+
+      {/* FLOATING STORE CARD POPUP */}
+      {selectedStorePopup && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setSelectedStorePopup(null)}
+        >
+          <div 
+            className="bg-[#0B132B] border border-slate-700/60 rounded-3xl p-6 shadow-2xl text-white max-w-sm w-full mx-auto relative space-y-4 animate-in fade-in zoom-in duration-150 select-none"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-black lowercase text-slate-100 tracking-tight font-sans">
+                {selectedStorePopup.name.split(' ')[0].toLowerCase()}
+              </div>
+              <span className={`px-3 py-1 text-xs font-bold rounded-full border ${
+                selectedStorePopup.status === 'closed'
+                  ? 'border-rose-500/40 text-rose-400 bg-rose-950/40'
+                  : 'border-emerald-500/40 text-emerald-400 bg-emerald-950/40'
+              }`}>
+                {selectedStorePopup.status === 'closed' ? 'closed' : 'open'}
+              </span>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-black text-white">{selectedStorePopup.name}</h3>
+              <p className="text-sm font-semibold text-blue-400 mt-0.5">
+                {selectedStorePopup.floor || currentFloor} • {selectedStorePopup.zone || 'North Wing'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">
+                <div className="text-xs text-slate-400 font-medium">Revenue Today</div>
+                <div className="text-lg font-black text-emerald-400 tracking-tight">
+                  ₹{(selectedStorePopup.revenueToday || 0).toLocaleString()}
+                </div>
+              </div>
+              <div className="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">
+                <div className="text-xs text-slate-400 font-medium">Visitors Today</div>
+                <div className="text-lg font-black text-cyan-400 tracking-tight">
+                  {(selectedStorePopup.visitorsToday || 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setSelectedStorePopup(null)}
+              className="w-full py-3 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-sm transition cursor-pointer"
+            >
+              Close Store Card
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MAP FOOTER LEGEND */}
       <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-3 gap-3">

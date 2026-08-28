@@ -1062,11 +1062,8 @@ app.get('/', (req, res) => {
   </main>
 
   <!-- STORE DETAIL MODAL -->
-  <div id="store-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
-    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full p-6 space-y-5 relative animate-in fade-in zoom-in duration-150 text-slate-900 max-h-[90vh] overflow-y-auto custom-scrollbar">
-      <button onclick="closeModal('store-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 text-xl font-bold cursor-pointer">✕</button>
-      <div id="store-modal-content"></div>
-    </div>
+  <div id="store-modal" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 hidden" onclick="if(event.target === this) closeModal('store-modal')">
+    <div id="store-modal-content" class="w-full max-w-sm"></div>
   </div>
 
   <!-- CONNECTED USERS MODAL -->
@@ -1662,78 +1659,42 @@ app.get('/', (req, res) => {
       const content = document.getElementById('store-modal-content');
       modal.classList.remove('hidden');
 
-      const txns = getStoreCustomerTransactions(store);
       const totalRev = Number(store.revenueToday || store.revenue_today) || 0;
-      const totalOrders = Number(store.ordersCount || store.orders_count) || 0;
-      const avgOrderVal = totalOrders > 0 ? Math.round(totalRev / totalOrders) : 0;
-
-      let txnsHtml = '';
-      if (txns.length === 0) {
-        txnsHtml = '<div class="p-6 text-center text-xs text-slate-400 font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">' +
-          '<p class="font-bold text-slate-600">No live customer transactions recorded yet today for ' + store.name + '.</p>' +
-          '<p class="text-[11px] mt-1">Live customer orders placed from the Customer Portal reflect here in real time.</p>' +
-        '</div>';
-      } else {
-        txnsHtml = txns.map(function(t) {
-          return '<div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">' +
-            '<div>' +
-              '<div class="font-extrabold text-slate-900 text-sm">' + t.customerName + ' <span class="text-[10px] font-mono text-slate-400">' + t.orderNumber + '</span></div>' +
-              '<div class="text-slate-600 text-xs mt-0.5">' + t.items + ' • 📞 ' + t.customerPhone + '</div>' +
-            '</div>' +
-            '<div class="text-right">' +
-              '<div class="text-sm font-black text-emerald-700">₹' + Number(t.amount).toLocaleString() + '</div>' +
-              '<div class="text-[10px] text-slate-500 font-medium">' + t.paymentMethod + ' • ' + t.timestamp + '</div>' +
-            '</div>' +
-          '</div>';
-        }).join('');
-      }
+      const totalVisitors = Number(store.visitorsToday || store.visitors_today) || 0;
+      const statusText = (store.status === 'closed' ? 'closed' : 'open');
+      const statusClass = (store.status === 'closed' 
+        ? 'border-rose-500/40 text-rose-400 bg-rose-950/40' 
+        : 'border-emerald-500/40 text-emerald-400 bg-emerald-950/40');
+      
+      const brandLogoText = (store.name || '').split(' ')[0].toLowerCase();
+      const SQ = "'";
 
       content.innerHTML = 
-        '<div class="flex items-center justify-between border-b border-slate-100 pb-4">' +
-          '<div class="flex items-center space-x-3">' +
-            renderBrandLogoHTML(store.name, 'w-12 h-12') +
-            '<div>' +
-              '<h3 class="text-xl font-black text-slate-900">' + store.name + '</h3>' +
-              '<span class="text-xs font-bold text-slate-500">' + store.category + ' • ' + store.zone + ' • ' + store.floor + '</span>' +
+        '<div class="bg-[#0B132B] border border-slate-700/60 rounded-3xl p-6 shadow-2xl text-white max-w-sm w-full mx-auto relative space-y-4 animate-in fade-in zoom-in duration-150 select-none">' +
+          '<div class="flex items-center justify-between">' +
+            '<div class="text-2xl font-black lowercase text-slate-100 tracking-tight font-sans">' + brandLogoText + '</div>' +
+            '<span class="px-3 py-1 text-xs font-bold rounded-full border ' + statusClass + '">' + statusText + '</span>' +
+          '</div>' +
+
+          '<div>' +
+            '<h3 class="text-xl font-black text-white">' + store.name + '</h3>' +
+            '<p class="text-sm font-semibold text-blue-400 mt-0.5">' + (store.floor || 'Ground Floor') + ' • ' + (store.zone || 'North Wing') + '</p>' +
+          '</div>' +
+
+          '<div class="grid grid-cols-2 gap-3">' +
+            '<div class="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">' +
+              '<div class="text-xs text-slate-400 font-medium">Revenue Today</div>' +
+              '<div class="text-lg font-black text-emerald-400 tracking-tight">₹' + totalRev.toLocaleString() + '</div>' +
+            '</div>' +
+            '<div class="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">' +
+              '<div class="text-xs text-slate-400 font-medium">Visitors Today</div>' +
+              '<div class="text-lg font-black text-cyan-400 tracking-tight">' + totalVisitors.toLocaleString() + '</div>' +
             '</div>' +
           '</div>' +
-          '<span class="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">' + (store.status === 'closed' ? 'Closed' : 'Open') + '</span>' +
-        '</div>' +
 
-        '<div class="grid grid-cols-4 gap-2 text-center my-4">' +
-          '<div class="p-2.5 bg-slate-50 rounded-2xl border border-slate-200">' +
-            '<div class="text-[10px] font-bold text-slate-400 uppercase">Visitors Today</div>' +
-            '<div class="text-sm font-black text-slate-900">' + (store.visitorsToday || 0) + '</div>' +
-          '</div>' +
-          '<div class="p-2.5 bg-slate-50 rounded-2xl border border-slate-200">' +
-            '<div class="text-[10px] font-bold text-slate-400 uppercase">Orders</div>' +
-            '<div class="text-sm font-black text-slate-900">' + totalOrders + '</div>' +
-          '</div>' +
-          '<div class="p-2.5 bg-emerald-50 rounded-2xl border border-emerald-200">' +
-            '<div class="text-[10px] font-bold text-emerald-700 uppercase">Revenue Today</div>' +
-            '<div class="text-sm font-black text-emerald-700">₹' + totalRev.toLocaleString() + '</div>' +
-          '</div>' +
-          '<div class="p-2.5 bg-blue-50 rounded-2xl border border-blue-200">' +
-            '<div class="text-[10px] font-bold text-blue-700 uppercase">Conversion %</div>' +
-            '<div class="text-sm font-black text-blue-700">' + (store.conversionRate || 45) + '%</div>' +
-          '</div>' +
-        '</div>' +
-
-        '<div class="flex items-center justify-between text-xs p-3 bg-slate-50 rounded-xl border border-slate-200/80 my-3">' +
-          '<div><span class="text-slate-500 font-medium">Manager:</span> <strong class="text-slate-900">' + (store.manager || 'Store Manager') + '</strong> (' + (store.phone || '+91 80 4930 1000') + ')</div>' +
-          '<div><span class="text-slate-500 font-medium">Rating:</span> <strong class="text-amber-600">★ ' + (store.rating || '4.8') + '</strong></div>' +
-        '</div>' +
-
-        '<div class="border-t border-slate-200 pt-4 space-y-3">' +
-          '<div class="flex items-center justify-between">' +
-            '<h4 class="text-xs font-black text-slate-900 uppercase tracking-wider">' +
-              '<span>💰 Verified POS Customer Transactions</span>' +
-            '</h4>' +
-            '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">Live POS Synced</span>' +
-          '</div>' +
-          '<div class="max-h-60 overflow-y-auto space-y-2 custom-scrollbar pr-1">' +
-            txnsHtml +
-          '</div>' +
+          '<button onclick="closeModal(' + SQ + 'store-modal' + SQ + ')" class="w-full py-3 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-sm transition cursor-pointer">' +
+            'Close Store Card' +
+          '</button>' +
         '</div>';
     }
 
