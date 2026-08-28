@@ -1021,9 +1021,9 @@ app.get('/', (req, res) => {
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div>
           <h3 class="text-base font-black text-slate-900 tracking-tight flex items-center space-x-2">
-            <span>🏪 Flagship Stores Telemetry Directory</span>
+            <span>🏪 Flagship Stores Telemetry Directory (All 33 Stores)</span>
           </h3>
-          <p class="text-xs text-slate-500 font-medium">Click any row to open Store Details with verified itemized POS receipts and sales breakdown</p>
+          <p class="text-xs text-slate-500 font-medium">Click any row or View POS to open Store Details with verified itemized POS receipts and sales breakdown</p>
         </div>
         <div class="flex items-center space-x-2">
           <input 
@@ -1031,8 +1031,11 @@ app.get('/', (req, res) => {
             id="table-search-input" 
             oninput="handleTableSearch(this.value)" 
             placeholder="Search store, category, or zone..." 
-            class="px-3.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/30 font-medium"
+            class="px-3.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/30 font-medium w-56"
           />
+          <button id="btn-clear-search" onclick="clearTableSearch()" class="hidden px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 cursor-pointer transition-colors whitespace-nowrap">
+            ✕ Show All 33
+          </button>
         </div>
       </div>
 
@@ -1106,6 +1109,20 @@ app.get('/', (req, res) => {
 
     function handleTableSearch(val) {
       tableSearchQuery = (val || '').toLowerCase().trim();
+      const clearBtn = document.getElementById('btn-clear-search');
+      if (clearBtn) {
+        if (tableSearchQuery) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+      }
+      renderStoreTable();
+    }
+
+    function clearTableSearch() {
+      const input = document.getElementById('table-search-input');
+      if (input) input.value = '';
+      tableSearchQuery = '';
+      const clearBtn = document.getElementById('btn-clear-search');
+      if (clearBtn) clearBtn.classList.add('hidden');
       renderStoreTable();
     }
 
@@ -1123,6 +1140,7 @@ app.get('/', (req, res) => {
 
     function resetMapView() {
       showHeatmapOverlay = true;
+      clearTableSearch();
       switchFloor('All Stores');
     }
 
@@ -1205,24 +1223,27 @@ app.get('/', (req, res) => {
 
     function handleZoneClick(targetId) {
       if (!targetId) return;
-      const zoneMap = {
-        'zone-d': 'North Wing',
-        'entrance-2': 'West Wing',
-        'zone-c': 'Central Atrium',
-        'zone-a': 'South Wing',
-        'zone-b': 'East Wing',
-        'hm-badge': 'East Wing'
+      const zoneFlagshipNames = {
+        'zone-d': 'Gucci Boutique',
+        'entrance-2': 'Tanishq Royal Heritage',
+        'zone-c': 'Louis Vuitton Maison',
+        'zone-a': 'Cartier High Jewelry',
+        'zone-b': 'Apple Experience Store',
+        'hm-badge': 'H&M Flagship'
       };
-      if (zoneMap[targetId]) {
-        const zoneName = zoneMap[targetId];
-        const searchInput = document.getElementById('table-search-input');
-        if (searchInput) {
-          searchInput.value = zoneName;
-          handleTableSearch(zoneName);
+
+      if (zoneFlagshipNames[targetId]) {
+        const flagshipName = zoneFlagshipNames[targetId].toLowerCase();
+        const store = storesData.find(function(s) {
+          return (s.name || '').toLowerCase().includes(flagshipName);
+        });
+        if (store) {
+          openStoreModal(store.id);
+          return;
         }
-      } else {
-        openStoreModal(targetId);
       }
+
+      openStoreModal(targetId);
     }
 
     function renderSpatialSvgMap() {
@@ -1237,7 +1258,7 @@ app.get('/', (req, res) => {
 
       const countEl = document.getElementById('floor-store-count');
       if (countEl) {
-        countEl.innerText = 'Showing ' + filteredStores.length + ' flagships on ' + currentFloor + ' • Click any store to view card';
+        countEl.innerText = (currentFloor === 'All Stores' ? 'Showing all ' + storesData.length + ' flagships on All Stores' : 'Showing ' + filteredStores.length + ' of ' + storesData.length + ' flagships on ' + currentFloor) + ' • Everything is Clickable';
       }
 
       function getZoneDensity(zoneKey) {
@@ -1542,7 +1563,9 @@ app.get('/', (req, res) => {
 
       let filtered = storesData.slice();
       if (currentFloor !== 'All Stores') {
-        filtered = filtered.filter(function(s) { return s.floor === currentFloor; });
+        filtered = filtered.filter(function(s) { 
+          return (s.floor || '').toLowerCase().includes(currentFloor.toLowerCase().replace('floor', '').trim()); 
+        });
       }
 
       if (tableSearchQuery) {
@@ -1550,12 +1573,19 @@ app.get('/', (req, res) => {
           return (s.name || '').toLowerCase().includes(tableSearchQuery) ||
                  (s.category || '').toLowerCase().includes(tableSearchQuery) ||
                  (s.zone || '').toLowerCase().includes(tableSearchQuery) ||
+                 (s.floor || '').toLowerCase().includes(tableSearchQuery) ||
                  (s.manager || '').toLowerCase().includes(tableSearchQuery);
         });
       }
 
       const countEl = document.getElementById('floor-store-count');
-      if (countEl) countEl.innerText = 'Showing ' + filtered.length + ' flagships on ' + currentFloor + ' • Everything is Clickable';
+      if (countEl) {
+        if (currentFloor === 'All Stores' && !tableSearchQuery) {
+          countEl.innerText = 'Showing all ' + storesData.length + ' flagships on All Stores • Everything is Clickable';
+        } else {
+          countEl.innerText = 'Showing ' + filtered.length + ' of ' + storesData.length + ' flagships on ' + currentFloor + ' • Everything is Clickable';
+        }
+      }
 
       if (!filtered.length) {
         tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-slate-400 font-bold">No stores found matching filter.</td></tr>';
