@@ -28,12 +28,12 @@ const FLOOR_INFO: Record<string, { stores: number; zones: string[]; category: st
 };
 
 const ZONE_HEAT: { zone: string; density: number; level: string; color: string }[] = [
-  { zone: 'Luxury Fashion Zone', density: 82, level: 'High', color: 'text-red-600 bg-red-50 border-red-200' },
-  { zone: 'Food & Dining Zone',  density: 74, level: 'High', color: 'text-orange-600 bg-orange-50 border-orange-200' },
-  { zone: 'Fashion Zone',        density: 61, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
-  { zone: 'Technology Zone',     density: 53, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
-  { zone: 'Main Entrance',       density: 48, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-  { zone: 'VIP Lounge',          density: 27, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+  { zone: 'Zone D (Auditorium)', density: 85, level: 'High', color: 'text-red-600 bg-red-50 border-red-200' },
+  { zone: 'Zone B (Hall)',       density: 76, level: 'High', color: 'text-orange-600 bg-orange-50 border-orange-200' },
+  { zone: 'Zone C (Exhibition)', density: 62, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  { zone: 'Zone A (Stands)',     density: 54, level: 'Medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  { zone: 'Entrance 2 (West Wing)', density: 44, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+  { zone: 'Entrance 1 (North)',  density: 35, level: 'Low', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
 ];
 
 const ACCESS_POINTS: { id: string; location: string; users: number; signal: string; status: 'Online' | 'Degraded' | 'Offline'; floor: string }[] = [
