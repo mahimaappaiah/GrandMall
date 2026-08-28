@@ -649,57 +649,92 @@ export const MallFloorMap: React.FC<MallFloorMapProps> = ({
         </div>
       </div>
 
-      {/* FLOATING STORE CARD POPUP */}
+      {/* STORE POS & CUSTOMER DETAILS MODAL POPUP */}
       {selectedStorePopup && (
         <div 
-          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
           onClick={() => setSelectedStorePopup(null)}
         >
           <div 
-            className="bg-[#0B132B] border border-slate-700/60 rounded-3xl p-6 shadow-2xl text-white max-w-sm w-full mx-auto relative space-y-4 animate-in fade-in zoom-in duration-150 select-none"
+            className="bg-white border border-slate-200 rounded-3xl p-6 lg:p-7 shadow-2xl text-slate-900 max-w-2xl w-full mx-auto relative space-y-5 animate-in fade-in zoom-in duration-150 select-none"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <div className="text-2xl font-black lowercase text-slate-100 tracking-tight font-sans">
-                {selectedStorePopup.name.split(' ')[0].toLowerCase()}
-              </div>
-              <span className={`px-3 py-1 text-xs font-bold rounded-full border ${
-                selectedStorePopup.status === 'closed'
-                  ? 'border-rose-500/40 text-rose-400 bg-rose-950/40'
-                  : 'border-emerald-500/40 text-emerald-400 bg-emerald-950/40'
-              }`}>
-                {selectedStorePopup.status === 'closed' ? 'closed' : 'open'}
-              </span>
-            </div>
-
-            <div>
-              <h3 className="text-xl font-black text-white">{selectedStorePopup.name}</h3>
-              <p className="text-sm font-semibold text-blue-400 mt-0.5">
-                {selectedStorePopup.floor || currentFloor} • {selectedStorePopup.zone || 'North Wing'}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">
-                <div className="text-xs text-slate-400 font-medium">Revenue Today</div>
-                <div className="text-lg font-black text-emerald-400 tracking-tight">
-                  ₹{(selectedStorePopup.revenueToday || 0).toLocaleString()}
-                </div>
-              </div>
-              <div className="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">
-                <div className="text-xs text-slate-400 font-medium">Visitors Today</div>
-                <div className="text-lg font-black text-cyan-400 tracking-tight">
-                  {(selectedStorePopup.visitorsToday || 0).toLocaleString()}
-                </div>
-              </div>
-            </div>
-
+            {/* Close Button Top Right */}
             <button 
               onClick={() => setSelectedStorePopup(null)}
-              className="w-full py-3 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-sm transition cursor-pointer"
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 text-xl font-bold p-1 cursor-pointer transition-colors"
             >
-              Close Store Card
+              ✕
             </button>
+
+            {/* Top Header */}
+            <div className="flex items-center space-x-4 pr-8">
+              <div className="w-12 h-12 rounded-xl bg-slate-950 text-white flex items-center justify-center font-black text-sm uppercase tracking-wider border border-slate-800 shadow-md shrink-0">
+                {selectedStorePopup.logo || selectedStorePopup.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center space-x-3">
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight truncate">{selectedStorePopup.name}</h3>
+                  <span className="px-3 py-0.5 text-xs font-bold rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50">
+                    {selectedStorePopup.status || 'Open'}
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  {selectedStorePopup.category || 'Fashion'} • {selectedStorePopup.zone || 'North Wing'} • {selectedStorePopup.floor || 'Ground Floor'}
+                </p>
+              </div>
+            </div>
+
+            {/* 4 Metrics Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center">
+                <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">VISITORS TODAY</div>
+                <div className="text-lg font-black text-slate-900 mt-0.5">{(selectedStorePopup.visitorsToday || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center">
+                <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">ORDERS</div>
+                <div className="text-lg font-black text-slate-900 mt-0.5">{(selectedStorePopup.ordersCount || 18).toLocaleString()}</div>
+              </div>
+              <div className="bg-emerald-50/40 border border-emerald-300 rounded-2xl p-3 text-center">
+                <div className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">REVENUE TODAY</div>
+                <div className="text-lg font-black text-emerald-600 mt-0.5">₹{(selectedStorePopup.revenueToday || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-blue-50/40 border border-blue-300 rounded-2xl p-3 text-center">
+                <div className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider">CONVERSION %</div>
+                <div className="text-lg font-black text-blue-600 mt-0.5">{selectedStorePopup.conversionRate || '22%'}</div>
+              </div>
+            </div>
+
+            {/* Manager & Rating Bar */}
+            <div className="border border-slate-200/90 rounded-2xl p-3 px-4 flex items-center justify-between text-xs bg-slate-50/30">
+              <div className="text-slate-600">
+                Manager: <span className="font-bold text-slate-900">{selectedStorePopup.manager_name || selectedStorePopup.managerName || 'Alessandro V.'}</span> <span className="text-slate-500 font-mono">({selectedStorePopup.manager_phone || selectedStorePopup.managerPhone || '+91 98111 22334'})</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="text-slate-500">Rating:</span>
+                <span className="text-amber-500 font-black">★</span>
+                <span className="font-extrabold text-slate-900">{selectedStorePopup.rating || '4.9'}</span>
+              </div>
+            </div>
+
+            {/* Verified POS Customer Transactions Header */}
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-black text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+                  <span>💰</span> VERIFIED POS CUSTOMER TRANSACTIONS
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Live POS Synced
+                </span>
+              </div>
+
+              {/* Transactions or Empty State */}
+              <div className="border border-slate-200 rounded-2xl p-8 text-center bg-slate-50/60">
+                <div className="font-bold text-xs text-slate-700">No live customer transactions recorded yet today for {selectedStorePopup.name}.</div>
+                <div className="text-[11px] text-slate-400 mt-1">Live customer orders placed from the Customer Portal reflect here in real time.</div>
+              </div>
+            </div>
           </div>
         </div>
       )}

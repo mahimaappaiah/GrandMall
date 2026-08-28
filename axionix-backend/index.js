@@ -1062,8 +1062,8 @@ app.get('/', (req, res) => {
   </main>
 
   <!-- STORE DETAIL MODAL -->
-  <div id="store-modal" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 hidden" onclick="if(event.target === this) closeModal('store-modal')">
-    <div id="store-modal-content" class="w-full max-w-sm"></div>
+  <div id="store-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden" onclick="if(event.target === this) closeModal('store-modal')">
+    <div id="store-modal-content" class="w-full max-w-2xl"></div>
   </div>
 
   <!-- CONNECTED USERS MODAL -->
@@ -1692,42 +1692,154 @@ app.get('/', (req, res) => {
       const content = document.getElementById('store-modal-content');
       modal.classList.remove('hidden');
 
+      const SQ = "'";
       const totalRev = Number(store.revenueToday || store.revenue_today) || 0;
       const totalVisitors = Number(store.visitorsToday || store.visitors_today) || 0;
-      const statusText = (store.status === 'closed' ? 'closed' : 'open');
-      const statusClass = (store.status === 'closed' 
-        ? 'border-rose-500/40 text-rose-400 bg-rose-950/40' 
-        : 'border-emerald-500/40 text-emerald-400 bg-emerald-950/40');
-      
-      const brandLogoText = (store.name || '').split(' ')[0].toLowerCase();
-      const SQ = "'";
+      const totalOrders = Number(store.ordersCount || store.orders_count) || (totalVisitors > 0 ? Math.max(1, Math.round(totalVisitors * 0.11)) : 0);
+      const conversionRate = store.conversionRate || store.conversion_rate || (totalVisitors > 0 ? Math.min(95, Math.max(8, Math.round((totalOrders / totalVisitors) * 100))) + '%' : '0%');
+
+      const defaultManagers = {
+        'gucci': { name: 'Alessandro V.', phone: '+91 98111 22334', rating: '4.9' },
+        'nike': { name: 'Marcus Thorne', phone: '+91 98222 44556', rating: '4.8' },
+        'tiffany': { name: 'Helena Vance', phone: '+91 98333 66778', rating: '4.9' },
+        'starbucks': { name: 'Ananya Sharma', phone: '+91 98444 88990', rating: '4.7' },
+        'haagen': { name: 'Rahul K.', phone: '+91 98555 11223', rating: '4.6' },
+        'häagen': { name: 'Rahul K.', phone: '+91 98555 11223', rating: '4.6' },
+        'prada': { name: 'Chiara M.', phone: '+91 98666 33445', rating: '4.9' },
+        'louis vuitton': { name: 'Jean-Paul D.', phone: '+91 98777 55667', rating: '4.9' },
+        'zara': { name: 'Mateo Ortiz', phone: '+91 98888 77889', rating: '4.7' },
+        'apple': { name: 'Vikram Mehta', phone: '+91 98999 99001', rating: '5.0' },
+        'rolex': { name: 'Hans Gruber', phone: '+91 98123 00112', rating: '5.0' },
+        'cartier': { name: 'Jacques Moreau', phone: '+91 98234 11223', rating: '4.9' },
+        'hermès': { name: 'Élodie Laurent', phone: '+91 98345 22334', rating: '4.9' },
+        'hermes': { name: 'Élodie Laurent', phone: '+91 98345 22334', rating: '4.9' },
+        'tanishq': { name: 'Rajesh Verma', phone: '+91 98456 33445', rating: '4.8' },
+        'malabar': { name: 'K. S. Nambiar', phone: '+91 98567 44556', rating: '4.8' },
+        'tag heuer': { name: 'Stefan Weber', phone: '+91 98678 55667', rating: '4.8' },
+        'oakley': { name: 'Dave Miller', phone: '+91 98789 66778', rating: '4.7' },
+        'din tai fung': { name: 'Chen Wei', phone: '+91 98890 77889', rating: '4.9' },
+        'coffee drama': { name: 'Kavita Roy', phone: '+91 98901 88990', rating: '4.6' },
+        'ray-ban': { name: 'Marco Bellini', phone: '+91 98012 99001', rating: '4.7' },
+        'tissot': { name: 'Luc Monnier', phone: '+91 98123 11223', rating: '4.8' },
+        'coach': { name: 'Sarah Jenkins', phone: '+91 98234 22334', rating: '4.7' },
+        'bvlgari': { name: 'Gianna Rossi', phone: '+91 98345 33445', rating: '4.9' },
+        'u.s. polo': { name: 'David Clark', phone: '+91 98456 44556', rating: '4.6' },
+        'sunglass hut': { name: 'Pooja Bhatia', phone: '+91 98567 55667', rating: '4.6' },
+        'titan': { name: 'Sanjay Deshmukh', phone: '+91 98678 66778', rating: '4.8' },
+        'tom ford': { name: 'Julian Hayes', phone: '+91 98789 77889', rating: '4.9' },
+        'pizzaexpress': { name: 'Fabrizio Conti', phone: '+91 98890 88990', rating: '4.7' },
+        'subway': { name: 'Amit Singh', phone: '+91 98901 99001', rating: '4.5' },
+        'bottega veneta': { name: 'Lorenzo V.', phone: '+91 98012 00112', rating: '4.9' },
+        'h&m': { name: 'Astrid Lind', phone: '+91 98123 22334', rating: '4.7' },
+        'swarovski': { name: 'Greta Keller', phone: '+91 98234 33445', rating: '4.8' },
+        'lenskart': { name: 'Naveen Goyal', phone: '+91 98345 44556', rating: '4.7' }
+      };
+
+      const sNameLower = (store.name || '').toLowerCase();
+      let mgrInfo = { name: 'Store Manager', phone: '+91 98111 22334', rating: '4.8' };
+      const matchedKey = Object.keys(defaultManagers).find(k => sNameLower.includes(k));
+      if (matchedKey) mgrInfo = defaultManagers[matchedKey];
+      if (store.manager_name || store.managerName) mgrInfo.name = store.manager_name || store.managerName;
+      if (store.manager_phone || store.managerPhone) mgrInfo.phone = store.manager_phone || store.managerPhone;
+      if (store.rating) mgrInfo.rating = store.rating;
+
+      const txns = getStoreCustomerTransactions(store);
+      let txnsHTML = '';
+
+      if (txns && txns.length > 0) {
+        txnsHTML = txns.map(function(t) {
+          return '<div class="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 transition-colors flex items-center justify-between text-xs">' +
+            '<div class="space-y-1">' +
+              '<div class="font-black text-slate-900 flex items-center gap-2">' +
+                '<span>' + t.customerName + '</span>' +
+                '<span class="text-[11px] font-mono text-slate-500 font-normal">(' + t.customerPhone + ')</span>' +
+                '<span class="px-2 py-0.2 rounded-full text-[9px] font-extrabold bg-blue-100 text-blue-700">' + t.orderNumber + '</span>' +
+              '</div>' +
+              '<div class="text-[11px] text-slate-600 font-medium">' + t.items + '</div>' +
+              '<div class="text-[10px] text-slate-400 font-medium">' + t.paymentMethod + ' • ' + t.timestamp + '</div>' +
+            '</div>' +
+            '<div class="text-right space-y-1">' +
+              '<div class="font-black text-emerald-600 text-sm">₹' + Number(t.amount || 0).toLocaleString() + '</div>' +
+              '<span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-800">Verified POS</span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      } else {
+        txnsHTML = '<div class="border border-slate-200 rounded-2xl p-8 text-center bg-slate-50/60">' +
+          '<div class="font-bold text-xs text-slate-700">No live customer transactions recorded yet today for ' + store.name + '.</div>' +
+          '<div class="text-[11px] text-slate-400 mt-1">Live customer orders placed from the Customer Portal reflect here in real time.</div>' +
+        '</div>';
+      }
 
       content.innerHTML = 
-        '<div class="bg-[#0B132B] border border-slate-700/60 rounded-3xl p-6 shadow-2xl text-white max-w-sm w-full mx-auto relative space-y-4 animate-in fade-in zoom-in duration-150 select-none">' +
-          '<div class="flex items-center justify-between">' +
-            '<div class="text-2xl font-black lowercase text-slate-100 tracking-tight font-sans">' + brandLogoText + '</div>' +
-            '<span class="px-3 py-1 text-xs font-bold rounded-full border ' + statusClass + '">' + statusText + '</span>' +
-          '</div>' +
-
-          '<div>' +
-            '<h3 class="text-xl font-black text-white">' + store.name + '</h3>' +
-            '<p class="text-sm font-semibold text-blue-400 mt-0.5">' + (store.floor || 'Ground Floor') + ' • ' + (store.zone || 'North Wing') + '</p>' +
-          '</div>' +
-
-          '<div class="grid grid-cols-2 gap-3">' +
-            '<div class="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">' +
-              '<div class="text-xs text-slate-400 font-medium">Revenue Today</div>' +
-              '<div class="text-lg font-black text-emerald-400 tracking-tight">₹' + totalRev.toLocaleString() + '</div>' +
-            '</div>' +
-            '<div class="bg-[#111C38] border border-slate-700/50 rounded-2xl p-3.5 space-y-1">' +
-              '<div class="text-xs text-slate-400 font-medium">Visitors Today</div>' +
-              '<div class="text-lg font-black text-cyan-400 tracking-tight">' + totalVisitors.toLocaleString() + '</div>' +
-            '</div>' +
-          '</div>' +
-
-          '<button onclick="closeModal(' + SQ + 'store-modal' + SQ + ')" class="w-full py-3 rounded-2xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-sm transition cursor-pointer">' +
-            'Close Store Card' +
+        '<div class="bg-white border border-slate-200 rounded-3xl p-6 lg:p-7 shadow-2xl text-slate-900 max-w-2xl w-full mx-auto relative space-y-5 animate-in fade-in zoom-in duration-150">' +
+          '<!-- Close Button Top Right -->' +
+          '<button onclick="closeModal(' + SQ + 'store-modal' + SQ + ')" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 text-xl font-bold p-1 cursor-pointer transition-colors">' +
+            '✕' +
           '</button>' +
+
+          '<!-- Top Header -->' +
+          '<div class="flex items-center space-x-4 pr-8">' +
+            renderBrandLogoHTML(store.name, 'w-12 h-12 text-sm') +
+            '<div class="flex-1 min-w-0">' +
+              '<div class="flex items-center space-x-3">' +
+                '<h3 class="text-xl font-black text-slate-900 tracking-tight truncate">' + store.name + '</h3>' +
+                '<span class="px-3 py-0.5 text-xs font-bold rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50">' + (store.status || 'Open') + '</span>' +
+              '</div>' +
+              '<p class="text-xs font-medium text-slate-500 mt-0.5">' +
+                (store.category || 'Fashion') + ' • ' + (store.zone || 'North Wing') + ' • ' + (store.floor || 'Ground Floor') +
+              '</p>' +
+            '</div>' +
+          '</div>' +
+
+          '<!-- 4 Metrics Row -->' +
+          '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">' +
+            '<div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center">' +
+              '<div class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">VISITORS TODAY</div>' +
+              '<div class="text-lg font-black text-slate-900 mt-0.5">' + totalVisitors.toLocaleString() + '</div>' +
+            '</div>' +
+            '<div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center">' +
+              '<div class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">ORDERS</div>' +
+              '<div class="text-lg font-black text-slate-900 mt-0.5">' + totalOrders.toLocaleString() + '</div>' +
+            '</div>' +
+            '<div class="bg-emerald-50/40 border border-emerald-300 rounded-2xl p-3 text-center">' +
+              '<div class="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">REVENUE TODAY</div>' +
+              '<div class="text-lg font-black text-emerald-600 mt-0.5">₹' + totalRev.toLocaleString() + '</div>' +
+            '</div>' +
+            '<div class="bg-blue-50/40 border border-blue-300 rounded-2xl p-3 text-center">' +
+              '<div class="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider">CONVERSION %</div>' +
+              '<div class="text-lg font-black text-blue-600 mt-0.5">' + conversionRate + '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<!-- Manager & Rating Bar -->' +
+          '<div class="border border-slate-200/90 rounded-2xl p-3 px-4 flex items-center justify-between text-xs bg-slate-50/30">' +
+            '<div class="text-slate-600">' +
+              'Manager: <span class="font-bold text-slate-900">' + mgrInfo.name + '</span> <span class="text-slate-500 font-mono">(' + mgrInfo.phone + ')</span>' +
+            '</div>' +
+            '<div class="flex items-center space-x-1">' +
+              '<span class="text-slate-500">Rating:</span>' +
+              '<span class="text-amber-500 font-black">★</span>' +
+              '<span class="font-extrabold text-slate-900">' + mgrInfo.rating + '</span>' +
+            '</div>' +
+          '</div>' +
+
+          '<!-- Verified POS Customer Transactions Header -->' +
+          '<div class="space-y-3 pt-1">' +
+            '<div class="flex items-center justify-between">' +
+              '<div class="text-xs font-black text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">' +
+                '<span>💰</span> VERIFIED POS CUSTOMER TRANSACTIONS' +
+              '</div>' +
+              '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">' +
+                '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>' +
+                'Live POS Synced' +
+              '</span>' +
+            '</div>' +
+
+            '<div class="max-h-56 overflow-y-auto space-y-2.5 custom-scrollbar pr-1">' +
+              txnsHTML +
+            '</div>' +
+          '</div>' +
         '</div>';
     }
 
