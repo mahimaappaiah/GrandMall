@@ -996,7 +996,7 @@ app.get('/', (req, res) => {
 
       <!-- SVG SPATIAL MAP CONTAINER -->
       <div class="relative w-full overflow-hidden bg-slate-50 rounded-3xl border border-slate-200/90 p-4 flex items-center justify-center min-h-[520px]">
-        <svg id="spatial-svg-map" viewBox="0 0 840 560" class="w-full h-auto select-none">
+        <svg id="spatial-svg-map" viewBox="0 0 800 560" class="w-full h-auto select-none">
           <!-- Dynamically Injected SVG Polygon Zones, Heat Contours & Pins -->
         </svg>
       </div>
@@ -1212,6 +1212,7 @@ app.get('/', (req, res) => {
       const svg = document.getElementById('spatial-svg-map');
       if (!svg) return;
 
+      const SQ = "'";
       const filteredStores = storesData.filter(function(s) {
         if (currentFloor === 'All Stores') return true;
         return (s.floor || '').toLowerCase().includes(currentFloor.toLowerCase().replace('floor', '').trim());
@@ -1348,7 +1349,7 @@ app.get('/', (req, res) => {
       '<rect x="675" y="525" width="8" height="25" fill="#cbd5e1" rx="2" />' +
 
       '<!-- 1. ZONE D (AUDITORIUM - TOP BLUE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-d\')">' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-d' + SQ + ')">' +
         '<rect x="230" y="150" width="240" height="105" rx="16" fill="' + fillD + '" stroke="#3b82f6" stroke-width="1.8" />' +
         '<text x="350" y="192" fill="#2563eb" font-size="18" font-weight="800" text-anchor="middle" class="font-sans">Auditorium</text>' +
         '<text x="350" y="214" fill="#3b82f6" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone D</text>' +
@@ -1367,7 +1368,7 @@ app.get('/', (req, res) => {
       '</g>' +
 
       '<!-- 2. ENTRANCE 2 (WEST WING / PINK-RED ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'entrance-2\')">' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'entrance-2' + SQ + ')">' +
         '<rect x="90" y="215" width="140" height="60" rx="14" fill="' + fillE2 + '" stroke="#f87171" stroke-width="1.5" />' +
         '<g transform="translate(105, 233)">' +
           '<rect x="0" y="0" width="100" height="24" rx="6" fill="#ffffff" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadowFilter)" />' +
@@ -1378,20 +1379,20 @@ app.get('/', (req, res) => {
       '</g>' +
 
       '<!-- 3. SOLID BLACK BADGE HM -->' +
-      '<g transform="translate(280, 305)" class="cursor-pointer" onclick="handleZoneClick(\'hm-badge\')">' +
+      '<g transform="translate(280, 305)" class="cursor-pointer" onclick="handleZoneClick(' + SQ + 'hm-badge' + SQ + ')">' +
         '<circle cx="0" cy="0" r="16" fill="#0f172a" stroke="#ffffff" stroke-width="2" filter="url(#shadowFilter)" />' +
         '<text x="0" y="4.5" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle">HM</text>' +
       '</g>' +
 
       '<!-- 4. ZONE C (EXHIBITION - CENTER SLATE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-c\')">' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-c' + SQ + ')">' +
         '<rect x="300" y="280" width="210" height="65" rx="14" fill="' + fillC + '" stroke="#64748b" stroke-width="1.8" />' +
         '<text x="405" y="308" fill="#334155" font-size="16" font-weight="800" text-anchor="middle" class="font-sans">Exhibition</text>' +
         '<text x="405" y="330" fill="#64748b" font-size="13" font-weight="600" text-anchor="middle" class="font-sans">Zone C</text>' +
       '</g>' +
 
       '<!-- 5. ZONE A (STANDS - BOTTOM SLATE ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-a\')">' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-a' + SQ + ')">' +
         '<rect x="195" y="380" width="280" height="140" rx="16" fill="' + fillA + '" stroke="#94a3b8" stroke-width="1.8" />' +
         '<!-- Entrance 3 Pill Tag -->' +
         '<g transform="translate(215, 368)">' +
@@ -1411,7 +1412,7 @@ app.get('/', (req, res) => {
       '</g>' +
 
       '<!-- 6. ZONE B (HALL - RIGHT AMBER ZONE) -->' +
-      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(\'zone-b\')">' +
+      '<g class="interactive-zone cursor-pointer" onclick="handleZoneClick(' + SQ + 'zone-b' + SQ + ')">' +
         '<rect x="545" y="340" width="175" height="165" rx="16" fill="' + fillB + '" stroke="#c29b7a" stroke-width="1.8" />' +
         '<text x="630" y="405" fill="#9a3412" font-size="18" font-weight="800" text-anchor="middle" class="font-sans">Hall</text>' +
         '<text x="630" y="435" fill="#b45309" font-size="14" font-weight="600" text-anchor="middle" class="font-sans">Zone B</text>' +
@@ -1457,7 +1458,7 @@ app.get('/', (req, res) => {
         const revK = Math.floor((store.revenueToday || 0) / 1000);
         const storeInitial = (store.logo || (store.name || 'ST').slice(0, 2).toUpperCase());
 
-        html += '<g transform="translate(' + pos.x + ', ' + pos.y + ')" class="interactive-pin cursor-pointer" onclick="event.stopPropagation(); handleZoneClick(\'' + store.id + '\')">' +
+        html += '<g transform="translate(' + pos.x + ', ' + pos.y + ')" class="interactive-pin cursor-pointer" onclick="event.stopPropagation(); handleZoneClick(' + SQ + store.id + SQ + ')">' +
           '<circle r="18" fill="#0f172a" stroke="#3b82f6" stroke-width="2" class="shadow-lg" />' +
           '<text y="4" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle">' + storeInitial + '</text>' +
           '<g transform="translate(0, 24)">' +
@@ -1775,14 +1776,8 @@ app.get('/', (req, res) => {
 
     async function loadData() {
       try {
-        const [mRes, bRes, uRes, oRes] = await Promise.all([
-          fetch('/api/admin/metrics').then(r => r.json()),
-          fetch('/api/brands').then(r => r.json()),
-          fetch('/api/auth/connected-users').then(r => r.json()),
-          fetch('/api/orders').then(r => r.json())
-        ]);
-
-        if (bRes && bRes.success && Array.isArray(bRes.brands)) {
+        const bRes = await fetch('/api/brands').then(r => r.json()).catch(() => null);
+        if (bRes && bRes.success && Array.isArray(bRes.brands) && bRes.brands.length > 0) {
           storesData = bRes.brands;
           renderStoreTable();
           renderSpatialSvgMap();
@@ -1791,26 +1786,38 @@ app.get('/', (req, res) => {
           let totalStoreVisitors = storesData.reduce((acc, s) => acc + (Number(s.visitorsToday || s.visitors_today) || 0), 0);
           let totalStoreOrders = storesData.reduce((acc, s) => acc + (Number(s.ordersCount || s.orders_count) || 0), 0);
 
-          document.getElementById('metric-stores').innerText = storesData.length + ' Stores';
-          document.getElementById('metric-revenue').innerText = totalStoreRev >= 10000000 
+          const elStores = document.getElementById('metric-stores');
+          if (elStores) elStores.innerText = storesData.length + ' Stores';
+          const elRev = document.getElementById('metric-revenue');
+          if (elRev) elRev.innerText = totalStoreRev >= 10000000 
             ? ('₹' + (totalStoreRev / 10000000).toFixed(2) + ' Cr')
             : ('₹' + (totalStoreRev / 100000).toFixed(1) + ' Lakh');
-          document.getElementById('metric-footfall').innerText = totalStoreVisitors.toLocaleString();
-          document.getElementById('metric-orders').innerText = totalStoreOrders.toLocaleString() + ' Orders';
+          const elFoot = document.getElementById('metric-footfall');
+          if (elFoot) elFoot.innerText = totalStoreVisitors.toLocaleString();
+          const elOrd = document.getElementById('metric-orders');
+          if (elOrd) elOrd.innerText = totalStoreOrders.toLocaleString() + ' Orders';
         }
+      } catch(err) {}
 
-        if (mRes && mRes.success) {
-          if (mRes.activeUsers !== undefined) {
-            document.getElementById('metric-users').innerText = mRes.activeUsers + ' Active';
-          }
+      try {
+        const mRes = await fetch('/api/admin/metrics').then(r => r.json()).catch(() => null);
+        if (mRes && mRes.success && mRes.activeUsers !== undefined) {
+          const elUsers = document.getElementById('metric-users');
+          if (elUsers) elUsers.innerText = mRes.activeUsers + ' Active';
         }
+      } catch(err) {}
 
-        if (uRes && uRes.success) {
-          connectedUsersData = uRes.users || [];
+      try {
+        const uRes = await fetch('/api/auth/connected-users').then(r => r.json()).catch(() => null);
+        if (uRes && uRes.success && Array.isArray(uRes.users)) {
+          connectedUsersData = uRes.users;
         }
+      } catch(err) {}
 
-        if (oRes && oRes.success) {
-          ordersData = oRes.orders || [];
+      try {
+        const oRes = await fetch('/api/orders').then(r => r.json()).catch(() => null);
+        if (oRes && oRes.success && Array.isArray(oRes.orders)) {
+          ordersData = oRes.orders;
         }
       } catch(err) {}
     }
@@ -1825,7 +1832,11 @@ app.get('/', (req, res) => {
       };
     } catch(err) {}
 
-    // Poll live backend endpoints every 2.5 seconds as fallback
+    // Initial immediate render before network requests
+    renderSpatialSvgMap();
+    renderStoreTable();
+
+    // Poll live backend endpoints every 2.5 seconds
     setInterval(loadData, 2500);
 
     loadData();
