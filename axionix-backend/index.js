@@ -988,10 +988,10 @@ app.get('/', (req, res) => {
 
       <!-- FLOOR SELECTOR TABS -->
       <div class="flex items-center space-x-2 overflow-x-auto pb-1">
-        <button onclick="switchFloor('Ground Floor')" id="btn-fl-0" class="px-5 py-2.5 text-xs font-extrabold rounded-xl transition-all bg-blue-600 text-white shadow-md shadow-blue-600/20 cursor-pointer">Ground Floor (16)</button>
+        <button onclick="switchFloor('All Stores')" id="btn-fl-all" class="px-5 py-2.5 text-xs font-extrabold rounded-xl transition-all bg-blue-600 text-white shadow-md shadow-blue-600/20 cursor-pointer">All Stores (33)</button>
+        <button onclick="switchFloor('Ground Floor')" id="btn-fl-0" class="px-5 py-2.5 text-xs font-extrabold rounded-xl transition-all bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 cursor-pointer">Ground Floor (16)</button>
         <button onclick="switchFloor('1st Floor')" id="btn-fl-1" class="px-5 py-2.5 text-xs font-extrabold rounded-xl transition-all bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 cursor-pointer">1st Floor (13)</button>
         <button onclick="switchFloor('2nd Floor')" id="btn-fl-2" class="px-5 py-2.5 text-xs font-extrabold rounded-xl transition-all bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 cursor-pointer">2nd Floor (4)</button>
-        <button onclick="switchFloor('All Stores')" id="btn-fl-all" class="px-5 py-2.5 text-xs font-extrabold rounded-xl transition-all bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 cursor-pointer">All Stores (33)</button>
       </div>
 
       <!-- SVG SPATIAL MAP CONTAINER -->
@@ -1010,7 +1010,7 @@ app.get('/', (req, res) => {
           <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Peak Density (&gt;75%)</span>
         </div>
         <div id="floor-store-count" class="font-bold text-slate-700">
-          Showing 16 flagships on Ground Floor • Everything is Clickable
+          Showing 33 flagships on All Stores • Everything is Clickable
         </div>
       </div>
 
@@ -1085,13 +1085,15 @@ app.get('/', (req, res) => {
   </div>
 
   <script>
-    let currentFloor = 'Ground Floor';
+    let currentFloor = 'All Stores';
     let currentOpenStoreId = null;
     let tableSearchQuery = '';
     let showHeatmapOverlay = true;
     let storesData = [];
     let connectedUsersData = [];
     let ordersData = [];
+    let prevStoresCount = 0;
+    let prevStoresRevTotal = 0;
 
     function closeModal(id) {
       if (id === 'store-modal') currentOpenStoreId = null;
@@ -1121,16 +1123,16 @@ app.get('/', (req, res) => {
 
     function resetMapView() {
       showHeatmapOverlay = true;
-      switchFloor('Ground Floor');
+      switchFloor('All Stores');
     }
 
     function switchFloor(floor) {
       currentFloor = floor;
       const buttons = [
+        { id: 'btn-fl-all', target: 'All Stores' },
         { id: 'btn-fl-0', target: 'Ground Floor' },
         { id: 'btn-fl-1', target: '1st Floor' },
-        { id: 'btn-fl-2', target: '2nd Floor' },
-        { id: 'btn-fl-all', target: 'All Stores' }
+        { id: 'btn-fl-2', target: '2nd Floor' }
       ];
 
       buttons.forEach(function(b) {
@@ -1233,6 +1235,11 @@ app.get('/', (req, res) => {
         return (s.floor || '').toLowerCase().includes(currentFloor.toLowerCase().replace('floor', '').trim());
       });
 
+      const countEl = document.getElementById('floor-store-count');
+      if (countEl) {
+        countEl.innerText = 'Showing ' + filteredStores.length + ' flagships on ' + currentFloor + ' • Click any store to view card';
+      }
+
       function getZoneDensity(zoneKey) {
         const zk = (zoneKey || '').toLowerCase();
         const matches = filteredStores.filter(function(s) {
@@ -1255,45 +1262,81 @@ app.get('/', (req, res) => {
       }
 
       const storePositions = {
-        // Ground Floor (16 stores)
-        'gucci boutique': { x: 285, y: 195 },
-        'tiffany & co.': { x: 415, y: 195 },
-        'tanishq royal heritage': { x: 130, y: 220 },
-        'malabar gold & diamonds': { x: 185, y: 250 },
-        'louis vuitton maison': { x: 310, y: 285 },
-        'hermès leather lounge': { x: 390, y: 285 },
-        'rolex boutique': { x: 470, y: 285 },
-        'omega watch atelier': { x: 330, y: 340 },
-        'bvlgari haute joaillerie': { x: 410, y: 340 },
-        'häagen-dazs': { x: 480, y: 340 },
-        'haagen-dazs': { x: 480, y: 340 },
-        'cartier high jewelry': { x: 275, y: 430 },
-        'prada atelier': { x: 355, y: 430 },
-        'tom ford eyewear': { x: 435, y: 430 },
-        'apple experience store': { x: 600, y: 380 },
-        'bottega veneta': { x: 670, y: 380 },
-        'starbucks reserve': { x: 635, y: 455 },
+        // North Wing / Zone D (7 stores)
+        'gucci boutique': { x: 275, y: 175 },
+        'gucci': { x: 275, y: 175 },
+        'nike flagship': { x: 345, y: 175 },
+        'nike': { x: 345, y: 175 },
+        'tiffany & co.': { x: 420, y: 175 },
+        'tiffany': { x: 420, y: 175 },
+        'tag heuer flagship': { x: 275, y: 220 },
+        'tag heuer': { x: 275, y: 220 },
+        'oakley performance vision': { x: 345, y: 220 },
+        'oakley': { x: 345, y: 220 },
+        'din tai fung': { x: 420, y: 220 },
+        'coffee drama cafe': { x: 455, y: 185 },
+        'coffee drama': { x: 455, y: 185 },
 
-        // 1st Floor (13 stores)
-        'nike flagship': { x: 280, y: 195 },
-        'tag heuer flagship': { x: 350, y: 195 },
-        'oakley performance vision': { x: 420, y: 195 },
-        'ray-ban sunglass hut': { x: 130, y: 220 },
-        'tissot swiss watches': { x: 185, y: 250 },
-        'coach new york': { x: 320, y: 295 },
-        'u.s. polo assn.': { x: 400, y: 295 },
-        'sunglass hut premier': { x: 480, y: 295 },
-        'titan nebula gold watches': { x: 400, y: 345 },
-        'zara flagship': { x: 355, y: 430 },
-        'h&m flagship': { x: 600, y: 380 },
-        'swarovski crystal pavilion': { x: 670, y: 380 },
-        'lenskart gold lounge': { x: 635, y: 455 },
+        // West Wing / Entrance 2 (4 stores)
+        'tanishq royal heritage': { x: 115, y: 200 },
+        'tanishq': { x: 115, y: 200 },
+        'malabar gold & diamonds': { x: 175, y: 200 },
+        'malabar': { x: 175, y: 200 },
+        'ray-ban sunglass hut': { x: 115, y: 250 },
+        'ray-ban': { x: 115, y: 250 },
+        'tissot swiss watches': { x: 175, y: 250 },
+        'tissot': { x: 175, y: 250 },
 
-        // 2nd Floor (4 stores)
-        'din tai fung': { x: 310, y: 200 },
-        'coffee drama cafe': { x: 410, y: 200 },
-        'pizzaexpress gourmet': { x: 310, y: 430 },
-        'subway fresh gourmet': { x: 410, y: 430 }
+        // Central Atrium / Zone C (10 stores)
+        'louis vuitton maison': { x: 295, y: 280 },
+        'louis vuitton': { x: 295, y: 280 },
+        'hermès leather lounge': { x: 365, y: 280 },
+        'hermès': { x: 365, y: 280 },
+        'hermes': { x: 365, y: 280 },
+        'rolex boutique': { x: 435, y: 280 },
+        'rolex': { x: 435, y: 280 },
+        'coach new york': { x: 505, y: 280 },
+        'coach': { x: 505, y: 280 },
+        'omega watch atelier': { x: 295, y: 335 },
+        'omega': { x: 295, y: 335 },
+        'bvlgari haute joaillerie': { x: 365, y: 335 },
+        'bvlgari': { x: 365, y: 335 },
+        'häagen-dazs': { x: 435, y: 335 },
+        'haagen-dazs': { x: 435, y: 335 },
+        'u.s. polo assn.': { x: 505, y: 335 },
+        'u.s. polo': { x: 505, y: 335 },
+        'sunglass hut premier': { x: 330, y: 365 },
+        'sunglass hut': { x: 330, y: 365 },
+        'titan nebula gold watches': { x: 470, y: 365 },
+        'titan nebula': { x: 470, y: 365 },
+
+        // South Wing / Zone A (6 stores)
+        'cartier high jewelry': { x: 245, y: 415 },
+        'cartier': { x: 245, y: 415 },
+        'prada atelier': { x: 315, y: 415 },
+        'prada': { x: 315, y: 415 },
+        'tom ford eyewear': { x: 385, y: 415 },
+        'tom ford': { x: 385, y: 415 },
+        'zara flagship': { x: 455, y: 415 },
+        'zara': { x: 455, y: 415 },
+        'pizzaexpress gourmet': { x: 280, y: 475 },
+        'pizzaexpress': { x: 280, y: 475 },
+        'subway fresh gourmet': { x: 360, y: 475 },
+        'subway': { x: 360, y: 475 },
+
+        // East Wing / Zone B (6 stores)
+        'apple experience store': { x: 585, y: 365 },
+        'apple': { x: 585, y: 365 },
+        'bottega veneta': { x: 655, y: 365 },
+        'bottega': { x: 655, y: 365 },
+        'h&m flagship': { x: 585, y: 420 },
+        'h&m': { x: 585, y: 420 },
+        'swarovski crystal pavilion': { x: 655, y: 420 },
+        'swarovski': { x: 655, y: 420 },
+        'starbucks reserve': { x: 585, y: 475 },
+        'starbucks': { x: 585, y: 475 },
+        'lenskart gold lounge': { x: 655, y: 475 },
+        'lenskart': { x: 655, y: 475 }
       };
 
       const zoneDDensity = getZoneDensity('auditorium');
@@ -1470,33 +1513,23 @@ app.get('/', (req, res) => {
           if (matchKey) pos = storePositions[matchKey];
         }
         if (!pos) {
-          pos = { x: 300 + (idx % 4) * 65, y: 200 + Math.floor(idx / 4) * 65 };
+          pos = { x: 300 + (idx % 6) * 55, y: 200 + Math.floor(idx / 6) * 55 };
         }
 
-        let posX = pos.x;
-        let posY = pos.y;
-        if (currentFloor === 'All Stores') {
-          if (store.floor === '1st Floor') {
-            posX += 14;
-            posY += 14;
-          } else if (store.floor === '2nd Floor') {
-            posX -= 14;
-            posY += 14;
-          }
-        }
-
+        const posX = pos.x;
+        const posY = pos.y;
         const revK = Math.floor((store.revenueToday || store.revenue_today || 0) / 1000);
         const storeInitial = (store.logo || (store.name || 'ST').slice(0, 2).toUpperCase());
         const storeNameShort = (store.name || '').split(' ')[0];
 
         html += '<g transform="translate(' + posX + ', ' + posY + ')" class="interactive-pin" style="cursor: pointer; pointer-events: all;" onclick="event.stopPropagation(); openStoreModal(' + SQ + store.id + SQ + ')">' +
-          '<circle r="17" fill="#0f172a" stroke="#3b82f6" stroke-width="2.5" filter="url(#shadowFilter)" style="cursor: pointer;" />' +
-          '<text y="4" fill="#ffffff" font-size="9" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeInitial + '</text>' +
-          '<g transform="translate(0, 23)" style="cursor: pointer;">' +
-            '<rect x="-26" y="-8" width="52" height="16" rx="8" fill="#10b981" filter="url(#shadowFilter)" />' +
-            '<text x="0" y="3.5" fill="#ffffff" font-size="8.5" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">₹' + revK + 'k</text>' +
+          '<circle r="14" fill="#0f172a" stroke="#3b82f6" stroke-width="2" filter="url(#shadowFilter)" style="cursor: pointer;" />' +
+          '<text y="3.5" fill="#ffffff" font-size="8" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeInitial + '</text>' +
+          '<g transform="translate(0, 18)" style="cursor: pointer;">' +
+            '<rect x="-20" y="-6" width="40" height="12" rx="6" fill="#10b981" filter="url(#shadowFilter)" />' +
+            '<text x="0" y="2.5" fill="#ffffff" font-size="7.5" font-weight="900" text-anchor="middle" style="pointer-events: none; user-select: none;">₹' + revK + 'k</text>' +
           '</g>' +
-          '<text y="-21" fill="#0f172a" font-size="9" font-weight="800" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeNameShort + '</text>' +
+          '<text y="-16" fill="#0f172a" font-size="8" font-weight="800" text-anchor="middle" style="pointer-events: none; user-select: none;">' + storeNameShort + '</text>' +
         '</g>';
       });
 
@@ -1774,11 +1807,18 @@ app.get('/', (req, res) => {
       try {
         const bRes = await fetch('/api/brands').then(r => r.json()).catch(() => null);
         if (bRes && bRes.success && Array.isArray(bRes.brands) && bRes.brands.length > 0) {
-          storesData = bRes.brands;
-          renderStoreTable();
-          renderSpatialSvgMap();
+          const newStores = bRes.brands;
+          const newRev = newStores.reduce((acc, s) => acc + (Number(s.revenueToday || s.revenue_today) || 0), 0);
+          const needsRender = (storesData.length !== newStores.length || prevStoresRevTotal !== newRev);
+          storesData = newStores;
+          prevStoresRevTotal = newRev;
 
-          let totalStoreRev = storesData.reduce((acc, s) => acc + (Number(s.revenueToday || s.revenue_today) || 0), 0);
+          if (needsRender) {
+            renderStoreTable();
+            renderSpatialSvgMap();
+          }
+
+          let totalStoreRev = newRev;
           let totalStoreVisitors = storesData.reduce((acc, s) => acc + (Number(s.visitorsToday || s.visitors_today) || 0), 0);
           let totalStoreOrders = storesData.reduce((acc, s) => acc + (Number(s.ordersCount || s.orders_count) || 0), 0);
 
