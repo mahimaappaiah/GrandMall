@@ -110,6 +110,64 @@ export default function App() {
     markNotificationAsReadInSupabase(id).catch(() => {});
   };
 
+  const handleTriggerTestAlert = () => {
+    const alertsPool: Partial<SystemAlert>[] = [
+      {
+        title: 'High Footfall Surge in Central Atrium',
+        description: 'Occupancy exceeded 88% capacity threshold (1,450 visitors). Security flow alerted.',
+        severity: 'warning',
+        category: 'Footfall',
+        location: 'Central Atrium Ground Floor'
+      },
+      {
+        title: 'Access Point AP-East-04 High Latency',
+        description: 'Gateway AP-East-04 packet delay 140ms. Auto-rerouting wifi channels.',
+        severity: 'critical',
+        category: 'Network',
+        location: 'East Wing 2nd Floor'
+      },
+      {
+        title: 'Starbucks BOGO Flash Offer Claimed',
+        description: 'Automated push alert claimed by 180 connected captive portal shoppers.',
+        severity: 'info',
+        category: 'Campaign',
+        location: 'Starbucks Reserve'
+      },
+      {
+        title: 'Luxury Boutique VIP Check-in',
+        description: 'Louis Vuitton Maison registered 4 VIP platinum members in store.',
+        severity: 'info',
+        category: 'Footfall',
+        location: 'Louis Vuitton Maison'
+      }
+    ];
+
+    const random = alertsPool[Math.floor(Math.random() * alertsPool.length)];
+    const newAlert: SystemAlert = {
+      id: `live-alt-${Date.now()}`,
+      title: random.title || 'System Notification',
+      description: random.description || 'System event',
+      message: random.description,
+      timestamp: 'Just now',
+      severity: random.severity || 'info',
+      category: random.category || 'Footfall',
+      read: false,
+      is_read: false,
+      location: random.location || 'The Grand Mall'
+    };
+
+    setAlertsList(prev => {
+      const updated = [newAlert, ...prev];
+      try { localStorage.setItem('axionix_alerts_list', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+
+    setLiveToast({
+      title: newAlert.title,
+      message: newAlert.description
+    });
+  };
+
   // Stores List State (Loaded from Supabase brands, persistent in localStorage)
   const [storesList, setStoresList] = useState<Store[]>(() => {
     try {
@@ -999,6 +1057,7 @@ export default function App() {
               onDismiss={handleDismissAlert}
               onMarkAllRead={handleMarkAllAlertsRead}
               onMarkAlertRead={handleMarkAlertRead}
+              onTriggerTestAlert={handleTriggerTestAlert}
             />
           )}
 
