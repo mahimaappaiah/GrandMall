@@ -545,13 +545,10 @@ export async function fetchDashboardAnalyticsChartsFromSupabase(): Promise<{
   brandsCount: number;
   highestDwellCategory: string;
 }> {
-  const fallbackTopStores: TopStoresChartData = TOP_PERFORMING_STORES_CHART;
-  const fallbackCategory: CategoryDistributionChartData = CATEGORY_DISTRIBUTION;
-
   if (!isSupabaseConfigured) {
     return {
-      topStoresChart: fallbackTopStores,
-      categoryDistributionChart: fallbackCategory,
+      topStoresChart: TOP_PERFORMING_STORES_CHART,
+      categoryDistributionChart: CATEGORY_DISTRIBUTION,
       isTopStoresLive: false,
       isCategoryDistributionLive: false,
       brandsCount: 0,
@@ -560,113 +557,359 @@ export async function fetchDashboardAnalyticsChartsFromSupabase(): Promise<{
   }
 
   try {
-    const { data: brands, error } = await supabase
-      .from('brands')
-      .select('id, name, category, revenue_today, visitors_today, orders_count')
-      .order('created_at', { ascending: false });
+    await ensureAdminSession();
 
-    if (error || !brands || brands.length === 0) {
-      return {
-        topStoresChart: fallbackTopStores,
-        categoryDistributionChart: fallbackCategory,
-        isTopStoresLive: false,
-        isCategoryDistributionLive: false,
-        brandsCount: 0,
-        highestDwellCategory: 'Food Court (32%)'
-      };
-    }
+    // Fetch brands, orders and visits in parallel for real-time aggregation
+    const [brandsRes, ordersRes, visitsRes] = await Promise.all([
+      supabase
+        .from('brands')
+        .select('id, name, category, revenue_today, visitors_today, orders_count')
+        .order('name', { ascending: true }),
+      supabase
+        .from('orders')
+        .select(`
+          id, total_amount, subtotal, created_at, status,
+          order_items (
+            id, subtotal, unit_price, quantity,
+            products ( brand_id, brands ( id, name, category ) )
+          )
+        `)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('store_visits')
+        .select('id, brand_id, created_at, brands ( id, name, category )')
+        .order('created_at', { ascending: false })
+    ]);
 
-    // 1. TOP PERFORMING STORES CHART
-    let topStoresChart: TopStoresChartData = fallbackTopStores;
-    let isTopStoresLive = false;
+    const brands = brandsRes.data || [];
+    const orders = (ordersRes.data || []).filter((o: any) => o.status !== 'Cancelled');
+    const visits = visitsRes.data || [];
 
-    const hasLiveRevenue = brands.some((b: any) => Number(b.revenue_today) > 0);
-    if (hasLiveRevenue) {
-      const top6 = brands
-        .slice()
-        .sort((a: any, b: any) => (Number(b.revenue_today) || 0) - (Number(a.revenue_today) || 0))
-        .slice(0, 6);
+    // Map brand names and revenue from actual orders placed by customers
+    const brandRevenueMap: Record<string, { id: string; name: string; revenue: number; recentOrderTime: number; orderCount: number }> = {};
 
-      topStoresChart = {
-        labels: top6.map((s: any) => s.name || 'Store'),
-        datasets: [
-          {
-            label: 'Revenue Today (in ₹ Thousands)',
-            data: top6.map((s: any) => Math.round((Number(s.revenue_today) || 0) / 1000)),
-            backgroundColor: 'rgba(37, 99, 235, 0.85)',
-            borderRadius: 6
-          }
-        ]
-      };
-      isTopStoresLive = true;
-    }
-
-    // 2. CATEGORY DISTRIBUTION DONUT CHART
-    const categoryCounts: Record<string, number> = {};
-    let totalItems = 0;
-
-    const hasLiveVisitors = brands.some((b: any) => Number(b.visitors_today) > 0);
-
+    // Initialize all known mall brands
     brands.forEach((b: any) => {
-      const cat = b.category || 'Other';
-      const weight = hasLiveVisitors ? (Number(b.visitors_today) || 0) : 1;
-      categoryCounts[cat] = (categoryCounts[cat] || 0) + weight;
-      totalItems += weight;
+      const bId = String(b.id);
+      brandRevenueMap[bId] = {
+        id: bId,
+        name: b.name || 'Store',
+        revenue: 0,
+        recentOrderTime: 0,
+        orderCount: 0
+      };
     });
 
-    let categoryDistributionChart: CategoryDistributionChartData = fallbackCategory;
-    let isCategoryDistributionLive = false;
-    let highestDwellCategory = 'Food Court (32%)';
+    // Aggregate real revenue from all orders
+    orders.forEach((ord: any) => {
+      const ordTotal = Number(ord.total_amount) || Number(ord.subtotal) || 0;
+      const ordTime = new Date(ord.created_at || Date.now()).getTime();
+
+      const items = ord.order_items || [];
+      if (items.length > 0) {
+        items.forEach((oi: any) => {
+          const bId = String(oi.products?.brand_id || oi.products?.brands?.id || '');
+          const bName = oi.products?.brands?.name || '';
+          const amt = Number(oi.subtotal) || (Number(oi.unit_price || 0) * Number(oi.quantity || 1)) || ordTotal;
+
+          if (bId && brandRevenueMap[bId]) {
+            brandRevenueMap[bId].revenue += amt;
+            brandRevenueMap[bId].orderCount += 1;
+            if (ordTime > brandRevenueMap[bId].recentOrderTime) brandRevenueMap[bId].recentOrderTime = ordTime;
+          } else if (bId) {
+            brandRevenueMap[bId] = {
+              id: bId,
+              name: bName || 'Store',
+              revenue: amt,
+              recentOrderTime: ordTime,
+              orderCount: 1
+            };
+          }
+        });
+      }
+    });
+
+    // Sort brands: stores with live orders / revenue first (highest revenue first, then most recent order), then other brands
+    const allStoreEntries = Object.values(brandRevenueMap);
+    allStoreEntries.sort((a, b) => {
+      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      if (b.recentOrderTime !== a.recentOrderTime) return b.recentOrderTime - a.recentOrderTime;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Take top 6 stores
+    const top6 = allStoreEntries.slice(0, 6);
+
+    const topStoresChart: TopStoresChartData = {
+      labels: top6.map(s => s.name),
+      datasets: [
+        {
+          label: 'Tenant Sales (₹)',
+          data: top6.map(s => s.revenue >= 1000 ? Math.round(s.revenue / 1000) : s.revenue),
+          backgroundColor: 'rgba(37, 99, 235, 0.85)',
+          borderRadius: 6
+        }
+      ]
+    };
+
+    // 2. CATEGORY FOOTFALL DISTRIBUTION
+    const categoryCounts: Record<string, number> = {};
+    let totalVisitsCount = 0;
+
+    visits.forEach((v: any) => {
+      const cat = v.brands?.category || 'Fashion';
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+      totalVisitsCount++;
+    });
+
+    if (totalVisitsCount === 0) {
+      orders.forEach((o: any) => {
+        (o.order_items || []).forEach((oi: any) => {
+          const cat = oi.products?.brands?.category || 'Retail';
+          categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+          totalVisitsCount++;
+        });
+      });
+    }
+
+    if (totalVisitsCount === 0) {
+      brands.forEach((b: any) => {
+        const cat = b.category || 'Retail';
+        categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+        totalVisitsCount++;
+      });
+    }
 
     const categories = Object.keys(categoryCounts);
-    if (categories.length > 0 && totalItems > 0) {
-      const sortedCategories = categories.sort((a, b) => categoryCounts[b] - categoryCounts[a]);
-      const percentages = sortedCategories.map(cat => Math.round((categoryCounts[cat] / totalItems) * 100));
+    const sortedCategories = categories.sort((a, b) => categoryCounts[b] - categoryCounts[a]);
+    const percentages = sortedCategories.map(cat => Math.max(1, Math.round((categoryCounts[cat] / totalVisitsCount) * 100)));
 
-      const palette = [
-        '#2563EB', // Primary Blue
-        '#3B82F6', // Accent Blue
-        '#10B981', // Emerald
-        '#F59E0B', // Amber
-        '#8B5CF6', // Purple
-        '#EC4899', // Pink
-        '#06B6D4', // Cyan
-        '#64748B'  // Slate
-      ];
-
-      categoryDistributionChart = {
-        labels: sortedCategories,
-        datasets: [
-          {
-            data: percentages,
-            backgroundColor: sortedCategories.map((_, i) => palette[i % palette.length]),
-            borderWidth: 2,
-            borderColor: '#FFFFFF'
-          }
-        ]
-      };
-      isCategoryDistributionLive = true;
-      highestDwellCategory = `${sortedCategories[0]} (${percentages[0]}%)`;
-    }
+    const palette = ['#2563EB', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#64748B'];
+    const categoryDistributionChart: CategoryDistributionChartData = {
+      labels: sortedCategories,
+      datasets: [
+        {
+          data: percentages,
+          backgroundColor: sortedCategories.map((_, i) => palette[i % palette.length]),
+          borderWidth: 2,
+          borderColor: '#FFFFFF'
+        }
+      ]
+    };
+    const highestDwellCategory = `${sortedCategories[0] || 'Retail'} (${percentages[0] || 100}%)`;
 
     return {
       topStoresChart,
       categoryDistributionChart,
-      isTopStoresLive,
-      isCategoryDistributionLive,
+      isTopStoresLive: true,
+      isCategoryDistributionLive: true,
       brandsCount: brands.length,
       highestDwellCategory
     };
   } catch (err) {
     console.warn('[Supabase] fetchDashboardAnalyticsCharts error:', err);
     return {
-      topStoresChart: fallbackTopStores,
-      categoryDistributionChart: fallbackCategory,
+      topStoresChart: TOP_PERFORMING_STORES_CHART,
+      categoryDistributionChart: CATEGORY_DISTRIBUTION,
       isTopStoresLive: false,
       isCategoryDistributionLive: false,
       brandsCount: 0,
       highestDwellCategory: 'Food Court (32%)'
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LIVE HOURLY WIFI CHART DATA (from wifi_sessions & store_visits, today vs yesterday by hour)
+// ---------------------------------------------------------------------------
+export async function fetchHourlyWifiChartFromSupabase(): Promise<{
+  data: typeof HOURLY_CONNECTED_USERS | null;
+  isLive: boolean;
+}> {
+  if (!isSupabaseConfigured) return { data: null, isLive: false };
+
+  try {
+    await ensureAdminSession();
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(todayStart.getDate() - 1);
+    const yesterdayEnd = new Date(todayStart);
+
+    const [todaySessionsRes, yesterdaySessionsRes, todayVisitsRes, yesterdayVisitsRes, activeProfilesRes] = await Promise.all([
+      supabase
+        .from('wifi_sessions')
+        .select('created_at, connected_at')
+        .gte('created_at', todayStart.toISOString())
+        .lte('created_at', now.toISOString()),
+      supabase
+        .from('wifi_sessions')
+        .select('created_at, connected_at')
+        .gte('created_at', yesterdayStart.toISOString())
+        .lte('created_at', yesterdayEnd.toISOString()),
+      supabase
+        .from('store_visits')
+        .select('created_at')
+        .gte('created_at', todayStart.toISOString())
+        .lte('created_at', now.toISOString()),
+      supabase
+        .from('store_visits')
+        .select('created_at')
+        .gte('created_at', yesterdayStart.toISOString())
+        .lte('created_at', yesterdayEnd.toISOString()),
+      supabase
+        .from('profiles')
+        .select('id, created_at, is_active')
+    ]);
+
+    const HOURS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+
+    function countByHour(sessions: any[], visits: any[]): number[] {
+      const counts: Record<number, number> = {};
+      (sessions || []).forEach((r: any) => {
+        try {
+          const d = r.connected_at || r.created_at;
+          if (d) {
+            const h = new Date(d).getHours();
+            counts[h] = (counts[h] || 0) + 1;
+          }
+        } catch (_) {}
+      });
+      (visits || []).forEach((r: any) => {
+        try {
+          if (r.created_at) {
+            const h = new Date(r.created_at).getHours();
+            counts[h] = (counts[h] || 0) + 1;
+          }
+        } catch (_) {}
+      });
+      return HOURS.map(label => {
+        const h = parseInt(label.split(':')[0]);
+        return counts[h] || 0;
+      });
+    }
+
+    const todayData = countByHour(todaySessionsRes.data || [], todayVisitsRes.data || []);
+    const yesterdayData = countByHour(yesterdaySessionsRes.data || [], yesterdayVisitsRes.data || []);
+
+    const activeProfilesCount = (activeProfilesRes.data || []).length;
+    const currentHourIdx = HOURS.findIndex(label => parseInt(label.split(':')[0]) === currentHour);
+    if (currentHourIdx >= 0 && activeProfilesCount > todayData[currentHourIdx]) {
+      todayData[currentHourIdx] = Math.max(todayData[currentHourIdx], activeProfilesCount);
+    }
+
+    return {
+      data: {
+        labels: HOURS,
+        datasets: [
+          {
+            label: 'Connected Users (Today)',
+            data: todayData,
+            borderColor: '#2563EB',
+            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6
+          },
+          {
+            label: 'Connected Users (Yesterday)',
+            data: yesterdayData,
+            borderColor: '#94A3B8',
+            backgroundColor: 'transparent',
+            borderDash: [5, 5],
+            tension: 0.4,
+            pointRadius: 2
+          }
+        ]
+      },
+      isLive: true
+    };
+  } catch (err) {
+    console.warn('[Supabase] fetchHourlyWifiChart error:', err);
+    return { data: null, isLive: false };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LIVE DAILY FOOTFALL CHART DATA (from store_visits, wifi_sessions, orders this week Mon–Sun)
+// ---------------------------------------------------------------------------
+export async function fetchDailyFootfallChartFromSupabase(): Promise<{
+  data: typeof DAILY_FOOTFALL | null;
+  isLive: boolean;
+}> {
+  if (!isSupabaseConfigured) return { data: null, isLive: false };
+
+  try {
+    await ensureAdminSession();
+
+    // Find Monday of current week
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon … 6=Sat
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 7);
+
+    const [visitsRes, sessionsRes, ordersRes] = await Promise.all([
+      supabase
+        .from('store_visits')
+        .select('created_at')
+        .gte('created_at', monday.toISOString())
+        .lte('created_at', sunday.toISOString()),
+      supabase
+        .from('wifi_sessions')
+        .select('created_at, connected_at')
+        .gte('created_at', monday.toISOString())
+        .lte('created_at', sunday.toISOString()),
+      supabase
+        .from('orders')
+        .select('created_at')
+        .gte('created_at', monday.toISOString())
+        .lte('created_at', sunday.toISOString())
+    ]);
+
+    const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayCounts: number[] = [0, 0, 0, 0, 0, 0, 0]; // index 0=Mon … 6=Sun
+
+    const allWeeklyRecords = [
+      ...(visitsRes.data || []),
+      ...(sessionsRes.data || []),
+      ...(ordersRes.data || [])
+    ];
+
+    allWeeklyRecords.forEach((v: any) => {
+      try {
+        const d = v.created_at || v.connected_at;
+        if (d) {
+          const jsDay = new Date(d).getDay(); // 0=Sun
+          const idx = (jsDay + 6) % 7; // convert to Mon=0 … Sun=6
+          dayCounts[idx]++;
+        }
+      } catch (_) {}
+    });
+
+    return {
+      data: {
+        labels: DAY_LABELS,
+        datasets: [
+          {
+            label: 'Total Footfall (Visitors)',
+            data: dayCounts,
+            backgroundColor: '#3B82F6',
+            borderRadius: 8,
+            borderSkipped: false
+          }
+        ]
+      },
+      isLive: true
+    };
+  } catch (err) {
+    console.warn('[Supabase] fetchDailyFootfallChart error:', err);
+    return { data: null, isLive: false };
   }
 }
 
@@ -956,7 +1199,7 @@ export async function updateReservationStatusInSupabase(resId: string, newStatus
     if (isUuid) {
       query = query.eq('id', resId);
     } else {
-      query = query.or(`id.eq.${resId}`);
+      query = query.or(`ref_code.eq.${resId},id.eq.${resId}`);
     }
     const { error } = await query;
     if (error) {
@@ -970,24 +1213,77 @@ export async function updateReservationStatusInSupabase(resId: string, newStatus
   }
 }
 
+export async function createReservationInSupabase(resData: {
+  storeName: string;
+  guestName: string;
+  guestPhone?: string;
+  partySize: number;
+  timeSlot: string;
+  reservationDate?: string;
+  specialNotes?: string;
+}): Promise<{ success: boolean; data?: any; error?: string }> {
+  if (!isSupabaseConfigured) return { success: false };
+  try {
+    await ensureAdminSession();
+    const refCode = `RES-${(resData.storeName || 'MAL').slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 899)}`;
+    let brandId: string | null = null;
+    if (resData.storeName) {
+      const { data: b } = await supabase
+        .from('brands')
+        .select('id')
+        .ilike('name', resData.storeName.trim())
+        .maybeSingle();
+      if (b?.id) brandId = b.id;
+    }
+
+    const bookingDate = resData.reservationDate || new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('reservations')
+      .insert({
+        ref_code: refCode,
+        brand_id: brandId,
+        guest_name: resData.guestName || 'Valued Guest',
+        guest_phone: resData.guestPhone || null,
+        party_size: Number(resData.partySize) || 2,
+        reservation_date: bookingDate,
+        time_slot: resData.timeSlot || '17:00 PM',
+        notes: resData.specialNotes || 'Direct Admin Reservation',
+        status: 'confirmed'
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[Supabase] createReservation error:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 export function formatConnectTimeIST(dateStr?: string | null): string {
   if (!dateStr) return 'Just now';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
 
-    // Real Indian Standard Time (IST, Asia/Kolkata)
+    // Real Indian Standard Time (IST, Asia/Kolkata) with uppercase AM/PM
     const istTimeOptions: Intl.DateTimeFormatOptions = {
       timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
     };
-    return new Intl.DateTimeFormat('en-IN', istTimeOptions).format(d);
+    const formatted = new Intl.DateTimeFormat('en-US', istTimeOptions).format(d);
+    return formatted.toUpperCase();
   } catch {
     return dateStr;
   }
 }
+
+export const formatISTTime = formatConnectTimeIST;
 
 // ---------------------------------------------------------------------------
 // CONNECTED USERS / PROFILES SERVICE (Reading public.profiles & public.store_visits)
@@ -1229,7 +1525,7 @@ export async function fetchConnectedUsersFromSupabase(): Promise<{ data: Connect
         email: u.email,
         macAddress: session?.mac_address || 'FE:88:99:A1:B2:C3',
         ipAddress: session?.ip_address || '192.168.10.142',
-        connectionTime: u._rawTimestamp ? new Date(u._rawTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today',
+        connectionTime: u._rawTimestamp ? formatConnectTimeIST(u._rawTimestamp) : 'Today',
         sessionDuration: calculatedDuration,
         visitedStores: visited,
         dataUsed: visited.length > 0 ? `${visited.length * 45} MB` : '15 MB',

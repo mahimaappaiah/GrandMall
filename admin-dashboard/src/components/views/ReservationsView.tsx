@@ -28,7 +28,7 @@ import {
 import { MOCK_RESERVATIONS } from '../../data/mockData';
 import { downloadReservationsCSV } from '../../utils/exportUtils';
 import { Reservation } from '../../types';
-import { fetchReservationsFromSupabase } from '../../services/supabaseService';
+import { fetchReservationsFromSupabase, updateReservationStatusInSupabase, createReservationInSupabase } from '../../services/supabaseService';
 import { BACKEND_URL } from '../../lib/config';
 
 interface ReservationsViewProps {
@@ -156,19 +156,28 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     setTimeout(() => setToastNotice(null), 4500);
   };
 
-  // Helper to generate dates for current week view
+  // Helper to generate dates for current week view (Mon - Sun, non-mutating)
   const getWeekDates = (offsetWeeks: number = 0) => {
     const today = new Date();
-    const curr = new Date(today.getTime() + offsetWeeks * 7 * 24 * 60 * 60 * 1000);
-    const firstDayOfWeek = curr.getDate() - curr.getDay() + 1; // Monday start
+    const target = new Date(today);
+    target.setDate(today.getDate() + offsetWeeks * 7);
+    const day = target.getDay(); // 0 is Sunday, 1 is Monday...
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(target);
+    monday.setDate(target.getDate() + diffToMonday);
+
     const week = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(curr.setDate(firstDayOfWeek + i));
-      const iso = d.toISOString().split('T')[0];
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const dayNum = String(d.getDate()).padStart(2, '0');
+      const iso = `${year}-${month}-${dayNum}`;
       const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayNum = d.getDate();
       const monthName = d.toLocaleDateString('en-US', { month: 'short' });
-      week.push({ iso, dayName, dayNum, monthName, isToday: iso === today.toISOString().split('T')[0] });
+      const isToday = d.toDateString() === today.toDateString();
+      week.push({ iso, dayName, dayNum: d.getDate(), monthName, isToday });
     }
     return week;
   };
@@ -410,6 +419,8 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
 
     showToast(`Reservation status updated to ${nextStatus}`);
 
+    updateReservationStatusInSupabase(resId, nextStatus).catch(() => {});
+
     fetch(`${BACKEND_URL}/api/reservations/${resId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -425,6 +436,8 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
     } catch (e) {}
 
     setLiveReservations(prev => prev.map(r => (r.id === resId || r.refCode === resId ? { ...r, status: 'No Show' as any } : r)));
+
+    updateReservationStatusInSupabase(resId, 'No Show').catch(() => {});
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/reservations/${resId}/no-show`, {
@@ -508,13 +521,24 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({ reservations
       setShowCreateModal(false);
       showToast(`🎉 Reservation ${refCode} created successfully for ${newGuestName}!`);
 
-      // 2. Persist to localStorage
+      // 2. Persist to Supabase
+      createReservationInSupabase({
+        storeName: newStoreName,
+        guestName: newGuestName,
+        guestPhone: newGuestPhone,
+        partySize: Number(newPartySize),
+        timeSlot: newTimeSlot,
+        reservationDate: newDate,
+        specialNotes: newSpecialNotes
+      }).catch(() => {});
+
+      // 3. Persist to localStorage
       try {
         const local = JSON.parse(localStorage.getItem('axionix_reservations_list') || '[]');
         localStorage.setItem('axionix_reservations_list', JSON.stringify([newResObj, ...local]));
       } catch (err) {}
 
-      // 3. Post to backend
+      // 4. Post to backend
       try {
         await fetch(`${BACKEND_URL}/api/reservations/book`, {
           method: 'POST',

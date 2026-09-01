@@ -1532,6 +1532,8 @@ export default function App() {
     };
   }, [mobileNumber]);
 
+const PORTAL_STANDARD_TIME_SLOTS = ['12:00 PM', '14:00 PM', '16:00 PM', '17:00 PM', '18:30 PM', '20:00 PM', '21:30 PM'];
+
   const [resModalOpen, setResModalOpen] = useState(false);
   const [resSelectedBrand, setResSelectedBrand] = useState<string>('');
   const [resDate, setResDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -1539,7 +1541,16 @@ export default function App() {
   const [resPartySize, setResPartySize] = useState(2);
   const [resNotes, setResNotes] = useState('VIP Fitting Suite');
   const [resSuccess, setResSuccess] = useState<any>(null);
-  const [availableSlots, setAvailableSlots] = useState<any[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<any[]>(() =>
+    PORTAL_STANDARD_TIME_SLOTS.map(slot => ({
+      timeSlot: slot,
+      maxCapacity: 4,
+      bookedCount: 0,
+      available: 4,
+      isFull: false,
+      waitlistCount: 0
+    }))
+  );
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isJoiningWaitlist, setIsJoiningWaitlist] = useState(false);
   const [waitlistSuccessInfo, setWaitlistSuccessInfo] = useState<any>(null);
@@ -1645,9 +1656,7 @@ export default function App() {
         : r
     ));
 
-    if (resSuccess && (resSuccess.refCode === targetRef || resSuccess.id === targetRef)) {
-      setResSuccess(null);
-    }
+    setResSuccess(null);
     setResModalOpen(false);
     setToastMessage(`✓ Reservation for ${targetStore} cancelled. Time slot released.`);
 
@@ -2919,15 +2928,18 @@ export default function App() {
       recordUserStoreVisit(targetStore);
     }
 
-    // Check if customer already booked this store
+    // Check if customer already booked this store for the same date & time slot
     const existingStoreBooking = myReservations.find(r => 
       r.storeName?.toLowerCase().trim() === targetStore?.toLowerCase().trim() && 
       r.status !== 'Cancelled' &&
-      isUserReservation(r)
+      r.status !== 'Completed' &&
+      r.status !== 'No Show' &&
+      isUserReservation(r) &&
+      (r.date === resDate && r.timeSlot === resTime)
     );
 
     if (existingStoreBooking) {
-      setToastMessage(`⚠️ You already booked this store, try other store booking or other time slot.`);
+      setToastMessage(`⚠️ You already have an active booking for ${targetStore} at ${resTime} on ${resDate}.`);
       return;
     }
 
@@ -4593,40 +4605,7 @@ export default function App() {
                 </div>
 
                 {/* Duplicate Store Booking Warning Banner */}
-                {(() => {
-                  const categoryBrands = brands.filter(b => b.category === selectedMainCategory);
-                  const currentStore = resSelectedBrand || (categoryBrands.length > 0 ? categoryBrands[0].name : (activeBrandModal ? activeBrandModal.name : 'Nike Flagship'));
-                  const existingStoreBooking = myReservations.find(r => 
-                    r.storeName?.toLowerCase().trim() === currentStore?.toLowerCase().trim() && 
-                    r.status !== 'Cancelled' &&
-                    isUserReservation(r)
-                  );
 
-                  if (!existingStoreBooking) return null;
-
-                  return (
-                    <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-start space-x-3 text-amber-950 text-xs shadow-xs animate-in fade-in">
-                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="font-extrabold text-amber-950 text-sm">You already booked this store!</p>
-                        <p className="text-amber-800 mt-1">
-                          You have an active booking at <span className="font-bold">{existingStoreBooking.storeName}</span> ({existingStoreBooking.timeSlot} on {existingStoreBooking.date || 'Today'}, Ref: <span className="font-mono font-bold text-blue-700">{existingStoreBooking.refCode}</span>).
-                        </p>
-                        <p className="text-amber-700 text-[11px] mt-1 font-semibold">
-                          👉 Try other store booking or other time slot, or cancel your previous booking below.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => handleCancelReservation(existingStoreBooking)}
-                          className="mt-2.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-[11px] flex items-center space-x-1.5 cursor-pointer shadow-xs transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Cancel Existing Booking</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

@@ -447,17 +447,25 @@ export async function fetchReservationAvailability(storeName: string, date?: str
     } catch (e) {}
   }
 
-  // Fetch real-time capacity configurations & waitlist from backend
+  // Fetch real-time capacity configurations & waitlist from backend (with fast timeout fallback)
   let backendCapacities: any = {};
   let backendWaitlist: any[] = [];
   try {
-    const capRes = await fetch(`${BACKEND_URL}/api/reservations/capacity?store=${encodeURIComponent(storeName)}`);
-    const capData = await capRes.json();
-    if (capData?.capacities) backendCapacities = capData.capacities;
+    const fetchCap = Promise.race([
+      fetch(`${BACKEND_URL}/api/reservations/capacity?store=${encodeURIComponent(storeName)}`),
+      new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+    ]).then(r => r.json()).then(capData => {
+      if (capData?.capacities) backendCapacities = capData.capacities;
+    }).catch(() => {});
 
-    const wlRes = await fetch(`${BACKEND_URL}/api/reservations/waitlist?store=${encodeURIComponent(storeName)}&date=${targetDate}`);
-    const wlData = await wlRes.json();
-    if (wlData?.waitlist) backendWaitlist = wlData.waitlist;
+    const fetchWl = Promise.race([
+      fetch(`${BACKEND_URL}/api/reservations/waitlist?store=${encodeURIComponent(storeName)}&date=${targetDate}`),
+      new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+    ]).then(r => r.json()).then(wlData => {
+      if (wlData?.waitlist) backendWaitlist = wlData.waitlist;
+    }).catch(() => {});
+
+    await Promise.allSettled([fetchCap, fetchWl]);
   } catch (e) {}
 
   const DEFAULT_SLOT_CAPACITIES: Record<string, { default: number; [slot: string]: number }> = {

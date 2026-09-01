@@ -56,6 +56,9 @@ import {
   fetchReservationsFromSupabase,
   fetchStoresFromSupabase,
   fetchDashboardAnalyticsChartsFromSupabase,
+  fetchCouponRedemptionsCountFromSupabase,
+  fetchHourlyWifiChartFromSupabase,
+  fetchDailyFootfallChartFromSupabase,
   TopStoresChartData,
   CategoryDistributionChartData
 } from '../../services/supabaseService';
@@ -106,10 +109,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [usersList, setUsersList] = useState<ConnectedUser[]>(propUsers || []);
   const [reservationsList, setReservationsList] = useState<Reservation[]>(propReservations || []);
   const [storesList, setStoresList] = useState<Store[]>(propStores || []);
+  // Authoritative metrics from mall_dashboard_metrics table
+  const [liveMetrics, setLiveMetrics] = useState<Record<string, number>>({});
+  // Live coupon redemptions count
+  const [liveCouponCount, setLiveCouponCount] = useState<number>(0);
+  // Previous poll snapshot for real % change calculation
+  const prevKpiSnapshot = React.useRef<Record<string, number>>({});
+  const [kpiDeltas, setKpiDeltas] = useState<Record<string, string>>({});
   
   const [topStoresChart, setTopStoresChart] = useState<TopStoresChartData>(TOP_PERFORMING_STORES_CHART);
   const [categoryDistributionChart, setCategoryDistributionChart] = useState<CategoryDistributionChartData>(CATEGORY_DISTRIBUTION);
   const [highestDwellZone, setHighestDwellZone] = useState<string>('Food Court (32%)');
+  // Live chart data from Supabase (fallback to mock constants if no live data)
+  const [hourlyWifiChart, setHourlyWifiChart] = useState(HOURLY_CONNECTED_USERS);
+  const [dailyFootfallChart, setDailyFootfallChart] = useState(DAILY_FOOTFALL);
   const [isLivePaused, setIsLivePaused] = useState(false);
 
   // Sync state when props update
@@ -135,7 +148,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Unified Live Supabase Data Fetcher
   const loadAllLiveDashboardData = async () => {
     try {
-      const [ordersRes, usersRes, resRes, storesRes, campRes, coupRes, logsRes, chartsRes] = await Promise.all([
+      const [ordersRes, usersRes, resRes, storesRes, campRes, coupRes, logsRes, chartsRes, metricsRes, couponCountRes] = await Promise.all([
         fetchOrdersFromSupabase().catch(() => ({ data: [], isLive: false })),
         fetchConnectedUsersFromSupabase().catch(() => ({ data: [], isLive: false })),
         fetchReservationsFromSupabase().catch(() => ({ data: [], isLive: false })),
@@ -143,7 +156,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         fetchCampaignsFromSupabase().catch(() => ({ data: [], isLive: false })),
         fetchCouponsFromSupabase().catch(() => ({ data: [], isLive: false })),
         fetchActivityLogsFromSupabase().catch(() => ({ data: [], isLive: false })),
-        fetchDashboardAnalyticsChartsFromSupabase().catch(() => null)
+        fetchDashboardAnalyticsChartsFromSupabase().catch(() => null),
+        fetchDashboardMetricsFromSupabase(selectedMall).catch(() => ({ metrics: null, kpiItems: [], isLive: false })),
+        fetchCouponRedemptionsCountFromSupabase().catch(() => ({ count: 0, isLive: false }))
       ]);
 
       if (ordersRes.data && ordersRes.data.length > 0) setOrdersList(ordersRes.data);
@@ -154,11 +169,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       if (coupRes.data && coupRes.data.length > 0) setCouponsList(coupRes.data);
       if (logsRes.data && logsRes.data.length > 0) setActivityFeed(logsRes.data);
 
+      // Authoritative metrics from mall_dashboard_metrics table
+      if (metricsRes.isLive && metricsRes.metrics) {
+        const m = metricsRes.metrics as Record<string, number>;
+        setLiveMetrics(m);
+      }
+
+      // Live coupon redemptions count from coupon_redemptions table
+      if (couponCountRes.isLive && couponCountRes.count > 0) {
+        setLiveCouponCount(couponCountRes.count);
+      }
+
       if (chartsRes) {
         if (chartsRes.topStoresChart) setTopStoresChart(chartsRes.topStoresChart);
         if (chartsRes.categoryDistributionChart) setCategoryDistributionChart(chartsRes.categoryDistributionChart);
         if (chartsRes.highestDwellCategory) setHighestDwellZone(chartsRes.highestDwellCategory);
       }
+
+      // Live hourly WiFi chart (today vs yesterday from store_visits by hour)
+      const wifiRes = await fetchHourlyWifiChartFromSupabase().catch(() => ({ data: null, isLive: false }));
+      if (wifiRes.isLive && wifiRes.data) setHourlyWifiChart(wifiRes.data as any);
+
+      // Live daily footfall trend (this week Mon-Sun from store_visits)
+      const footfallRes = await fetchDailyFootfallChartFromSupabase().catch(() => ({ data: null, isLive: false }));
+      if (footfallRes.isLive && footfallRes.data) setDailyFootfallChart(footfallRes.data as any);
     } catch (err) {
       console.warn('[DashboardView] Live data refresh error:', err);
     }
@@ -190,118 +224,165 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [selectedMall, isLivePaused]);
 
-  // Use authoritative unified active datasets
-  const activeStores = (propStores && propStores.length > 0) ? propStores : storesList;
-  const activeUsers = (propUsers && propUsers.length > 0) ? propUsers : usersList;
-  const activeOrders = (propOrders && propOrders.length > 0) ? propOrders : ordersList;
-  const activeReservations = (propReservations && propReservations.length > 0) ? propReservations : reservationsList;
-  const activeCoupons = (propCoupons && propCoupons.length > 0) ? propCoupons : couponsList;
-  const activeCampaigns = (propCampaigns && propCampaigns.length > 0) ? propCampaigns : campaignsList;
+  // Use authoritative unified active datasets — prefer live Supabase fetched data over stale props
+  const activeStores = storesList.length > 0 ? storesList : (propStores || []);
+  const activeUsers = usersList.length > 0 ? usersList : (propUsers || []);
+  const activeOrders = ordersList.length > 0 ? ordersList : (propOrders || []);
+  const activeReservations = reservationsList.length > 0 ? reservationsList : (propReservations || []);
+  const activeCoupons = couponsList.length > 0 ? couponsList : (propCoupons || []);
+  const activeCampaigns = campaignsList.length > 0 ? campaignsList : (propCampaigns || []);
 
-  // Calculate Real Dynamic Live Metrics strictly from live authoritative data
-  const liveUsersCount = activeUsers.length;
-  
+  // Compute live aggregates from Supabase-fetched store data
+  const liveUsersCount = typeof liveMetrics.active_users === 'number' ? liveMetrics.active_users : activeUsers.length;
+
   const totalStoreFootfall = activeStores.reduce((sum, s) => sum + (Number(s.visitorsToday || (s as any).visitors_today) || 0), 0);
   const totalStoreOrders = activeStores.reduce((sum, s) => sum + (Number(s.ordersCount || (s as any).orders_count) || 0), 0);
   const totalStoreBookings = activeStores.reduce((sum, s) => sum + (Number(s.reservationsCount || (s as any).reservations_count) || 0), 0);
   const totalStoreRevenue = activeStores.reduce((sum, s) => sum + (Number(s.revenueToday || (s as any).revenue_today) || 0), 0);
 
   const liveOrdersRev = activeOrders.reduce((sum, o) => sum + (Number(o.totalAmount || (o as any).total_amount) || 0), 0);
-  const totalGrossRevenue = totalStoreRevenue + liveOrdersRev;
-  const totalOrdersCount = totalStoreOrders + activeOrders.length;
-  const totalReservationsCount = totalStoreBookings + activeReservations.length;
-  const totalVisitorsCount = totalStoreFootfall + activeUsers.length;
 
-  const liveRevenueStr = totalGrossRevenue >= 10000000 
+  // Use mall_dashboard_metrics as authoritative override when available
+  const totalVisitorsCount = typeof liveMetrics.new_users_today === 'number' && liveMetrics.new_users_today > 0
+    ? liveMetrics.new_users_today
+    : totalStoreFootfall + activeUsers.length;
+  const totalOrdersCount = typeof liveMetrics.total_orders_today === 'number' && liveMetrics.total_orders_today > 0
+    ? liveMetrics.total_orders_today
+    : totalStoreOrders + activeOrders.length;
+  const totalReservationsCount = typeof liveMetrics.reservations_today === 'number' && liveMetrics.reservations_today > 0
+    ? liveMetrics.reservations_today
+    : totalStoreBookings + activeReservations.length;
+  const totalGrossRevenue = typeof liveMetrics.total_revenue_today === 'number' && liveMetrics.total_revenue_today > 0
+    ? liveMetrics.total_revenue_today
+    : totalStoreRevenue + liveOrdersRev;
+  const totalCouponsRedeemed = liveCouponCount > 0
+    ? liveCouponCount
+    : (activeCoupons.reduce((sum, c) => sum + (Number(c.redeemedCount) || 0), 0) ||
+       activeCampaigns.reduce((sum, c) => sum + (Number(c.couponsRedeemed) || 0), 0));
+
+  const liveRevenueStr = totalGrossRevenue >= 10000000
     ? `₹${(totalGrossRevenue / 10000000).toFixed(2)} Cr`
     : (totalGrossRevenue >= 100000 ? `₹${(totalGrossRevenue / 100000).toFixed(2)} L` : `₹${totalGrossRevenue.toLocaleString()}`);
 
-  const totalCouponsRedeemed = activeCoupons.reduce((sum, c) => sum + (Number(c.redeemedCount) || 0), 0) ||
-    activeCampaigns.reduce((sum, c) => sum + (Number(c.couponsRedeemed) || 0), 0);
+  // Compute real % change from previous poll vs current values
+  const computeDelta = (key: string, currentVal: number): string => {
+    const prev = prevKpiSnapshot.current[key];
+    if (typeof prev !== 'number' || prev === 0 || currentVal === prev) return kpiDeltas[key] || '–';
+    const pct = ((currentVal - prev) / prev) * 100;
+    const sign = pct >= 0 ? '+' : '';
+    return `${sign}${pct.toFixed(1)}%`;
+  };
 
-  // 8 Dynamic KPI Cards matching real live database state
-  const dynamicKpiData: KpiItem[] = useMemo(() => [
-    {
-      id: 'connected-users',
-      title: 'Connected Users',
-      value: `${liveUsersCount.toLocaleString()} Active`,
-      change: '+12.4%',
-      changeType: 'increase',
-      period: 'vs yesterday',
-      iconName: 'Wifi',
-      sparklineData: [84, 88, 91, 92, 93, liveUsersCount]
-    },
-    {
-      id: 'todays-visitors',
-      title: "Today's Visitors",
-      value: totalVisitorsCount.toLocaleString(),
-      change: '+8.7%',
-      changeType: 'increase',
-      period: 'sensor & wifi aggregate',
-      iconName: 'Users',
-      sparklineData: [14200, 15100, 15800, 16100, totalVisitorsCount]
-    },
-    {
-      id: 'store-visits',
-      title: 'Store Visits',
-      value: totalStoreFootfall.toLocaleString(),
-      change: '+15.2%',
-      changeType: 'increase',
-      period: 'cumulative footfall',
-      iconName: 'ShoppingBag',
-      sparklineData: [14000, 14900, 15600, 16000, totalStoreFootfall]
-    },
-    {
-      id: 'orders',
-      title: 'Orders',
-      value: totalOrdersCount.toLocaleString(),
-      change: '+6.3%',
-      changeType: 'increase',
-      period: '33 flagships + digital POS',
-      iconName: 'Receipt',
-      sparklineData: [3200, 3450, 3600, 3700, totalOrdersCount]
-    },
-    {
-      id: 'reservations',
-      title: 'Reservations',
-      value: totalReservationsCount.toLocaleString(),
-      change: '+18.9%',
-      changeType: 'increase',
-      period: 'dining & services booked',
-      iconName: 'CalendarCheck',
-      sparklineData: [310, 335, 360, 375, totalReservationsCount]
-    },
-    {
-      id: 'revenue',
-      title: 'Revenue',
-      value: liveRevenueStr,
-      change: '+14.1%',
-      changeType: 'increase',
-      period: 'gross mall sales today',
-      iconName: 'IndianRupee',
-      sparklineData: [51000000, 54500000, 58000000, 60000000, totalGrossRevenue]
-    },
-    {
-      id: 'coupon-redemptions',
-      title: 'Coupon Redemptions',
-      value: totalCouponsRedeemed.toLocaleString(),
-      change: '+22.5%',
-      changeType: 'increase',
-      period: 'via AXIONIX app',
-      iconName: 'Ticket',
-      sparklineData: [310, 460, 610, 780, totalCouponsRedeemed]
-    },
-    {
-      id: 'network-bandwidth',
-      title: 'Network Bandwidth',
-      value: `${(liveUsersCount * 0.32 + 14.5).toFixed(1)} GB`,
-      change: '+4.2%',
-      changeType: 'increase',
-      period: '42 APs Online',
-      iconName: 'Zap',
-      sparklineData: [180, 240, 310, 390, 480, Math.round(liveUsersCount * 0.32 + 14.5)]
-    }
-  ], [liveUsersCount, totalVisitorsCount, totalStoreFootfall, totalOrdersCount, totalReservationsCount, totalGrossRevenue, liveRevenueStr, totalCouponsRedeemed]);
+  // Update snapshot after computing deltas (deferred so deltas show change vs PREVIOUS)
+  React.useEffect(() => {
+    const snap = {
+      users: liveUsersCount,
+      visitors: totalVisitorsCount,
+      footfall: totalStoreFootfall,
+      orders: totalOrdersCount,
+      reservations: totalReservationsCount,
+      revenue: totalGrossRevenue,
+      coupons: totalCouponsRedeemed
+    };
+    setKpiDeltas({
+      users: computeDelta('users', liveUsersCount),
+      visitors: computeDelta('visitors', totalVisitorsCount),
+      footfall: computeDelta('footfall', totalStoreFootfall),
+      orders: computeDelta('orders', totalOrdersCount),
+      reservations: computeDelta('reservations', totalReservationsCount),
+      revenue: computeDelta('revenue', totalGrossRevenue),
+      coupons: computeDelta('coupons', totalCouponsRedeemed)
+    });
+    prevKpiSnapshot.current = snap;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveUsersCount, totalVisitorsCount, totalStoreFootfall, totalOrdersCount, totalReservationsCount, totalGrossRevenue, totalCouponsRedeemed]);
+
+  // 8 Dynamic KPI Cards — values from live Supabase tables, % change computed from consecutive polls
+  const dynamicKpiData: KpiItem[] = useMemo(() => {
+    const bw = parseFloat((liveUsersCount * 0.32 + 14.5).toFixed(1));
+    return [
+      {
+        id: 'connected-users',
+        title: 'Connected Users',
+        value: `${liveUsersCount.toLocaleString()} Active`,
+        change: kpiDeltas.users || '–',
+        changeType: (kpiDeltas.users || '').startsWith('+') ? 'increase' : ((kpiDeltas.users || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: 'vs last poll (live)',
+        iconName: 'Wifi',
+        sparklineData: [84, 88, 91, 92, 93, liveUsersCount]
+      },
+      {
+        id: 'todays-visitors',
+        title: "Today's Visitors",
+        value: totalVisitorsCount.toLocaleString(),
+        change: kpiDeltas.visitors || '–',
+        changeType: (kpiDeltas.visitors || '').startsWith('+') ? 'increase' : ((kpiDeltas.visitors || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: 'sensor & wifi aggregate',
+        iconName: 'Users',
+        sparklineData: [14200, 15100, 15800, 16100, totalVisitorsCount]
+      },
+      {
+        id: 'store-visits',
+        title: 'Store Visits',
+        value: totalStoreFootfall.toLocaleString(),
+        change: kpiDeltas.footfall || '–',
+        changeType: (kpiDeltas.footfall || '').startsWith('+') ? 'increase' : ((kpiDeltas.footfall || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: 'cumulative footfall',
+        iconName: 'ShoppingBag',
+        sparklineData: [14000, 14900, 15600, 16000, totalStoreFootfall]
+      },
+      {
+        id: 'orders',
+        title: 'Orders',
+        value: totalOrdersCount.toLocaleString(),
+        change: kpiDeltas.orders || '–',
+        changeType: (kpiDeltas.orders || '').startsWith('+') ? 'increase' : ((kpiDeltas.orders || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: '33 flagships + digital POS',
+        iconName: 'Receipt',
+        sparklineData: [3200, 3450, 3600, 3700, totalOrdersCount]
+      },
+      {
+        id: 'reservations',
+        title: 'Reservations',
+        value: totalReservationsCount.toLocaleString(),
+        change: kpiDeltas.reservations || '–',
+        changeType: (kpiDeltas.reservations || '').startsWith('+') ? 'increase' : ((kpiDeltas.reservations || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: 'dining & services booked',
+        iconName: 'CalendarCheck',
+        sparklineData: [310, 335, 360, 375, totalReservationsCount]
+      },
+      {
+        id: 'revenue',
+        title: 'Revenue',
+        value: liveRevenueStr,
+        change: kpiDeltas.revenue || '–',
+        changeType: (kpiDeltas.revenue || '').startsWith('+') ? 'increase' : ((kpiDeltas.revenue || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: 'gross mall sales today',
+        iconName: 'IndianRupee',
+        sparklineData: [51000000, 54500000, 58000000, 60000000, totalGrossRevenue]
+      },
+      {
+        id: 'coupon-redemptions',
+        title: 'Coupon Redemptions',
+        value: totalCouponsRedeemed.toLocaleString(),
+        change: kpiDeltas.coupons || '–',
+        changeType: (kpiDeltas.coupons || '').startsWith('+') ? 'increase' : ((kpiDeltas.coupons || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: 'via AXIONIX app (live DB)',
+        iconName: 'Ticket',
+        sparklineData: [310, 460, 610, 780, totalCouponsRedeemed]
+      },
+      {
+        id: 'network-bandwidth',
+        title: 'Network Bandwidth',
+        value: `${bw} GB`,
+        change: kpiDeltas.users ? (parseFloat(kpiDeltas.users) > 0 ? `+${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%` : `${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%`) : '–',
+        changeType: (kpiDeltas.users || '').startsWith('+') ? 'increase' : ((kpiDeltas.users || '').startsWith('-') ? 'decrease' : 'increase'),
+        period: '42 APs Online',
+        iconName: 'Zap',
+        sparklineData: [180, 240, 310, 390, 480, Math.round(bw)]
+      }
+    ];
+  }, [liveUsersCount, totalVisitorsCount, totalStoreFootfall, totalOrdersCount, totalReservationsCount, totalGrossRevenue, liveRevenueStr, totalCouponsRedeemed, kpiDeltas]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -435,7 +516,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="h-64 sm:h-72">
             <Line 
-              data={HOURLY_CONNECTED_USERS}
+              data={hourlyWifiChart}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
@@ -501,7 +582,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="h-56">
             <Bar 
-              data={DAILY_FOOTFALL}
+              data={dailyFootfallChart}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,

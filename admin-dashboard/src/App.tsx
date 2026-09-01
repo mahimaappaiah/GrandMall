@@ -88,7 +88,16 @@ export default function App() {
   const [storesList, setStoresList] = useState<Store[]>(MOCK_STORES);
 
   // Real-time Lists State (Preserved and Persistent across browser refreshes)
-  const [usersList, setUsersList] = useState<ConnectedUser[]>([]);
+  const [usersList, setUsersList] = useState<ConnectedUser[]>(() => {
+    try {
+      const saved = localStorage.getItem('axionix_users_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
 
   const [ordersList, setOrdersList] = useState<Order[]>(() => {
     try {
@@ -123,7 +132,9 @@ export default function App() {
   const [campaignsList, setCampaignsList] = useState<Campaign[]>([]);
 
   useEffect(() => {
-    try { localStorage.setItem('axionix_users_list', JSON.stringify(usersList)); } catch (e) {}
+    if (usersList && usersList.length > 0) {
+      try { localStorage.setItem('axionix_users_list', JSON.stringify(usersList)); } catch (e) {}
+    }
   }, [usersList]);
 
   useEffect(() => {
@@ -247,7 +258,30 @@ export default function App() {
         setStoresList(storesRes.data);
       }
       if (usersRes.data && usersRes.isLive) {
-        setUsersList(usersRes.data);
+        setUsersList(prev => {
+          const map = new Map<string, ConnectedUser>();
+          prev.forEach(u => map.set(getAppUserKey(u), { ...u }));
+          usersRes.data.forEach((u: ConnectedUser) => {
+            const key = getAppUserKey(u);
+            const existing = map.get(key);
+            const existingStores = existing?.visitedStores || [];
+            const incomingStores = u.visitedStores || [];
+            const mergedStores = Array.from(new Set([...existingStores, ...incomingStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+            map.set(key, {
+              ...existing,
+              ...u,
+              visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || [])
+            });
+          });
+          const list = Array.from(map.values());
+          list.sort((a: any, b: any) => {
+            const timeA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+            const timeB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+            return timeB - timeA;
+          });
+          return list;
+        });
       }
       if (ordersRes.data && ordersRes.isLive) {
         setOrdersList(ordersRes.data);
@@ -305,7 +339,30 @@ export default function App() {
     const unsubWifi = realtimeManager.subscribe('wifi_sessions', () => {
       fetchConnectedUsersFromSupabase().then(res => {
         if (res.data && res.isLive) {
-          setUsersList(res.data);
+          setUsersList(prev => {
+            const map = new Map<string, ConnectedUser>();
+            prev.forEach(u => map.set(getAppUserKey(u), { ...u }));
+            res.data.forEach((u: ConnectedUser) => {
+              const key = getAppUserKey(u);
+              const existing = map.get(key);
+              const existingStores = existing?.visitedStores || [];
+              const incomingStores = u.visitedStores || [];
+              const mergedStores = Array.from(new Set([...existingStores, ...incomingStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+              map.set(key, {
+                ...existing,
+                ...u,
+                visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || [])
+              });
+            });
+            const list = Array.from(map.values());
+            list.sort((a: any, b: any) => {
+              const timeA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+              const timeB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+              return timeB - timeA;
+            });
+            return list;
+          });
         }
       });
     });
@@ -608,11 +665,19 @@ export default function App() {
             map.set(key, {
               ...existing,
               ...u,
-              visitedStores: mergedStores,
+              connectionTime: existing?.connectionTime || u.connectionTime,
+              sessionDuration: existing?.sessionDuration || u.sessionDuration,
+              visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || []),
               status: u.status || existing?.status || 'Active'
             });
           });
-          return Array.from(map.values());
+          const list = Array.from(map.values());
+          list.sort((a: any, b: any) => {
+            const timeA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+            const timeB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+            return timeB - timeA;
+          });
+          return list;
         });
       }
     } catch (e) {}
@@ -629,7 +694,30 @@ export default function App() {
 
         const usersRes = await fetchConnectedUsersFromSupabase();
         if (usersRes.data && usersRes.isLive) {
-          setUsersList(usersRes.data);
+          setUsersList(prev => {
+            const map = new Map<string, ConnectedUser>();
+            prev.forEach(u => map.set(getAppUserKey(u), { ...u }));
+            usersRes.data.forEach((u: ConnectedUser) => {
+              const key = getAppUserKey(u);
+              const existing = map.get(key);
+              const existingStores = existing?.visitedStores || [];
+              const incomingStores = u.visitedStores || [];
+              const mergedStores = Array.from(new Set([...existingStores, ...incomingStores])).filter(s => s && s !== 'Wi-Fi Captive Portal');
+
+              map.set(key, {
+                ...existing,
+                ...u,
+                visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || [])
+              });
+            });
+            const list = Array.from(map.values());
+            list.sort((a: any, b: any) => {
+              const timeA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+              const timeB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+              return timeB - timeA;
+            });
+            return list;
+          });
         }
 
         const ordersRes = await fetchOrdersFromSupabase();

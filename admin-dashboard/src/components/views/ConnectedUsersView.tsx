@@ -14,7 +14,17 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
   const [search, setSearch] = useState('');
   const [deviceFilter, setDeviceFilter] = useState('All');
   const [vipOnly, setVipOnly] = useState(false);
-  const [liveUsersList, setLiveUsersList] = useState<ConnectedUser[]>(propUsers && propUsers.length > 0 ? propUsers : []);
+  const [liveUsersList, setLiveUsersList] = useState<ConnectedUser[]>(() => {
+    if (propUsers && propUsers.length > 0) return propUsers;
+    try {
+      const cached = localStorage.getItem('axionix_users_list');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   function getCleanPhone(p?: string): string {
@@ -58,15 +68,18 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
           userMap.set(key, {
             ...existing,
             ...u,
+            connectionTime: u.connectionTime || existing?.connectionTime,
+            sessionDuration: u.sessionDuration || existing?.sessionDuration,
             visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || [])
           });
         });
         const list = Array.from(userMap.values());
         list.sort((a: any, b: any) => {
-          const timeA = a._rawTimestamp || a.created_at || a.connectionTime || 0;
-          const timeB = b._rawTimestamp || b.created_at || b.connectionTime || 0;
-          return new Date(timeB).getTime() - new Date(timeA).getTime();
+          const timeA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+          const timeB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+          return timeB - timeA;
         });
+        try { localStorage.setItem('axionix_users_list', JSON.stringify(list)); } catch (e) {}
         return list;
       });
     }
@@ -74,23 +87,23 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
 
   const fetchLiveConnectedUsers = useCallback(async () => {
     try {
-      // 1. Fetch live profiles & Wi-Fi sessions from Supabase
+      // 1. Fetch live profiles & Wi-Fi sessions from Supabase (Primary Authoritative Source)
       const supaRes = await fetchConnectedUsersFromSupabase();
       let users = Array.isArray(supaRes.data) && supaRes.data.length > 0 ? supaRes.data : [];
 
-      // 2. Query backend live captive session list as additional real-time source
+      // 2. Query backend live captive session list as additional real-time source without overwriting Supabase authority
       try {
         const bRes = await fetch(`${BACKEND_URL}/api/auth/connected-users`);
         const bData = await bRes.json();
         if (bData && bData.success && Array.isArray(bData.users) && bData.users.length > 0) {
           const userMap = new Map<string, ConnectedUser>();
 
-          // Seed with Supabase users
+          // Seed with authoritative Supabase users
           users.forEach(u => {
             userMap.set(findKey(u), u);
           });
 
-          // Overlay real-time active statuses from backend gateway
+          // Overlay real-time active gateway telemetry
           bData.users.forEach((bu: any) => {
             const key = findKey(bu);
             const existing = userMap.get(key);
@@ -101,7 +114,7 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
 
               userMap.set(key, {
                 ...existing,
-                visitedStores: mergedStores,
+                visitedStores: mergedStores.length > 0 ? mergedStores : existing.visitedStores,
                 status: bu.status || existing.status || 'Active',
                 zone: bu.zone || existing.zone || 'Ground Floor Atrium',
                 dataUsed: bu.dataUsed || existing.dataUsed || '45 MB'
@@ -130,16 +143,19 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
             userMap.set(key, {
               ...existing,
               ...u,
+              connectionTime: u.connectionTime || existing?.connectionTime,
+              sessionDuration: u.sessionDuration || existing?.sessionDuration,
               visitedStores: mergedStores.length > 0 ? mergedStores : (existing?.visitedStores || u.visitedStores || [])
             });
           });
 
           const mergedList = Array.from(userMap.values());
           mergedList.sort((a: any, b: any) => {
-            const timeA = a._rawTimestamp || a.created_at || a.connectionTime || 0;
-            const timeB = b._rawTimestamp || b.created_at || b.connectionTime || 0;
-            return new Date(timeB).getTime() - new Date(timeA).getTime();
+            const timeA = a._rawTimestamp ? new Date(a._rawTimestamp).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+            const timeB = b._rawTimestamp ? new Date(b._rawTimestamp).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+            return timeB - timeA;
           });
+          try { localStorage.setItem('axionix_users_list', JSON.stringify(mergedList)); } catch (e) {}
           return mergedList;
         });
       }
@@ -196,15 +212,29 @@ export const ConnectedUsersView: React.FC<ConnectedUsersViewProps> = ({ onSelect
 
   const filteredUsers = liveUsersList.filter(u => {
     const nameStr = (u.name || '').toLowerCase();
-    const phoneStr = (u.phone || '');
+    const phoneDigits = (u.phone || '').replace(/\D/g, '');
+    const rawPhone = (u.phone || '').toLowerCase();
     const macStr = (u.macAddress || '').toLowerCase();
-    const searchLower = search.toLowerCase();
+    const searchLower = search.toLowerCase().trim();
+    const searchDigits = search.replace(/\D/g, '');
 
-    const matchesSearch = !search || 
+    const matchesSearch = !searchLower || 
                           nameStr.includes(searchLower) || 
-                          phoneStr.includes(search) || 
-                          macStr.includes(searchLower);
-    const matchesDevice = deviceFilter === 'All' || u.deviceType === deviceFilter;
+                          (searchDigits.length > 0 && phoneDigits.includes(searchDigits)) ||
+                          rawPhone.includes(searchLower) ||
+                          macStr.includes(searchLower) ||
+                          (u.visitedStores || []).some((s: string) => (s || '').toLowerCase().includes(searchLower)) ||
+                          (u.zone || '').toLowerCase().includes(searchLower);
+
+    const dev = (u.deviceType || '').toLowerCase();
+    const filterDev = deviceFilter.toLowerCase();
+    const matchesDevice = deviceFilter === 'All' || 
+                          dev === filterDev || 
+                          dev.includes(filterDev) || 
+                          filterDev.includes(dev) ||
+                          (filterDev === 'windows' && dev.includes('win')) ||
+                          (filterDev === 'macos' && (dev.includes('mac') || dev.includes('apple')));
+
     const matchesVip = !vipOnly || Boolean(u.vipStatus);
     return matchesSearch && matchesDevice && matchesVip;
   });
