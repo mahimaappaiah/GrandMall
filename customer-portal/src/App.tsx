@@ -2472,6 +2472,243 @@ const PORTAL_STANDARD_TIME_SLOTS = ['12:00 PM', '14:00 PM', '16:00 PM', '17:00 P
   const pointsDiscountAmount = Math.floor(pointsRedeemed / 10);
   const finalCartTotal = Math.max(0, rawCartTotal - discountAmount - pointsDiscountAmount);
 
+  // ---------------------------------------------------------------------------
+  // INTELLIGENT GEMINI AI CONCIERGE NLP & DIRECTORY ENGINE
+  // ---------------------------------------------------------------------------
+  const generateAiConciergeResponse = (rawQuery: string): string => {
+    const query = rawQuery.toLowerCase().trim();
+    if (!query) return "Hello! How can I assist you at The Grand Mall today?";
+
+    // 1. GREETINGS & CASUAL CONVERSATION
+    if (/^(hi|hello|hey|greetings|good morning|good afternoon|good evening|namaste|hola)(\s|$|[!?.,])/i.test(query) && query.length < 35) {
+      return "Hello! Welcome to The Grand Mall. I am your Gemini AI Concierge. Ask me about store locations, fashion recommendations (hoodies, shoes, luxury watches), dining spots, active coupons, or VIP suite reservations!";
+    }
+    if (query.includes('thank') || query.includes('thanks') || query.includes('awesome') || query.includes('great')) {
+      return "You're very welcome! Enjoy your shopping experience at The Grand Mall. Let me know if you need anything else!";
+    }
+    if (query.includes('who are you') || query.includes('what can you do')) {
+      return "I am the Gemini AI Concierge for The Grand Mall. I can guide you to all 33 flagship stores, recommend trending outfits & electronics, assist with table reservations, provide discount coupons, and find mall amenities!";
+    }
+
+    // 2. SPECIFIC BRAND DIRECTORY LOOKUP (e.g. "Which floor is Nike on?", "Where is Starbucks?", "Rolex location")
+    for (const store of ALL_STORES) {
+      const sName = store.name.toLowerCase();
+      const shortName = sName.split(' ')[0]; // 'nike', 'zara', 'rolex', 'starbucks', 'apple', etc.
+      if (query.includes(sName) || (shortName.length > 3 && query.includes(shortName))) {
+        const isLocationQuery = query.includes('floor') || query.includes('where') || query.includes('location') || query.includes('wing') || query.includes('find');
+        const isHoursQuery = query.includes('hour') || query.includes('open') || query.includes('time') || query.includes('close');
+        const isContactQuery = query.includes('contact') || query.includes('phone') || query.includes('call') || query.includes('manager');
+
+        if (isHoursQuery) {
+          return `⏰ **${store.name}** (${store.floor}, ${store.zone}) is open **${store.openHours}**. It is currently **${store.status}**!`;
+        }
+        if (isContactQuery) {
+          return `📞 **${store.name}** Manager: ${store.manager} • Phone: ${store.phone} (Location: ${store.floor}, ${store.zone}).`;
+        }
+
+        const sampleItems = store.items.slice(0, 3).map(i => `${i.name} (₹${i.price.toLocaleString()})`).join(', ');
+        return `📍 **${store.name}** is located on the **${store.floor} (${store.zone})**.
+Status: ${store.status} • Hours: ${store.openHours} • Rating: ⭐ ${store.rating}
+Popular items: ${sampleItems}. ${store.category === 'Fashion' ? 'You can also book a VIP fitting room suite right here in the portal!' : (store.category === 'Food' ? 'You can book dining tables directly in the portal!' : '')}`;
+      }
+    }
+
+    // 3. HOODIES / SWEATSHIRTS / JACKETS / WINTER WEAR
+    if (query.includes('hoodie') || query.includes('sweatshirt') || query.includes('jacket') || query.includes('fleece') || query.includes('sweater') || query.includes('coat')) {
+      return `🧥 For **Hoodies & Outerwear**, we recommend:
+1. **Nike Flagship** (1st Floor North Wing) — *Nike Sportswear Club Fleece Hoodie* (₹4,495) & Tech Fleece full-zips.
+2. **Zara Flagship** (1st Floor West Wing) — *Oversized Heavyweight Cotton Hoodie* (₹3,990) & Relaxed Zip Sweaters.
+3. **H&M Concept** (2nd Floor Central) — *Relaxed Fit Cotton-Blend Hoodie* (₹2,299) for casual streetwear.
+4. **Gucci Boutique** (1st Floor Luxury Avenue) — *Embroidered Interlocking-G Fleece Hoodie* for luxury designer fashion.
+
+💡 You can reserve a VIP fitting room at Zara or Nike to try them on in private!`;
+    }
+
+    // 4. SHOES / SNEAKERS / FOOTWEAR
+    if (query.includes('shoe') || query.includes('sneaker') || query.includes('footwear') || query.includes('running') || query.includes('heels') || query.includes('loafers') || query.includes('boots')) {
+      return `👟 For **Shoes & Footwear**, check out:
+1. **Nike Flagship** (1st Floor North Wing) — *Air Jordan 1 Retro High OG* (₹16,995), *Nike Air Max 270* (₹13,995), and *Pegasus 40* running shoes.
+2. **Zara Flagship** (1st Floor West Wing) — *Chunky Leather Platform Sneakers* (₹5,990) and minimalist formal dress shoes.
+3. **Gucci Boutique** (1st Floor) — *Gucci Ace Embroidered Sneaker* (₹68,000) & Princetown Leather Slippers.
+4. **Louis Vuitton Maison** (Ground Floor) — *LV Trainer Sneaker* in Monogram Denim.`;
+    }
+
+    // 5. FOOD / RESTAURANTS / DINING / COFFEE / HUNGRY
+    if (query.includes('eat') || query.includes('food') || query.includes('dining') || query.includes('hungry') || query.includes('restaurant') || query.includes('lunch') || query.includes('dinner') || query.includes('breakfast') || query.includes('brunch') || query.includes('coffee') || query.includes('pizza') || query.includes('burger') || query.includes('dumpling') || query.includes('ice cream') || query.includes('dessert')) {
+      if (query.includes('coffee') || query.includes('cafe') || query.includes('latte') || query.includes('croissant')) {
+        return `☕ For the best **Coffee & Bakery**, visit **Starbucks Reserve** on the **Ground Floor East Wing**! Try the *Artisan Cold Brew & Butter Croissant* (₹520) or *Reserve Truffle Mushroom Sourdough* (₹850).`;
+      }
+      if (query.includes('ice cream') || query.includes('dessert') || query.includes('waffle') || query.includes('sweet')) {
+        return `🍨 For **Desserts & Ice Cream**, visit **Häagen-Dazs** on the **Ground Floor Central Atrium**! Signature: *Belgian Chocolate Fondue Platter* (₹950) & *Dulce de Leche Sundae* (₹620).`;
+      }
+      if (query.includes('dumpling') || query.includes('chinese') || query.includes('dim sum') || query.includes('asian') || query.includes('noodle')) {
+        return `🥟 For Asian cuisine & Michelin-style Dim Sum, visit **Din Tai Fung** on the **2nd Floor Dining Hub North**! Must-try: *Signature Pork Xiao Long Bao* (₹850) & *Spicy Sichuan Noodles* (₹590).`;
+      }
+      if (query.includes('pizza') || query.includes('italian') || query.includes('pasta')) {
+        return `🍕 For Italian dining, visit **PizzaExpress Gourmet** on the **2nd Floor Food Court South**! Signature: *Romana Padana Artisan Pizza* (₹820).`;
+      }
+      return `🍽️ The Grand Mall features award-winning dining on the **2nd Floor Dining Hub** and **Ground Floor**:
+• **Din Tai Fung** (2nd Floor North) — World-famous Xiao Long Bao & Asian specialties (⭐ 4.9).
+• **PizzaExpress Gourmet** (2nd Floor South) — Handcrafted Roman pizzas & pastas (⭐ 4.7).
+• **Starbucks Reserve** (Ground Floor East) — Artisanal roasts, brunch toasts & gourmet pastries (⭐ 4.8).
+• **Häagen-Dazs** (Ground Floor Atrium) — Belgian chocolate fondue & artisanal sundaes (⭐ 4.7).
+
+💡 Table reservations with instant seating confirmation can be booked directly in this portal!`;
+    }
+
+    // 6. WATCHES / JEWELRY / LUXURY GIFTS
+    if (query.includes('watch') || query.includes('timepiece') || query.includes('jewelry') || query.includes('jewellery') || query.includes('diamond') || query.includes('gold') || query.includes('ring') || query.includes('necklace') || query.includes('rolex') || query.includes('omega') || query.includes('tiffany') || query.includes('cartier') || query.includes('tanishq')) {
+      return `💎 For **Luxury Watches & Fine Jewelry**:
+1. **Rolex Boutique** (Ground Floor Atrium) — *Rolex Submariner Date* & *Datejust 41* Swiss timepieces.
+2. **Omega Watch Atelier** (Ground Floor Atrium) — *Speedmaster Moonwatch Professional* & *Seamaster Diver 300M*.
+3. **Cartier High Jewelry** (Ground Floor Luxury Wing) — *Love Bracelet in 18k Yellow Gold* (₹6,50,000) & *Panthère de Cartier*.
+4. **Tiffany & Co.** (Ground Floor East Wing) — *Tiffany Setting Diamond Solitaire Ring* & *Tiffany T1 Wide Bangle*.
+5. **Tanishq Royal Heritage** (Ground Floor) — 22k gold bridal jewelry & Kundan royal heirlooms.
+6. **Malabar Gold & Diamonds** (Ground Floor) — Certified IGI diamond solitaires & hallmark gold.`;
+    }
+
+    // 7. BEAUTY / COSMETICS / PERFUMES / SKINCARE
+    if (query.includes('makeup') || query.includes('perfume') || query.includes('fragrance') || query.includes('lipstick') || query.includes('skincare') || query.includes('beauty') || query.includes('cologne') || query.includes('sephora') || query.includes('mac')) {
+      return `💄 For **Beauty, Cosmetics & Fragrances**:
+1. **Sephora Haute Parfumerie** (Ground Floor West Wing) — Luxury fragrances (Dior, Chanel, Tom Ford), *Fenty Beauty Gloss Bomb*, and *Huda Beauty Empress Palette*.
+2. **MAC Cosmetics Pro Studio** (Ground Floor) — *Ruby Woo Retro Matte Lipstick* & Studio Fix fluid foundation.
+3. **Jo Malone London** (Ground Floor Central) — *English Pear & Freesia Cologne* (₹11,500) & luxury scented candles.
+4. **Bath & Body Works** (1st Floor) — 3-wick candles, body mists & aromatherapy sets.`;
+    }
+
+    // 8. ELECTRONICS / GADGETS / LAPTOPS / PHONES / AUDIO
+    if (query.includes('electronics') || query.includes('phone') || query.includes('iphone') || query.includes('laptop') || query.includes('macbook') || query.includes('gadget') || query.includes('apple') || query.includes('sony') || query.includes('bose') || query.includes('headphone') || query.includes('tv') || query.includes('camera')) {
+      return `⚡ For **Electronics & Tech**:
+1. **Apple Experience Store** (1st Floor Tech Promenade) — *iPhone 16 Pro Max*, *MacBook Pro M3 Max*, *iPad Pro M4*, and *AirPods Max*.
+2. **Bose Audio Lounge** (1st Floor) — *QuietComfort Ultra Headphones* & *Smart Soundbar 900*.
+3. **Sony Center** (1st Floor) — *WH-1000XM5 Noise Cancelling Headphones*, *PlayStation 5 Pro*, and *Bravia 4K OLED TVs*.
+4. **Croma Mega Store** (1st Floor East Wing) — Multi-brand home appliances, gaming laptops, and mobile accessories.`;
+    }
+
+    // 9. KIDS & TOYS
+    if (query.includes('kid') || query.includes('toy') || query.includes('child') || query.includes('baby') || query.includes('game') || query.includes('lego') || query.includes('hamleys')) {
+      return `🧸 For **Kids & Family**:
+1. **Hamleys Toy Kingdom** (2nd Floor Family Zone) — Plush toys, remote-controlled cars, board games, and live magic demonstrations!
+2. **Lego Certified Store** (2nd Floor) — *Lego Star Wars Millennium Falcon*, *Lego Technic Ferrari*, and build-your-own minifigure stations.
+3. **PVR IMAX & Kids Cinema Lounge** (3rd Floor) — Family movie screenings and gaming arcade.`;
+    }
+
+    // 10. SUNGLASSES & EYEWEAR
+    if (query.includes('sunglass') || query.includes('glass') || query.includes('eyewear') || query.includes('spectacles') || query.includes('lenskart') || query.includes('ray-ban') || query.includes('oakley')) {
+      return `🕶️ For **Eyewear & Sunglasses**:
+1. **Ray-Ban Sunglass Hut** (1st Floor Central) — *Classic Aviator Total Black* (₹10,590) & *Wayfarer Polarized*.
+2. **Sunglass Hut Premier** (1st Floor) — Luxury shades from Versace, Prada, and Burberry.
+3. **Oakley Performance Vision** (1st Floor North) — Sport polarized shades with Prizm lenses.
+4. **Lenskart Gold Lounge** (1st Floor) — 3D eye testing and John Jacobs titanium frames.`;
+    }
+
+    // 11. COUPONS, PROMOS & DISCOUNTS
+    if (query.includes('coupon') || query.includes('offer') || query.includes('discount') || query.includes('deal') || query.includes('promo') || query.includes('save') || query.includes('points') || query.includes('loyalty')) {
+      return `🎟️ **Active Grand Mall Promotional Offers & Coupons:**
+• **GRANDMALL20** — 20% OFF on concierge orders across the mall.
+• **ZARASUMMER10** — 10% OFF on Zara summer fashion.
+• **STARBUCKSBOGO** — Buy 1 Get 1 Free on all handcrafted beverages.
+• **NIKE15** — 15% OFF performance footwear & activewear.
+• **TIFFANYDIAMOND** — Flat ₹15,000 OFF fine jewelry.
+
+⭐ **Loyalty Rewards:** Earn 10 points for every ₹100 spent. Redeem 10 points = ₹1 instant discount during checkout!`;
+    }
+
+    // 12. VIP RESERVATIONS & FITTING ROOMS
+    if (query.includes('fitting') || query.includes('reservation') || query.includes('reserve') || query.includes('book') || query.includes('suite') || query.includes('table')) {
+      return `✨ **VIP Concierge Suite & Table Reservations:**
+You can book private shopping and dining suites directly in this portal:
+• **VIP Wardrobe Fitting Suites:** Available at *Nike Flagship*, *Zara*, *Louis Vuitton Maison*, and *Gucci Boutique*. Enjoy complimentary champagne, personal stylists, and mirror lighting.
+• **Dining Table Bookings:** Instant confirmed seating at *Din Tai Fung*, *PizzaExpress Gourmet*, and *Starbucks Reserve*.
+
+👉 Tap on any store and click **"Reserve VIP Suite"** or **"Book Dining Table"**!`;
+    }
+
+    // 13. MALL SERVICES & AMENITIES
+    if (query.includes('washroom') || query.includes('restroom') || query.includes('toilet') || query.includes('loo')) {
+      return `🚻 **Restrooms & Washrooms:** Located on all floors (Ground, 1st, 2nd, and 3rd Floor) adjacent to the central elevators and escalators in both the East and West wings. Dedicated accessible washrooms and baby diaper changing stations are located on the 1st & 2nd floors.`;
+    }
+    if (query.includes('parking') || query.includes('valet') || query.includes('car') || query.includes('ev') || query.includes('charge')) {
+      return `🚗 **Parking & Valet Services:**
+• **Valet Drop-off:** Available at the Main Grand Portico (East Wing Entrance).
+• **Multi-level Parking:** Basement Levels B1, B2, and B3 with 2,400+ smart sensor parking bays.
+• **EV Fast Chargers:** 16 ultra-fast 60kW DC charging points on Basement B1 near Pillar 14.`;
+    }
+    if (query.includes('wifi') || query.includes('internet') || query.includes('speed') || query.includes('network')) {
+      return `📶 **High-Speed Mall Wi-Fi:** Complimentary high-speed Wi-Fi (up to 300 Mbps) is powered across 42 enterprise Wi-Fi 6 Access Points. Simply keep your mobile number verified on this portal to stay connected everywhere in the mall!`;
+    }
+    if (query.includes('cinema') || query.includes('movie') || query.includes('theatre') || query.includes('imax') || query.includes('pvr')) {
+      return `🎬 **PVR IMAX 4K Cinema:** Located on the **3rd Floor Entertainment Zone**. Features 8 screens with Dolby Atmos sound, VIP recliner seating, and gourmet in-seat food service.`;
+    }
+    if (query.includes('help') || query.includes('lost') || query.includes('desk') || query.includes('wheelchair') || query.includes('stroller') || query.includes('information') || query.includes('security')) {
+      return `ℹ️ **Information & Guest Services:**
+The Information Desk is located at the **Ground Floor Central Atrium** (near the fountain).
+Services offered:
+• Complimentary wheelchairs & baby strollers.
+• Lost & Found repository.
+• Foreign currency exchange & Tax-Free refund counter.
+• Mall Wayfinding maps & shopping concierge.`;
+    }
+
+    // 14. FLOOR DIRECTORY GUIDANCE
+    if (query.includes('ground') || query.includes('gf')) {
+      return `🏛️ **Ground Floor Directory:** Luxury boutiques & fine dining: Rolex, Cartier, Tiffany & Co., Louis Vuitton Maison, Starbucks Reserve, Häagen-Dazs, Guest Information Desk, and Main Entrance.`;
+    }
+    if (query.includes('first floor') || query.includes('1st floor') || query.includes('1f')) {
+      return `🛍️ **1st Floor Directory:** Flagship fashion & electronics: Nike Flagship, Zara Flagship, Apple Experience Store, Gucci Boutique, Prada Atelier, Bose Audio, and Sunglass Hut.`;
+    }
+    if (query.includes('second floor') || query.includes('2nd floor') || query.includes('2f')) {
+      return `🍽️ **2nd Floor Directory:** Dining Hub & Family Fashion: Din Tai Fung, PizzaExpress Gourmet, H&M Concept, and Hamleys Toy Kingdom.`;
+    }
+    if (query.includes('third floor') || query.includes('3rd floor') || query.includes('3f')) {
+      return `🍿 **3rd Floor Directory:** Entertainment & Cinema: PVR IMAX 4K Cinema, Gaming Arcade, Virtual Reality Zone, and Food Lounge.`;
+    }
+
+    // 15. DYNAMIC SMART MATCHER (Searches all 33 stores and product catalogs for words in query)
+    const words = query.split(/\s+/).filter(w => w.length > 2);
+    const matchedStores: { store: Brand; score: number; matchedItems: string[] }[] = [];
+
+    for (const s of ALL_STORES) {
+      let score = 0;
+      const matchedItems: string[] = [];
+
+      for (const w of words) {
+        if (s.name.toLowerCase().includes(w)) score += 5;
+        if (s.category.toLowerCase().includes(w)) score += 3;
+        if (s.subTags.some(t => t.toLowerCase().includes(w))) score += 2;
+        for (const item of s.items) {
+          if (item.name.toLowerCase().includes(w)) {
+            score += 4;
+            matchedItems.push(`${item.name} (₹${item.price.toLocaleString()})`);
+          }
+        }
+      }
+
+      if (score > 0) {
+        matchedStores.push({ store: s, score, matchedItems });
+      }
+    }
+
+    if (matchedStores.length > 0) {
+      matchedStores.sort((a, b) => b.score - a.score);
+      const top = matchedStores.slice(0, 3);
+      const recommendations = top.map(m => {
+        const itemTxt = m.matchedItems.length > 0 ? ` • Highlights: ${m.matchedItems.slice(0, 2).join(', ')}` : '';
+        return `• **${m.store.name}** (${m.store.floor}, ${m.store.zone})${itemTxt}`;
+      }).join('\n');
+
+      return `Here are the best matches for your request at The Grand Mall:\n\n${recommendations}\n\n💡 You can browse full store menus and reserve VIP fitting rooms right here in the portal!`;
+    }
+
+    // 16. GENERAL INTELLIGENT FALLBACK
+    return `I'm happy to help you with anything at The Grand Mall! You can ask me:
+• Store locations & floors (e.g. *"Where is Nike?"*, *"Which floor is Rolex?"*)
+• Product recommendations (e.g. *"I want to buy a hoodie / sneakers / watch"*)
+• Dining options (e.g. *"Where to get coffee / dumplings / lunch"*)
+• Active discounts & coupon codes (e.g. *"Show me offers"*)
+• Mall amenities (e.g. *"Where are the washrooms / parking?"*)`;
+  };
+
   const handleSendAiMessage = async () => {
     if (!aiInput.trim()) return;
     const userQuery = aiInput.trim();
@@ -2480,22 +2717,10 @@ const PORTAL_STANDARD_TIME_SLOTS = ['12:00 PM', '14:00 PM', '16:00 PM', '17:00 P
     setIsAiTyping(true);
 
     setTimeout(() => {
-      let reply = "I'm happy to help you at The Grand Mall! You can browse our store directory on the Ground, 1st, 2nd, and 3rd floors.";
-      const queryLower = userQuery.toLowerCase();
-
-      if (queryLower.includes('eat') || queryLower.includes('food') || queryLower.includes('dining') || queryLower.includes('hungry')) {
-        reply = "For food & dining, head to the 2nd Floor Dining Hub! We recommend Din Tai Fung for dumplings, Starbucks Reserve for artisanal coffee, or Brew & Bean.";
-      } else if (queryLower.includes('watch') || queryLower.includes('gift') || queryLower.includes('luxury')) {
-        reply = "For luxury gifts and timepieces, check out Rolex Boutique on the Ground Floor Atrium, or Gucci & Prada Atelier on 1st Floor!";
-      } else if (queryLower.includes('hoodie') || queryLower.includes('shoe') || queryLower.includes('nike') || queryLower.includes('zara')) {
-        reply = "Nike Flagship is located on 1st Floor North Wing, and Zara Flagship is on 1st Floor West Wing. You can book a VIP fitting room suite right here in the portal!";
-      } else if (queryLower.includes('coupon') || queryLower.includes('discount') || queryLower.includes('offer')) {
-        reply = "Use coupon code 'GRANDMALL20' for 20% OFF or 'ZARASUMMER10' for 10% OFF at checkout! You can also redeem your loyalty points for direct discount.";
-      }
-
+      const reply = generateAiConciergeResponse(userQuery);
       setAiMessages(prev => [...prev, { role: 'ai', text: reply }]);
       setIsAiTyping(false);
-    }, 800);
+    }, 450);
   };
 
   const handleProcessQrScan = async (codeToScan: string) => {
