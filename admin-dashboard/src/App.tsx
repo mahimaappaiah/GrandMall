@@ -84,8 +84,17 @@ export default function App() {
     markAllNotificationsAsReadInSupabase().catch(() => {});
   };
 
-  // Stores List State (Loaded from Supabase brands, falling back to mock)
-  const [storesList, setStoresList] = useState<Store[]>(MOCK_STORES);
+  // Stores List State (Loaded from Supabase brands, persistent in localStorage)
+  const [storesList, setStoresList] = useState<Store[]>(() => {
+    try {
+      const saved = localStorage.getItem('axionix_stores_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
 
   // Real-time Lists State (Preserved and Persistent across browser refreshes)
   const [usersList, setUsersList] = useState<ConnectedUser[]>(() => {
@@ -256,6 +265,7 @@ export default function App() {
 
       if (storesRes.data && storesRes.data.length > 0) {
         setStoresList(storesRes.data);
+        try { localStorage.setItem('axionix_stores_list', JSON.stringify(storesRes.data)); } catch (e) {}
       }
       if (usersRes.data && usersRes.isLive) {
         setUsersList(prev => {
@@ -898,7 +908,7 @@ export default function App() {
         <main className="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto space-y-6">
           
           {/* 1. ADMIN DASHBOARD */}
-          {currentView === 'dashboard' && (
+          <div className={currentView === 'dashboard' ? 'block' : 'hidden'}>
             <DashboardView
               selectedMall={selectedMall}
               onSelectView={setCurrentView}
@@ -910,7 +920,7 @@ export default function App() {
               coupons={couponsList}
               campaigns={campaignsList}
             />
-          )}
+          </div>
 
           {/* 2. MALL OVERVIEW (DIGITAL TWIN) */}
           {currentView === 'mall-overview' && (

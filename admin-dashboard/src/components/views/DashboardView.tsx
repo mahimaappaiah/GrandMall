@@ -91,6 +91,13 @@ interface DashboardViewProps {
   campaigns?: Campaign[];
 }
 
+// Module-level caches to guarantee instant zero-flash mounting across view switches & refreshes
+let globalTopStoresChart: TopStoresChartData | null = null;
+let globalCategoryDistributionChart: CategoryDistributionChartData | null = null;
+let globalHourlyWifiChart: any = null;
+let globalDailyFootfallChart: any = null;
+let globalHighestDwellZone: string = 'Food Court (32%)';
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   selectedMall,
   onSelectView,
@@ -108,7 +115,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [ordersList, setOrdersList] = useState<Order[]>(propOrders || []);
   const [usersList, setUsersList] = useState<ConnectedUser[]>(propUsers || []);
   const [reservationsList, setReservationsList] = useState<Reservation[]>(propReservations || []);
-  const [storesList, setStoresList] = useState<Store[]>(propStores || []);
+  const [storesList, setStoresList] = useState<Store[]>(() => {
+    if (propStores && propStores.length > 0) return propStores;
+    try {
+      const saved = localStorage.getItem('axionix_stores_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+
   // Authoritative metrics from mall_dashboard_metrics table
   const [liveMetrics, setLiveMetrics] = useState<Record<string, number>>({});
   // Live coupon redemptions count
@@ -117,12 +135,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const prevKpiSnapshot = React.useRef<Record<string, number>>({});
   const [kpiDeltas, setKpiDeltas] = useState<Record<string, string>>({});
   
-  const [topStoresChart, setTopStoresChart] = useState<TopStoresChartData>(TOP_PERFORMING_STORES_CHART);
-  const [categoryDistributionChart, setCategoryDistributionChart] = useState<CategoryDistributionChartData>(CATEGORY_DISTRIBUTION);
-  const [highestDwellZone, setHighestDwellZone] = useState<string>('Food Court (32%)');
-  // Live chart data from Supabase (fallback to mock constants if no live data)
-  const [hourlyWifiChart, setHourlyWifiChart] = useState(HOURLY_CONNECTED_USERS);
-  const [dailyFootfallChart, setDailyFootfallChart] = useState(DAILY_FOOTFALL);
+  const [topStoresChart, setTopStoresChart] = useState<TopStoresChartData>(() => {
+    if (globalTopStoresChart) return globalTopStoresChart;
+    try {
+      const saved = localStorage.getItem('axionix_top_stores_chart');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      labels: ["Haldiram's", "Nykaa Luxe", "KFC", "Hamleys", "Tanishq", "Zara"],
+      datasets: [{ label: 'Tenant Sales (₹)', data: [1420, 1180, 950, 820, 740, 680], backgroundColor: 'rgba(37, 99, 235, 0.85)', borderRadius: 6 }]
+    };
+  });
+
+  const [categoryDistributionChart, setCategoryDistributionChart] = useState<CategoryDistributionChartData>(() => {
+    if (globalCategoryDistributionChart) return globalCategoryDistributionChart;
+    try {
+      const saved = localStorage.getItem('axionix_cat_chart');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return CATEGORY_DISTRIBUTION;
+  });
+
+  const [highestDwellZone, setHighestDwellZone] = useState<string>(() => globalHighestDwellZone);
+
+  // Live chart data from Supabase (persistent cache fallback)
+  const [hourlyWifiChart, setHourlyWifiChart] = useState(() => {
+    if (globalHourlyWifiChart) return globalHourlyWifiChart;
+    try {
+      const saved = localStorage.getItem('axionix_wifi_chart');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return HOURLY_CONNECTED_USERS;
+  });
+
+  const [dailyFootfallChart, setDailyFootfallChart] = useState(() => {
+    if (globalDailyFootfallChart) return globalDailyFootfallChart;
+    try {
+      const saved = localStorage.getItem('axionix_footfall_chart');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DAILY_FOOTFALL;
+  });
+
   const [isLivePaused, setIsLivePaused] = useState(false);
 
   // JSON string cache refs to prevent state thrashing and flashing
@@ -199,6 +253,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const s = JSON.stringify(storesRes.data.map((st: any) => [st.id, st.revenueToday, st.visitorsToday]));
         if (s !== prevStoresJson.current) {
           prevStoresJson.current = s;
+          try { localStorage.setItem('axionix_stores_list', JSON.stringify(storesRes.data)); } catch (e) {}
           setStoresList(storesRes.data);
         }
       }
@@ -240,6 +295,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           const s = JSON.stringify(chartsRes.topStoresChart);
           if (s !== prevTopStoresJson.current) {
             prevTopStoresJson.current = s;
+            globalTopStoresChart = chartsRes.topStoresChart;
+            try { localStorage.setItem('axionix_top_stores_chart', s); } catch (e) {}
             setTopStoresChart(chartsRes.topStoresChart);
           }
         }
@@ -247,10 +304,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           const s = JSON.stringify(chartsRes.categoryDistributionChart);
           if (s !== prevCatJson.current) {
             prevCatJson.current = s;
+            globalCategoryDistributionChart = chartsRes.categoryDistributionChart;
+            try { localStorage.setItem('axionix_cat_chart', s); } catch (e) {}
             setCategoryDistributionChart(chartsRes.categoryDistributionChart);
           }
         }
-        if (chartsRes.highestDwellCategory) setHighestDwellZone(chartsRes.highestDwellCategory);
+        if (chartsRes.highestDwellCategory) {
+          globalHighestDwellZone = chartsRes.highestDwellCategory;
+          setHighestDwellZone(chartsRes.highestDwellCategory);
+        }
       }
 
       // Live hourly WiFi chart
@@ -259,6 +321,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const s = JSON.stringify(wifiRes.data);
         if (s !== prevWifiJson.current) {
           prevWifiJson.current = s;
+          globalHourlyWifiChart = wifiRes.data;
+          try { localStorage.setItem('axionix_wifi_chart', s); } catch (e) {}
           setHourlyWifiChart(wifiRes.data as any);
         }
       }
@@ -269,6 +333,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const s = JSON.stringify(footfallRes.data);
         if (s !== prevFootfallJson.current) {
           prevFootfallJson.current = s;
+          globalDailyFootfallChart = footfallRes.data;
+          try { localStorage.setItem('axionix_footfall_chart', s); } catch (e) {}
           setDailyFootfallChart(footfallRes.data as any);
         }
       }
