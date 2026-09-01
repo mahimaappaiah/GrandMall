@@ -35,6 +35,8 @@ interface HeaderProps {
   currentUser?: any;
   currentAdmin?: AdminUser | null;
   onSignOut?: () => void;
+  onMarkAllRead?: () => void;
+  onMarkAlertRead?: (id: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -49,7 +51,9 @@ export const Header: React.FC<HeaderProps> = ({
   alerts = MOCK_ALERTS,
   currentUser,
   currentAdmin,
-  onSignOut
+  onSignOut,
+  onMarkAllRead,
+  onMarkAlertRead
 }) => {
   const [time, setTime] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
@@ -300,34 +304,66 @@ export const Header: React.FC<HeaderProps> = ({
                     <Bell className="w-4 h-4 text-blue-600" />
                     System Alerts
                   </div>
-                  <button
-                    onClick={() => {
-                      onSelectView('notifications');
-                      setNotificationsOpen(false);
-                    }}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                  >
-                    View All
-                    <ExternalLink className="w-3 h-3" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && onMarkAllRead && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMarkAllRead();
+                        }}
+                        className="text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        onSelectView('notifications');
+                        setNotificationsOpen(false);
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      View All
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                  {MOCK_ALERTS.map(alert => (
-                    <div key={alert.id} className={`p-3.5 transition-colors ${alert.read ? 'bg-white' : 'bg-blue-50/40'}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                          alert.severity === 'critical' ? 'bg-rose-100 text-rose-700' :
-                          alert.severity === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {alert.severity}
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-medium">{alert.timestamp}</span>
-                      </div>
-                      <div className="text-xs font-bold text-slate-900 mt-1.5">{alert.title}</div>
-                      <div className="text-xs text-slate-600 mt-0.5 line-clamp-2">{alert.description}</div>
+                  {(alerts || []).length === 0 ? (
+                    <div className="p-5 text-center text-xs text-slate-400 font-medium">
+                      No notifications
                     </div>
-                  ))}
+                  ) : (
+                    (alerts || []).map(alert => (
+                      <div
+                        key={alert.id}
+                        onClick={() => {
+                          if (onMarkAlertRead && (!alert.read || !alert.is_read)) {
+                            onMarkAlertRead(alert.id);
+                          }
+                        }}
+                        className={`p-3.5 transition-colors cursor-pointer hover:bg-slate-50 ${alert.read || alert.is_read ? 'bg-white' : 'bg-blue-50/40'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                              alert.severity === 'critical' ? 'bg-rose-100 text-rose-700' :
+                              alert.severity === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {alert.severity}
+                            </span>
+                            {!alert.read && !alert.is_read && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-medium">{alert.timestamp}</span>
+                        </div>
+                        <div className="text-xs font-bold text-slate-900 mt-1.5">{alert.title}</div>
+                        <div className="text-xs text-slate-600 mt-0.5 line-clamp-2">{alert.description || alert.message}</div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}

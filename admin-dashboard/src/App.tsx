@@ -71,17 +71,43 @@ export default function App() {
   // Real-time toast state
   const [liveToast, setLiveToast] = useState<{ title: string; message: string } | null>(null);
 
-  const [alertsList, setAlertsList] = useState<SystemAlert[]>(MOCK_ALERTS);
-  const unreadAlertsCount = alertsList.filter(a => !a.read).length;
+  const [alertsList, setAlertsList] = useState<SystemAlert[]>(() => {
+    try {
+      const saved = localStorage.getItem('axionix_alerts_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return MOCK_ALERTS;
+  });
+  const unreadAlertsCount = alertsList.filter(a => !a.read && !a.is_read).length;
 
   const handleDismissAlert = (id: string) => {
-    setAlertsList(prev => prev.filter(a => a.id !== id));
+    setAlertsList(prev => {
+      const updated = prev.filter(a => a.id !== id);
+      try { localStorage.setItem('axionix_alerts_list', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
     markNotificationAsReadInSupabase(id).catch(() => {});
   };
 
   const handleMarkAllAlertsRead = () => {
-    setAlertsList(prev => prev.map(a => ({ ...a, read: true, is_read: true })));
+    setAlertsList(prev => {
+      const updated = prev.map(a => ({ ...a, read: true, is_read: true }));
+      try { localStorage.setItem('axionix_alerts_list', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
     markAllNotificationsAsReadInSupabase().catch(() => {});
+  };
+
+  const handleMarkAlertRead = (id: string) => {
+    setAlertsList(prev => {
+      const updated = prev.map(a => a.id === id ? { ...a, read: true, is_read: true } : a);
+      try { localStorage.setItem('axionix_alerts_list', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+    markNotificationAsReadInSupabase(id).catch(() => {});
   };
 
   // Stores List State (Loaded from Supabase brands, persistent in localStorage)
@@ -902,6 +928,8 @@ export default function App() {
           currentUser={currentUser}
           currentAdmin={currentAdmin}
           onSignOut={handleSignOut}
+          onMarkAllRead={handleMarkAllAlertsRead}
+          onMarkAlertRead={handleMarkAlertRead}
         />
 
         {/* MAIN DASHBOARD CANVAS */}
@@ -970,6 +998,7 @@ export default function App() {
               alerts={alertsList}
               onDismiss={handleDismissAlert}
               onMarkAllRead={handleMarkAllAlertsRead}
+              onMarkAlertRead={handleMarkAlertRead}
             />
           )}
 

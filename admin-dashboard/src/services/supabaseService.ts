@@ -1990,6 +1990,7 @@ export async function createNotificationInSupabase(notif: Partial<SystemAlert>):
 export async function markNotificationAsReadInSupabase(id: string): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured) return { success: true };
   try {
+    await ensureAdminSession();
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
@@ -2005,10 +2006,11 @@ export async function markNotificationAsReadInSupabase(id: string): Promise<{ su
 export async function markAllNotificationsAsReadInSupabase(): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured) return { success: true };
   try {
+    await ensureAdminSession();
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
-      .eq('is_read', false);
+      .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (error) return { success: false, error: error.message };
     return { success: true };
