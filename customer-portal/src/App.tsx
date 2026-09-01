@@ -2491,7 +2491,7 @@ const PORTAL_STANDARD_TIME_SLOTS = ['12:00 PM', '14:00 PM', '16:00 PM', '17:00 P
     }
 
     // 2. SPECIFIC BRAND DIRECTORY LOOKUP (e.g. "Which floor is Nike on?", "Where is Starbucks?", "Rolex location")
-    for (const store of ALL_STORES) {
+    for (const store of MASTER_BRANDS) {
       const sName = store.name.toLowerCase();
       const shortName = sName.split(' ')[0]; // 'nike', 'zara', 'rolex', 'starbucks', 'apple', etc.
       if (query.includes(sName) || (shortName.length > 3 && query.includes(shortName))) {
@@ -2506,7 +2506,7 @@ const PORTAL_STANDARD_TIME_SLOTS = ['12:00 PM', '14:00 PM', '16:00 PM', '17:00 P
           return `📞 **${store.name}** Manager: ${store.manager} • Phone: ${store.phone} (Location: ${store.floor}, ${store.zone}).`;
         }
 
-        const sampleItems = store.items.slice(0, 3).map(i => `${i.name} (₹${i.price.toLocaleString()})`).join(', ');
+        const sampleItems = (store.items || []).slice(0, 3).map(i => `${i.name} (₹${i.price.toLocaleString()})`).join(', ');
         return `📍 **${store.name}** is located on the **${store.floor} (${store.zone})**.
 Status: ${store.status} • Hours: ${store.openHours} • Rating: ⭐ ${store.rating}
 Popular items: ${sampleItems}. ${store.category === 'Fashion' ? 'You can also book a VIP fitting room suite right here in the portal!' : (store.category === 'Food' ? 'You can book dining tables directly in the portal!' : '')}`;
@@ -2668,15 +2668,15 @@ Services offered:
     const words = query.split(/\s+/).filter(w => w.length > 2);
     const matchedStores: { store: Brand; score: number; matchedItems: string[] }[] = [];
 
-    for (const s of ALL_STORES) {
+    for (const s of MASTER_BRANDS) {
       let score = 0;
       const matchedItems: string[] = [];
 
       for (const w of words) {
         if (s.name.toLowerCase().includes(w)) score += 5;
         if (s.category.toLowerCase().includes(w)) score += 3;
-        if (s.subTags.some(t => t.toLowerCase().includes(w))) score += 2;
-        for (const item of s.items) {
+        if (s.subTags && s.subTags.some(t => t.toLowerCase().includes(w))) score += 2;
+        for (const item of (s.items || [])) {
           if (item.name.toLowerCase().includes(w)) {
             score += 4;
             matchedItems.push(`${item.name} (₹${item.price.toLocaleString()})`);
@@ -2717,9 +2717,20 @@ Services offered:
     setIsAiTyping(true);
 
     setTimeout(() => {
-      const reply = generateAiConciergeResponse(userQuery);
-      setAiMessages(prev => [...prev, { role: 'ai', text: reply }]);
-      setIsAiTyping(false);
+      try {
+        const reply = generateAiConciergeResponse(userQuery);
+        setAiMessages(prev => [...prev, { role: 'ai', text: reply }]);
+      } catch (err) {
+        setAiMessages(prev => [
+          ...prev,
+          {
+            role: 'ai',
+            text: "I'm here to assist you with all store locations, floor directions, dining spots, and offers at The Grand Mall!"
+          }
+        ]);
+      } finally {
+        setIsAiTyping(false);
+      }
     }, 450);
   };
 
