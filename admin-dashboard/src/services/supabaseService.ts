@@ -385,132 +385,81 @@ export async function fetchProductsFromSupabase(brandIdOrName?: string): Promise
 // ---------------------------------------------------------------------------
 export async function fetchDashboardMetricsFromSupabase(selectedMall?: string): Promise<{
   metrics: {
-    active_users?: number;
-    new_users_today?: number;
-    total_store_visits_today?: number;
-    total_orders_today?: number;
-    total_revenue_today?: number;
-    reservations_today?: number;
+    active_users: number;
+    new_users_today: number;
+    total_store_visits_today: number;
+    total_orders_today: number;
+    total_revenue_today: number;
+    reservations_today: number;
+    coupon_redemptions_today: number;
   } | null;
   kpiItems: KpiItem[];
   isLive: boolean;
   error?: string;
 }> {
-  const defaultKpis = getLocationKpiData(selectedMall || 'Phoenix Marketcity Bengaluru');
-
   if (!isSupabaseConfigured) {
-    return { metrics: null, kpiItems: defaultKpis, isLive: false };
+    return { metrics: null, kpiItems: [], isLive: false };
   }
 
   try {
-    const { data, error } = await supabase
-      .from('mall_dashboard_metrics')
-      .select('*')
-      .limit(1)
-      .maybeSingle();
+    await ensureAdminSession();
 
-    if (error) {
-      console.warn('[Supabase] fetchDashboardMetrics error:', error.message);
-      return { metrics: null, kpiItems: defaultKpis, isLive: false, error: error.message };
-    }
+    // Query live tables in parallel
+    const [brandsRes, ordersRes, profilesRes, sessionsRes, visitsRes, resvsRes, couponsRes] = await Promise.all([
+      supabase.from('brands').select('id, visitors_today, orders_count, revenue_today, reservations_count'),
+      supabase.from('orders').select('id, total_amount, subtotal, status'),
+      supabase.from('profiles').select('id, is_active'),
+      supabase.from('wifi_sessions').select('id, is_active'),
+      supabase.from('store_visits').select('id'),
+      supabase.from('reservations').select('id, status'),
+      supabase.from('coupon_redemptions').select('id', { count: 'exact', head: true })
+    ]);
 
-    if (!data) {
-      return { metrics: null, kpiItems: defaultKpis, isLive: false };
-    }
+    const brands = brandsRes.data || [];
+    const validOrders = (ordersRes.data || []).filter((o: any) => o.status !== 'Cancelled');
+    const profiles = profilesRes.data || [];
+    const sessions = sessionsRes.data || [];
+    const visits = visitsRes.data || [];
+    const reservations = (resvsRes.data || []).filter((r: any) => r.status !== 'Cancelled');
+    const couponRedemptionsCount = couponsRes.count || 0;
 
-    // Map live Supabase metrics from public.mall_dashboard_metrics
-    const activeUsersVal = typeof data.active_users === 'number' ? data.active_users : null;
-    const newUsersVal = typeof data.new_users_today === 'number' ? data.new_users_today : null;
-    const storeVisitsVal = typeof data.total_store_visits_today === 'number' ? data.total_store_visits_today : null;
-    const totalOrdersVal = typeof data.total_orders_today === 'number' ? data.total_orders_today : null;
-    const reservationsVal = typeof data.reservations_today === 'number' ? data.reservations_today : null;
-    const totalRevenueVal = typeof data.total_revenue_today === 'number' ? data.total_revenue_today : null;
+    let storeVisitors = 0;
+    let storeOrders = 0;
+    let storeRevenue = 0;
+    let storeReservations = 0;
 
-    // Check coupon redemptions count
-    let couponRedemptionsVal: number | null = null;
-    try {
-      const { count: cpnCount } = await supabase
-        .from('coupon_redemptions')
-        .select('id', { count: 'exact', head: true });
-      if (typeof cpnCount === 'number' && cpnCount > 0) {
-        couponRedemptionsVal = cpnCount;
-      }
-    } catch (_) {}
+    brands.forEach((b: any) => {
+      storeVisitors += Number(b.visitors_today || 0);
+      storeOrders += Number(b.orders_count || 0);
+      storeRevenue += Number(b.revenue_today || 0);
+      storeReservations += Number(b.reservations_count || 0);
+    });
 
-    const dynamicKpis: KpiItem[] = [
-      {
-        id: 'kpi-1',
-        title: 'Connected Users',
-        value: activeUsersVal !== null ? activeUsersVal.toLocaleString() : defaultKpis[0].value,
-        change: '+12.4%',
-        isPositive: true,
-        subtext: 'vs yesterday',
-        sparklineData: [920, 1050, 1180, 1290, 1340, 1420, activeUsersVal ?? 1482],
-        iconName: 'Wifi'
-      },
-      {
-        id: 'kpi-2',
-        title: "Today's Visitors",
-        value: newUsersVal !== null ? newUsersVal.toLocaleString() : defaultKpis[1].value,
-        change: '+8.7%',
-        isPositive: true,
-        subtext: 'vs average weekday',
-        sparklineData: [3200, 4100, 4800, 5600, 6100, 6500, newUsersVal ?? 6824],
-        iconName: 'Users'
-      },
-      {
-        id: 'kpi-3',
-        title: 'Store Visits',
-        value: storeVisitsVal !== null ? storeVisitsVal.toLocaleString() : defaultKpis[2].value,
-        change: '+15.2%',
-        isPositive: true,
-        subtext: 'cumulative footfall',
-        sparklineData: [11000, 13200, 14500, 15900, 16800, 17500, storeVisitsVal ?? 18420],
-        iconName: 'ShoppingBag'
-      },
-      {
-        id: 'kpi-4',
-        title: 'Orders',
-        value: totalOrdersVal !== null ? totalOrdersVal.toLocaleString() : defaultKpis[3].value,
-        change: '+6.3%',
-        isPositive: true,
-        subtext: 'digital & counter orders',
-        sparklineData: [600, 750, 890, 980, 1100, 1190, totalOrdersVal ?? 1245],
-        iconName: 'Receipt'
-      },
-      {
-        id: 'kpi-5',
-        title: 'Reservations',
-        value: reservationsVal !== null ? reservationsVal.toLocaleString() : defaultKpis[4].value,
-        change: '+18.9%',
-        isPositive: true,
-        subtext: 'dining & services booked',
-        sparklineData: [180, 220, 260, 290, 330, 360, reservationsVal ?? 382],
-        iconName: 'CalendarCheck'
-      },
-      {
-        id: 'kpi-6',
-        title: 'Revenue',
-        value: totalRevenueVal !== null ? `₹${totalRevenueVal.toLocaleString()}` : defaultKpis[5].value,
-        change: '+14.1%',
-        isPositive: true,
-        subtext: 'gross mall sales today',
-        sparklineData: [620000, 810000, 990000, 1150000, 1310000, 1410000, totalRevenueVal ?? 1485200],
-        iconName: 'IndianRupee'
-      },
-      couponRedemptionsVal !== null
-        ? {
-            ...defaultKpis[6],
-            value: couponRedemptionsVal.toLocaleString(),
-            subtext: 'verified Supabase redemptions'
-          }
-        : defaultKpis[6],
-      defaultKpis[7]
-    ];
+    let liveOrdersRevenue = 0;
+    validOrders.forEach((o: any) => {
+      liveOrdersRevenue += Number(o.total_amount) || Number(o.subtotal) || 0;
+    });
 
-    return { metrics: data, kpiItems: dynamicKpis, isLive: true };
+    const activeUsersCount = Math.max(profiles.length, sessions.length, visits.length);
+    const totalVisitors = storeVisitors + activeUsersCount;
+    const totalOrders = storeOrders + validOrders.length;
+    const totalReservations = storeReservations + reservations.length;
+    const totalRevenue = storeRevenue + liveOrdersRevenue;
+
+    const metrics = {
+      active_users: activeUsersCount,
+      new_users_today: totalVisitors,
+      total_store_visits_today: storeVisitors,
+      total_orders_today: totalOrders,
+      total_revenue_today: totalRevenue,
+      reservations_today: totalReservations,
+      coupon_redemptions_today: couponRedemptionsCount
+    };
+
+    return { metrics, kpiItems: [], isLive: true };
   } catch (err: any) {
-    return { metrics: null, kpiItems: defaultKpis, isLive: false, error: err.message };
+    console.warn('[Supabase] fetchDashboardMetrics error:', err);
+    return { metrics: null, kpiItems: [], isLive: false, error: err.message };
   }
 }
 
