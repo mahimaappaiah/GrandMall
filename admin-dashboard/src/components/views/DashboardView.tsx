@@ -415,19 +415,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     ? `₹${(totalGrossRevenue / 10000000).toFixed(2)} Cr`
     : (totalGrossRevenue >= 100000 ? `₹${(totalGrossRevenue / 100000).toFixed(2)} L` : `₹${totalGrossRevenue.toLocaleString()}`);
 
-  // Compute real % change from previous poll vs current values
-  const computeDelta = (key: string, currentVal: number): string => {
-    const prev = prevKpiSnapshot.current[key];
-    if (typeof prev !== 'number' || prev === 0 || currentVal === prev) return kpiDeltas[key] || '+0.0%';
-    const pct = ((currentVal - prev) / prev) * 100;
-    if (Math.abs(pct) < 0.05) return '+0.0%';
-    const sign = pct > 0 ? '+' : '';
-    return `${sign}${pct.toFixed(1)}%`;
-  };
+  // 8 Dynamic KPI Cards — values from live Supabase tables, % change computed from consecutive polls
+  const dynamicKpiData: KpiItem[] = useMemo(() => {
+    const bw = parseFloat((liveUsersCount * 0.32 + 14.5).toFixed(1));
 
-  // Update snapshot after computing deltas (deferred so deltas show change vs PREVIOUS)
-  React.useEffect(() => {
-    const snap = {
+    const computeDelta = (key: string, currentVal: number): { change: string; isPositive: boolean } => {
+      const prev = prevKpiSnapshot.current[key];
+      if (typeof prev !== 'number' || prev === 0 || currentVal === prev) {
+        return { change: '+0.0%', isPositive: true };
+      }
+      const pct = ((currentVal - prev) / prev) * 100;
+      if (Math.abs(pct) < 0.05) return { change: '+0.0%', isPositive: true };
+      const sign = pct > 0 ? '+' : '';
+      return { change: `${sign}${pct.toFixed(1)}%`, isPositive: pct >= 0 };
+    };
+
+    const dUsers = computeDelta('users', liveUsersCount);
+    const dVisitors = computeDelta('visitors', totalVisitorsCount);
+    const dFootfall = computeDelta('footfall', totalStoreFootfall);
+    const dOrders = computeDelta('orders', totalOrdersCount);
+    const dReservations = computeDelta('reservations', totalReservationsCount);
+    const dRevenue = computeDelta('revenue', totalGrossRevenue);
+    const dCoupons = computeDelta('coupons', totalCouponsRedeemed);
+
+    // Update snapshot after calculation
+    prevKpiSnapshot.current = {
       users: liveUsersCount,
       visitors: totalVisitorsCount,
       footfall: totalStoreFootfall,
@@ -436,30 +448,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       revenue: totalGrossRevenue,
       coupons: totalCouponsRedeemed
     };
-    setKpiDeltas({
-      users: computeDelta('users', liveUsersCount),
-      visitors: computeDelta('visitors', totalVisitorsCount),
-      footfall: computeDelta('footfall', totalStoreFootfall),
-      orders: computeDelta('orders', totalOrdersCount),
-      reservations: computeDelta('reservations', totalReservationsCount),
-      revenue: computeDelta('revenue', totalGrossRevenue),
-      coupons: computeDelta('coupons', totalCouponsRedeemed)
-    });
-    prevKpiSnapshot.current = snap;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveUsersCount, totalVisitorsCount, totalStoreFootfall, totalOrdersCount, totalReservationsCount, totalGrossRevenue, totalCouponsRedeemed]);
 
-  // 8 Dynamic KPI Cards — values from live Supabase tables, % change computed from consecutive polls
-  const dynamicKpiData: KpiItem[] = useMemo(() => {
-    const bw = parseFloat((liveUsersCount * 0.32 + 14.5).toFixed(1));
     return [
       {
         id: 'connected-users',
         title: 'Connected Users',
         value: `${liveUsersCount.toLocaleString()} Active`,
-        change: kpiDeltas.users || '+0.0%',
-        changeType: !(kpiDeltas.users || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.users || '').startsWith('-'),
+        change: dUsers.change,
+        changeType: dUsers.isPositive ? 'increase' : 'decrease',
+        isPositive: dUsers.isPositive,
         subtext: 'live gateway telemetry',
         period: 'vs last poll (live)',
         iconName: 'Wifi',
@@ -469,9 +466,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'todays-visitors',
         title: "Today's Visitors",
         value: totalVisitorsCount.toLocaleString(),
-        change: kpiDeltas.visitors || '+0.0%',
-        changeType: !(kpiDeltas.visitors || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.visitors || '').startsWith('-'),
+        change: dVisitors.change,
+        changeType: dVisitors.isPositive ? 'increase' : 'decrease',
+        isPositive: dVisitors.isPositive,
         subtext: 'sensor & wifi aggregate',
         period: 'sensor & wifi aggregate',
         iconName: 'Users',
@@ -481,9 +478,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'store-visits',
         title: 'Store Visits',
         value: totalStoreFootfall.toLocaleString(),
-        change: kpiDeltas.footfall || '+0.0%',
-        changeType: !(kpiDeltas.footfall || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.footfall || '').startsWith('-'),
+        change: dFootfall.change,
+        changeType: dFootfall.isPositive ? 'increase' : 'decrease',
+        isPositive: dFootfall.isPositive,
         subtext: 'cumulative footfall',
         period: 'cumulative footfall',
         iconName: 'ShoppingBag',
@@ -493,9 +490,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'orders',
         title: 'Orders',
         value: totalOrdersCount.toLocaleString(),
-        change: kpiDeltas.orders || '+0.0%',
-        changeType: !(kpiDeltas.orders || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.orders || '').startsWith('-'),
+        change: dOrders.change,
+        changeType: dOrders.isPositive ? 'increase' : 'decrease',
+        isPositive: dOrders.isPositive,
         subtext: '33 flagships + digital POS',
         period: '33 flagships + digital POS',
         iconName: 'Receipt',
@@ -505,9 +502,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'reservations',
         title: 'Reservations',
         value: totalReservationsCount.toLocaleString(),
-        change: kpiDeltas.reservations || '+0.0%',
-        changeType: !(kpiDeltas.reservations || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.reservations || '').startsWith('-'),
+        change: dReservations.change,
+        changeType: dReservations.isPositive ? 'increase' : 'decrease',
+        isPositive: dReservations.isPositive,
         subtext: 'dining & services booked',
         period: 'dining & services booked',
         iconName: 'CalendarCheck',
@@ -517,9 +514,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'revenue',
         title: 'Revenue',
         value: liveRevenueStr,
-        change: kpiDeltas.revenue || '+0.0%',
-        changeType: !(kpiDeltas.revenue || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.revenue || '').startsWith('-'),
+        change: dRevenue.change,
+        changeType: dRevenue.isPositive ? 'increase' : 'decrease',
+        isPositive: dRevenue.isPositive,
         subtext: 'gross mall sales today',
         period: 'gross mall sales today',
         iconName: 'IndianRupee',
@@ -529,9 +526,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'coupon-redemptions',
         title: 'Coupon Redemptions',
         value: totalCouponsRedeemed.toLocaleString(),
-        change: kpiDeltas.coupons || '+0.0%',
-        changeType: !(kpiDeltas.coupons || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.coupons || '').startsWith('-'),
+        change: dCoupons.change,
+        changeType: dCoupons.isPositive ? 'increase' : 'decrease',
+        isPositive: dCoupons.isPositive,
         subtext: 'verified Supabase redemptions',
         period: 'via AXIONIX app (live DB)',
         iconName: 'Ticket',
@@ -541,19 +538,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'network-bandwidth',
         title: 'Network Bandwidth',
         value: `${bw} GB`,
-        change: kpiDeltas.users ? (parseFloat(kpiDeltas.users) > 0 ? `+${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%` : `${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%`) : '+0.0%',
-        changeType: !(kpiDeltas.users || '').startsWith('-') ? 'increase' : 'decrease',
-        isPositive: !(kpiDeltas.users || '').startsWith('-'),
+        change: dUsers.change,
+        changeType: dUsers.isPositive ? 'increase' : 'decrease',
+        isPositive: dUsers.isPositive,
         subtext: '42 APs Online (optimal)',
         period: '42 APs Online',
         iconName: 'QrCode',
         sparklineData: [62, 75, 88, 98, bw]
       }
     ];
-  }, [liveUsersCount, totalVisitorsCount, totalStoreFootfall, totalOrdersCount, totalReservationsCount, totalGrossRevenue, liveRevenueStr, totalCouponsRedeemed, kpiDeltas]);
+  }, [liveUsersCount, totalVisitorsCount, totalStoreFootfall, totalOrdersCount, totalReservationsCount, totalGrossRevenue, liveRevenueStr, totalCouponsRedeemed]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6">
       
       {/* 1. LARGE WELCOME CARD */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white p-6 sm:p-8 shadow-xl shadow-blue-600/15">
