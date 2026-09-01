@@ -125,25 +125,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [dailyFootfallChart, setDailyFootfallChart] = useState(DAILY_FOOTFALL);
   const [isLivePaused, setIsLivePaused] = useState(false);
 
-  // Sync state when props update
+  // JSON string cache refs to prevent state thrashing and flashing
+  const prevStoresJson = React.useRef<string>('');
+  const prevUsersJson = React.useRef<string>('');
+  const prevOrdersJson = React.useRef<string>('');
+  const prevResJson = React.useRef<string>('');
+  const prevCouponsJson = React.useRef<string>('');
+  const prevCampaignsJson = React.useRef<string>('');
+  const prevLogsJson = React.useRef<string>('');
+  const prevTopStoresJson = React.useRef<string>('');
+  const prevCatJson = React.useRef<string>('');
+  const prevWifiJson = React.useRef<string>('');
+  const prevFootfallJson = React.useRef<string>('');
+
+  // Sync state when props update ONLY if not already loaded from live Supabase
   useEffect(() => {
-    if (propStores && propStores.length > 0) setStoresList(propStores);
-  }, [propStores]);
+    if (propStores && propStores.length > 0 && storesList.length === 0) setStoresList(propStores);
+  }, [propStores, storesList.length]);
   useEffect(() => {
-    if (propUsers && propUsers.length > 0) setUsersList(propUsers);
-  }, [propUsers]);
+    if (propUsers && propUsers.length > 0 && usersList.length === 0) setUsersList(propUsers);
+  }, [propUsers, usersList.length]);
   useEffect(() => {
-    if (propOrders && propOrders.length > 0) setOrdersList(propOrders);
-  }, [propOrders]);
+    if (propOrders && propOrders.length > 0 && ordersList.length === 0) setOrdersList(propOrders);
+  }, [propOrders, ordersList.length]);
   useEffect(() => {
-    if (propReservations && propReservations.length > 0) setReservationsList(propReservations);
-  }, [propReservations]);
+    if (propReservations && propReservations.length > 0 && reservationsList.length === 0) setReservationsList(propReservations);
+  }, [propReservations, reservationsList.length]);
   useEffect(() => {
-    if (propCoupons && propCoupons.length > 0) setCouponsList(propCoupons);
-  }, [propCoupons]);
+    if (propCoupons && propCoupons.length > 0 && couponsList.length === 0) setCouponsList(propCoupons);
+  }, [propCoupons, couponsList.length]);
   useEffect(() => {
-    if (propCampaigns && propCampaigns.length > 0) setCampaignsList(propCampaigns);
-  }, [propCampaigns]);
+    if (propCampaigns && propCampaigns.length > 0 && campaignsList.length === 0) setCampaignsList(propCampaigns);
+  }, [propCampaigns, campaignsList.length]);
 
   // Unified Live Supabase Data Fetcher
   const loadAllLiveDashboardData = async () => {
@@ -161,13 +174,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         fetchCouponRedemptionsCountFromSupabase().catch(() => ({ count: 0, isLive: false }))
       ]);
 
-      if (ordersRes.data && ordersRes.data.length > 0) setOrdersList(ordersRes.data);
-      if (usersRes.data && usersRes.data.length > 0) setUsersList(usersRes.data);
-      if (resRes.data && resRes.data.length > 0) setReservationsList(resRes.data);
-      if (storesRes.data && storesRes.data.length > 0) setStoresList(storesRes.data);
-      if (campRes.data && campRes.data.length > 0) setCampaignsList(campRes.data);
-      if (coupRes.data && coupRes.data.length > 0) setCouponsList(coupRes.data);
-      if (logsRes.data && logsRes.data.length > 0) setActivityFeed(logsRes.data);
+      if (ordersRes.data && ordersRes.data.length > 0) {
+        const s = JSON.stringify(ordersRes.data.map((o: any) => o.id));
+        if (s !== prevOrdersJson.current) {
+          prevOrdersJson.current = s;
+          setOrdersList(ordersRes.data);
+        }
+      }
+      if (usersRes.data && usersRes.data.length > 0) {
+        const s = JSON.stringify(usersRes.data.map((u: any) => u.id));
+        if (s !== prevUsersJson.current) {
+          prevUsersJson.current = s;
+          setUsersList(usersRes.data);
+        }
+      }
+      if (resRes.data && resRes.data.length > 0) {
+        const s = JSON.stringify(resRes.data.map((r: any) => r.id));
+        if (s !== prevResJson.current) {
+          prevResJson.current = s;
+          setReservationsList(resRes.data);
+        }
+      }
+      if (storesRes.data && storesRes.data.length > 0) {
+        const s = JSON.stringify(storesRes.data.map((st: any) => [st.id, st.revenueToday, st.visitorsToday]));
+        if (s !== prevStoresJson.current) {
+          prevStoresJson.current = s;
+          setStoresList(storesRes.data);
+        }
+      }
+      if (campRes.data && campRes.data.length > 0) {
+        const s = JSON.stringify(campRes.data.map((c: any) => c.id));
+        if (s !== prevCampaignsJson.current) {
+          prevCampaignsJson.current = s;
+          setCampaignsList(campRes.data);
+        }
+      }
+      if (coupRes.data && coupRes.data.length > 0) {
+        const s = JSON.stringify(coupRes.data.map((c: any) => c.id));
+        if (s !== prevCouponsJson.current) {
+          prevCouponsJson.current = s;
+          setCouponsList(coupRes.data);
+        }
+      }
+      if (logsRes.data && logsRes.data.length > 0) {
+        const s = JSON.stringify(logsRes.data.slice(0, 5).map((l: any) => l.id));
+        if (s !== prevLogsJson.current) {
+          prevLogsJson.current = s;
+          setActivityFeed(logsRes.data);
+        }
+      }
 
       // Authoritative metrics from mall_dashboard_metrics table
       if (metricsRes.isLive && metricsRes.metrics) {
@@ -181,18 +236,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
 
       if (chartsRes) {
-        if (chartsRes.topStoresChart) setTopStoresChart(chartsRes.topStoresChart);
-        if (chartsRes.categoryDistributionChart) setCategoryDistributionChart(chartsRes.categoryDistributionChart);
+        if (chartsRes.topStoresChart) {
+          const s = JSON.stringify(chartsRes.topStoresChart);
+          if (s !== prevTopStoresJson.current) {
+            prevTopStoresJson.current = s;
+            setTopStoresChart(chartsRes.topStoresChart);
+          }
+        }
+        if (chartsRes.categoryDistributionChart) {
+          const s = JSON.stringify(chartsRes.categoryDistributionChart);
+          if (s !== prevCatJson.current) {
+            prevCatJson.current = s;
+            setCategoryDistributionChart(chartsRes.categoryDistributionChart);
+          }
+        }
         if (chartsRes.highestDwellCategory) setHighestDwellZone(chartsRes.highestDwellCategory);
       }
 
-      // Live hourly WiFi chart (today vs yesterday from store_visits by hour)
+      // Live hourly WiFi chart
       const wifiRes = await fetchHourlyWifiChartFromSupabase().catch(() => ({ data: null, isLive: false }));
-      if (wifiRes.isLive && wifiRes.data) setHourlyWifiChart(wifiRes.data as any);
+      if (wifiRes.isLive && wifiRes.data) {
+        const s = JSON.stringify(wifiRes.data);
+        if (s !== prevWifiJson.current) {
+          prevWifiJson.current = s;
+          setHourlyWifiChart(wifiRes.data as any);
+        }
+      }
 
-      // Live daily footfall trend (this week Mon-Sun from store_visits)
+      // Live daily footfall trend
       const footfallRes = await fetchDailyFootfallChartFromSupabase().catch(() => ({ data: null, isLive: false }));
-      if (footfallRes.isLive && footfallRes.data) setDailyFootfallChart(footfallRes.data as any);
+      if (footfallRes.isLive && footfallRes.data) {
+        const s = JSON.stringify(footfallRes.data);
+        if (s !== prevFootfallJson.current) {
+          prevFootfallJson.current = s;
+          setDailyFootfallChart(footfallRes.data as any);
+        }
+      }
     } catch (err) {
       console.warn('[DashboardView] Live data refresh error:', err);
     }
@@ -200,7 +279,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   useEffect(() => {
     loadAllLiveDashboardData();
-    const interval = setInterval(loadAllLiveDashboardData, 6000);
+    const interval = setInterval(loadAllLiveDashboardData, 8000);
     return () => clearInterval(interval);
   }, [selectedMall]);
 
@@ -213,7 +292,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const unsubLogs = realtimeManager.subscribe('activity_logs', () => {
       if (!isLivePaused) {
         fetchActivityLogsFromSupabase().then(res => {
-          if (res.data && res.isLive) setActivityFeed(res.data);
+          if (res.data && res.isLive) {
+            const s = JSON.stringify(res.data.slice(0, 5).map((l: any) => l.id));
+            if (s !== prevLogsJson.current) {
+              prevLogsJson.current = s;
+              setActivityFeed(res.data);
+            }
+          }
         });
       }
     });
@@ -535,6 +620,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Line 
               data={hourlyWifiChart}
               options={{
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
@@ -572,6 +658,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Doughnut 
                 data={categoryDistributionChart}
                 options={{
+                  animation: false,
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: {
@@ -619,6 +706,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Bar 
               data={dailyFootfallChart}
               options={{
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: { 
@@ -657,6 +745,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Bar 
               data={topStoresChart}
               options={{
+                animation: false,
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
