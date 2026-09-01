@@ -267,9 +267,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Compute real % change from previous poll vs current values
   const computeDelta = (key: string, currentVal: number): string => {
     const prev = prevKpiSnapshot.current[key];
-    if (typeof prev !== 'number' || prev === 0 || currentVal === prev) return kpiDeltas[key] || '–';
+    if (typeof prev !== 'number' || prev === 0 || currentVal === prev) return kpiDeltas[key] || '+0.0%';
     const pct = ((currentVal - prev) / prev) * 100;
-    const sign = pct >= 0 ? '+' : '';
+    if (Math.abs(pct) < 0.05) return '+0.0%';
+    const sign = pct > 0 ? '+' : '';
     return `${sign}${pct.toFixed(1)}%`;
   };
 
@@ -305,8 +306,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'connected-users',
         title: 'Connected Users',
         value: `${liveUsersCount.toLocaleString()} Active`,
-        change: kpiDeltas.users || '–',
-        changeType: (kpiDeltas.users || '').startsWith('+') ? 'increase' : ((kpiDeltas.users || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.users || '+0.0%',
+        changeType: !(kpiDeltas.users || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.users || '').startsWith('-'),
+        subtext: 'live gateway telemetry',
         period: 'vs last poll (live)',
         iconName: 'Wifi',
         sparklineData: [84, 88, 91, 92, 93, liveUsersCount]
@@ -315,8 +318,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'todays-visitors',
         title: "Today's Visitors",
         value: totalVisitorsCount.toLocaleString(),
-        change: kpiDeltas.visitors || '–',
-        changeType: (kpiDeltas.visitors || '').startsWith('+') ? 'increase' : ((kpiDeltas.visitors || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.visitors || '+0.0%',
+        changeType: !(kpiDeltas.visitors || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.visitors || '').startsWith('-'),
+        subtext: 'sensor & wifi aggregate',
         period: 'sensor & wifi aggregate',
         iconName: 'Users',
         sparklineData: [14200, 15100, 15800, 16100, totalVisitorsCount]
@@ -325,8 +330,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'store-visits',
         title: 'Store Visits',
         value: totalStoreFootfall.toLocaleString(),
-        change: kpiDeltas.footfall || '–',
-        changeType: (kpiDeltas.footfall || '').startsWith('+') ? 'increase' : ((kpiDeltas.footfall || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.footfall || '+0.0%',
+        changeType: !(kpiDeltas.footfall || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.footfall || '').startsWith('-'),
+        subtext: 'cumulative footfall',
         period: 'cumulative footfall',
         iconName: 'ShoppingBag',
         sparklineData: [14000, 14900, 15600, 16000, totalStoreFootfall]
@@ -335,8 +342,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'orders',
         title: 'Orders',
         value: totalOrdersCount.toLocaleString(),
-        change: kpiDeltas.orders || '–',
-        changeType: (kpiDeltas.orders || '').startsWith('+') ? 'increase' : ((kpiDeltas.orders || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.orders || '+0.0%',
+        changeType: !(kpiDeltas.orders || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.orders || '').startsWith('-'),
+        subtext: '33 flagships + digital POS',
         period: '33 flagships + digital POS',
         iconName: 'Receipt',
         sparklineData: [3200, 3450, 3600, 3700, totalOrdersCount]
@@ -345,8 +354,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'reservations',
         title: 'Reservations',
         value: totalReservationsCount.toLocaleString(),
-        change: kpiDeltas.reservations || '–',
-        changeType: (kpiDeltas.reservations || '').startsWith('+') ? 'increase' : ((kpiDeltas.reservations || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.reservations || '+0.0%',
+        changeType: !(kpiDeltas.reservations || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.reservations || '').startsWith('-'),
+        subtext: 'dining & services booked',
         period: 'dining & services booked',
         iconName: 'CalendarCheck',
         sparklineData: [310, 335, 360, 375, totalReservationsCount]
@@ -355,8 +366,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'revenue',
         title: 'Revenue',
         value: liveRevenueStr,
-        change: kpiDeltas.revenue || '–',
-        changeType: (kpiDeltas.revenue || '').startsWith('+') ? 'increase' : ((kpiDeltas.revenue || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.revenue || '+0.0%',
+        changeType: !(kpiDeltas.revenue || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.revenue || '').startsWith('-'),
+        subtext: 'gross mall sales today',
         period: 'gross mall sales today',
         iconName: 'IndianRupee',
         sparklineData: [51000000, 54500000, 58000000, 60000000, totalGrossRevenue]
@@ -365,8 +378,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'coupon-redemptions',
         title: 'Coupon Redemptions',
         value: totalCouponsRedeemed.toLocaleString(),
-        change: kpiDeltas.coupons || '–',
-        changeType: (kpiDeltas.coupons || '').startsWith('+') ? 'increase' : ((kpiDeltas.coupons || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.coupons || '+0.0%',
+        changeType: !(kpiDeltas.coupons || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.coupons || '').startsWith('-'),
+        subtext: 'verified Supabase redemptions',
         period: 'via AXIONIX app (live DB)',
         iconName: 'Ticket',
         sparklineData: [310, 460, 610, 780, totalCouponsRedeemed]
@@ -375,11 +390,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         id: 'network-bandwidth',
         title: 'Network Bandwidth',
         value: `${bw} GB`,
-        change: kpiDeltas.users ? (parseFloat(kpiDeltas.users) > 0 ? `+${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%` : `${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%`) : '–',
-        changeType: (kpiDeltas.users || '').startsWith('+') ? 'increase' : ((kpiDeltas.users || '').startsWith('-') ? 'decrease' : 'increase'),
+        change: kpiDeltas.users ? (parseFloat(kpiDeltas.users) > 0 ? `+${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%` : `${(parseFloat(kpiDeltas.users) * 0.32).toFixed(1)}%`) : '+0.0%',
+        changeType: !(kpiDeltas.users || '').startsWith('-') ? 'increase' : 'decrease',
+        isPositive: !(kpiDeltas.users || '').startsWith('-'),
+        subtext: '42 APs Online (optimal)',
         period: '42 APs Online',
-        iconName: 'Zap',
-        sparklineData: [180, 240, 310, 390, 480, Math.round(bw)]
+        iconName: 'QrCode',
+        sparklineData: [62, 75, 88, 98, bw]
       }
     ];
   }, [liveUsersCount, totalVisitorsCount, totalStoreFootfall, totalOrdersCount, totalReservationsCount, totalGrossRevenue, liveRevenueStr, totalCouponsRedeemed, kpiDeltas]);
@@ -525,7 +542,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     position: 'top',
                     labels: { boxWidth: 12, usePointStyle: true, font: { size: 11, weight: 'bold' } }
                   },
-                  tooltip: { mode: 'index', intersect: false }
+                  tooltip: { 
+                    mode: 'index', 
+                    intersect: false,
+                    callbacks: {
+                      label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y} active devices`
+                    }
+                  }
                 },
                 scales: {
                   x: { grid: { display: false }, ticks: { font: { size: 11 } } },
@@ -543,18 +566,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <h3 className="text-sm font-bold text-slate-900">Category Footfall Share</h3>
               <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Today</span>
             </div>
-            <p className="text-xs text-slate-500 mb-4">Footfall distribution by store category</p>
+            <p className="text-xs text-slate-500 mb-2">Footfall distribution by store category</p>
 
-            <div className="h-48 flex items-center justify-center">
+            <div className="h-52 flex items-center justify-center">
               <Doughnut 
                 data={categoryDistributionChart}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10, weight: 'bold' } } }
+                    legend: { 
+                      position: 'bottom', 
+                      labels: { 
+                        boxWidth: 10, 
+                        padding: 10,
+                        font: { size: 11, weight: 'bold' } 
+                      } 
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: (ctx) => ` ${ctx.label}: ${ctx.parsed}% Footfall`
+                      }
+                    }
                   },
-                  cutout: '65%'
+                  cutout: '60%'
                 }}
               />
             </div>
@@ -586,10 +621,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: { 
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx) => ` Footfall: ${ctx.parsed.y}k visitors (${Math.round(ctx.parsed.y * 1000).toLocaleString()})`
+                    }
+                  }
+                },
                 scales: {
                   x: { grid: { display: false } },
-                  y: { grid: { color: '#F1F5F9' } }
+                  y: { grid: { color: '#F1F5F9' }, ticks: { callback: (v) => `${v}k` } }
                 }
               }}
             />
@@ -618,9 +660,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: { 
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx) => ` Sales: ₹${(ctx.parsed.x * 1000).toLocaleString()}`
+                    }
+                  }
+                },
                 scales: {
-                  x: { grid: { color: '#F1F5F9' } },
+                  x: { 
+                    grid: { color: '#F1F5F9' },
+                    ticks: { callback: (v) => `₹${Number(v).toLocaleString()}k` }
+                  },
                   y: { grid: { display: false } }
                 }
               }}

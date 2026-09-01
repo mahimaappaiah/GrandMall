@@ -32,6 +32,12 @@ const ICON_MAP: Record<string, React.ElementType> = {
 export const KpiCard: React.FC<KpiCardProps> = ({ item, onClick }) => {
   const IconComponent = ICON_MAP[item.iconName] || Users;
 
+  const isPositive = item.isPositive !== undefined 
+    ? item.isPositive 
+    : (!item.change?.startsWith('-') && item.change !== '–');
+
+  const subtextDisplay = item.subtext || item.period || 'live telemetry';
+
   // Calculate SVG sparkline points
   const maxVal = Math.max(...item.sparklineData);
   const minVal = Math.min(...item.sparklineData);
@@ -60,7 +66,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({ item, onClick }) => {
           <svg width={width} height={height} className="overflow-visible">
             <polyline
               fill="none"
-              stroke={item.isPositive ? '#2563EB' : '#E11D48'}
+              stroke={isPositive ? '#2563EB' : '#E11D48'}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -81,12 +87,12 @@ export const KpiCard: React.FC<KpiCardProps> = ({ item, onClick }) => {
 
       <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
         <div className={`flex items-center gap-1 font-bold ${
-          item.isPositive ? 'text-emerald-600' : 'text-rose-600'
+          isPositive ? 'text-emerald-600' : 'text-rose-600'
         }`}>
-          {item.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+          {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
           <span>{item.change}</span>
         </div>
-        <span className="text-slate-400 font-medium">{item.subtext}</span>
+        <span className="text-slate-400 font-medium">{subtextDisplay}</span>
       </div>
     </div>
   );
