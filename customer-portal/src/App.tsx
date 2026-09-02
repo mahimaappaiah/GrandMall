@@ -5129,9 +5129,9 @@ Services offered:
             <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 text-xs">
               {aiMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 ${
+                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 whitespace-pre-line leading-relaxed break-words ${
                     msg.role === 'user'
-                      ? 'bg-blue-600 text-white font-medium rounded-br-none'
+                      ? 'bg-blue-600 text-white font-medium rounded-br-none shadow-xs'
                       : 'bg-white border border-slate-200 text-slate-800 font-normal shadow-xs rounded-bl-none'
                   }`}>
                     {msg.text}
