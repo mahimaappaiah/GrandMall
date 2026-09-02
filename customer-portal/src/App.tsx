@@ -5094,11 +5094,80 @@ Services offered:
         </div>
       )}
 
-
-
       {/* ========================================================================= */}
-      {/* PRODUCT OPTIONS & CUSTOMIZATION SELECTION MODAL                           */}
+      {/* FLOATING GEMINI AI CONCIERGE CHAT WIDGET & MODAL (AFTER LOGIN ONLY)       */}
       {/* ========================================================================= */}
+      {currentStep !== 'login' && (
+        <div className="fixed bottom-6 right-6 z-40">
+          {!isAiChatOpen ? (
+            <button
+              onClick={() => setIsAiChatOpen(true)}
+              className="p-4 bg-gradient-to-tr from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-full shadow-2xl shadow-purple-600/40 flex items-center justify-center cursor-pointer transition-all hover:scale-105 group"
+              title="Open Gemini AI Concierge Assistant"
+            >
+              <Bot className="w-6 h-6 animate-pulse" />
+              <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 ease-out whitespace-nowrap text-xs font-bold pl-0 group-hover:pl-2">
+                AI Concierge
+              </span>
+            </button>
+          ) : (
+            <div className="w-80 sm:w-96 bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col h-[480px] animate-in slide-in-from-bottom-4">
+              <div className="bg-gradient-to-r from-purple-700 to-blue-700 p-4 text-white flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm leading-tight">Gemini AI Concierge</h4>
+                    <span className="text-[10px] text-purple-200 font-medium">Smart Mall Assistant</span>
+                  </div>
+                </div>
+                <button onClick={() => setIsAiChatOpen(false)} className="text-purple-200 hover:text-white font-bold text-sm cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 text-xs">
+                {aiMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 whitespace-pre-line leading-relaxed break-words ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white font-medium rounded-br-none shadow-xs'
+                        : 'bg-white border border-slate-200 text-slate-800 font-normal shadow-xs rounded-bl-none'
+                    }`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+                {isAiTyping && (
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-slate-200 text-slate-400 text-xs px-3.5 py-2 rounded-2xl animate-pulse">
+                      AI Concierge is typing...
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 bg-white border-t border-slate-100 flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={aiInput}
+                  onChange={e => setAiInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSendAiMessage()}
+                  placeholder="Ask about food, gifts, offers..."
+                  className="flex-1 bg-slate-100 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-purple-600"
+                />
+                <button
+                  onClick={handleSendAiMessage}
+                  className="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {selectedProductForOptions && (() => {
         const isFood = isFoodItem(selectedProductForOptions.item, selectedProductForOptions.storeName);
         const currentUnitPrice = calculateDynamicUnitPrice(selectedProductForOptions.item, optSize, optFit, optColor);
